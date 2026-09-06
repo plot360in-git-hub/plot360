@@ -35,8 +35,21 @@ export async function getEligiblePropertiesForAssignment() {
     query = query.not('id', 'in', `(${openPropertyIds.join(',')})`);
   }
 
-  const { data } = await query.order('next_monitoring_due_date', { ascending: true, nullsFirst: true });
-  const candidates = data ?? [];
+    const { data } = await query.order('next_monitoring_due_date', { ascending: true, nullsFirst: true });
+  type CandidateProperty = {
+    id: string;
+    property_name: string;
+    street_address: string | null;
+    village_town: string | null;
+    district: string | null;
+    state: string | null;
+    sro_name: string | null;
+    sro_code: string | null;
+    next_monitoring_due_date: string | null;
+    owner_id: string;
+    profiles: any;
+  };
+  const candidates: CandidateProperty[] = data ?? [];
   if (candidates.length === 0) return [];
 
   // Only within the 15-day window (or already overdue) even gets checked further.
