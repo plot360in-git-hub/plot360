@@ -25,7 +25,7 @@ export async function getEligiblePropertiesForAssignment() {
     .in('status', ['assigned', 'accepted', 'submitted']);
   const openPropertyIds = (openJobs ?? []).map((j) => j.property_id);
 
-  let query = supabase
+  let query: any = supabase
     .from('properties')
     .select('id, property_name, street_address, village_town, district, state, sro_name, sro_code, next_monitoring_due_date, owner_id, profiles(first_name, last_name, email)')
     .eq('status', 'verified')

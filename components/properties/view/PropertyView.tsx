@@ -11,6 +11,7 @@ const DOC_LABELS: Record<DocumentType, string> = {
   approval_letter: 'Approval Letter',
   owner_id: 'Owner ID Proof',
   ownership_proof: 'Ownership Proof',
+  ec_reference_copy: 'Old EC / Sale Deed Reference Copy',
 };
 
 async function getProperty(propertyId: string) {
