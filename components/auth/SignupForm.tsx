@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { signUp } from './auth.actions';
+import { TurnstileWidget } from './TurnstileWidget';
 
 export function SignupForm() {
   const [isPending, startTransition] = useTransition();
@@ -49,10 +50,9 @@ export function SignupForm() {
         <input className="field-input" id="confirmPassword" name="confirmPassword" type="password" required minLength={8} />
       </div>
 
-      {/* Swap for a real captcha widget (hCaptcha/Turnstile, both free) before launch */}
       <div style={{ marginBottom: 24 }}>
-        <label className="field-label" htmlFor="captcha">Captcha</label>
-        <input className="field-input" id="captcha" name="captcha" type="text" required placeholder="Type the letters shown" />
+        <label className="field-label">Captcha</label>
+        <TurnstileWidget />
       </div>
 
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { verifyTurnstileToken } from '@/components/auth/turnstile.server';
 
 // Agents sign up through the same Supabase Auth pool as everyone else —
 // what makes them an "agent" is completing /agent/onboarding afterward,
@@ -11,6 +12,10 @@ export async function agentSignUp(formData: FormData) {
   const email = String(formData.get('email'));
   const password = String(formData.get('password'));
   const confirmPassword = String(formData.get('confirmPassword'));
+  const captchaToken = formData.get('cf-turnstile-response') as string | null;
+
+  const captchaCheck = await verifyTurnstileToken(captchaToken);
+  if (!captchaCheck.success) return { error: captchaCheck.error };
 
   if (password !== confirmPassword) return { error: 'Passwords do not match.' };
   if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
@@ -55,9 +60,9 @@ export async function agentLogIn(formData: FormData) {
 
 // Distinguishes "not signed in" from "signed in but registration incomplete
 // or awaiting verification" so pages can route accordingly.
-export async function getAgentGateStatus(): Promise<
-  'unauthenticated' | 'needs_onboarding' | 'pending' | 'rejected' | 'verified'
-> {
+type AgentGateStatus = 'unauthenticated' | 'needs_onboarding' | 'pending' | 'rejected' | 'verified';
+
+export async function getAgentGateStatus(): Promise<AgentGateStatus> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return 'unauthenticated';

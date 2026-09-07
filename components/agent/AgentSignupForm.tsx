@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { agentSignUp } from './agent-auth.actions';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 
 export function AgentSignupForm() {
   const [isPending, startTransition] = useTransition();
@@ -46,6 +47,11 @@ export function AgentSignupForm() {
       <div style={{ marginBottom: 24 }}>
         <label className="field-label">Re-enter password</label>
         <input className="field-input" name="confirmPassword" type="password" required minLength={8} />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <label className="field-label">Captcha</label>
+        <TurnstileWidget />
       </div>
 
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
