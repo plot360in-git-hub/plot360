@@ -18,5 +18,7 @@ export async function GET(request: Request) {
     }
   }
 
+  // Invalid, expired, or already-used code — send back to the homepage
+  // with a flag rather than showing a raw 404.
   return NextResponse.redirect(`${origin}/?confirm=failed`);
 }

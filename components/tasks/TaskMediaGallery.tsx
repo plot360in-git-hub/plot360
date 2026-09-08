@@ -39,7 +39,7 @@ export function TaskMediaGallery({
     });
   }
 
-    function handleStatusChange(status: 'not_done' | 'in_progress' | 'complete') {
+  function handleStatusChange(status: 'not_done' | 'in_progress' | 'complete') {
     startTransition(() => {
       updateTaskStatus(task.id, status);
     });

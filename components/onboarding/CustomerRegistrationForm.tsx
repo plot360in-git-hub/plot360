@@ -3,13 +3,6 @@
 import { useState, useTransition } from 'react';
 import { saveCustomerRegistration } from './onboarding.actions';
 
-const SECURITY_QUESTIONS = [
-  "What was your first pet's name?",
-  'What city were you born in?',
-  "What is your mother's maiden name?",
-  'What was the name of your first school?',
-];
-
 function AddressFields({ prefix, label }: { prefix: 'current' | 'permanent'; label: string }) {
   return (
     <div>
@@ -81,13 +74,13 @@ export function CustomerRegistrationForm({ step: initialStep = 1 }: { step?: 1 |
 
       <div style={{ display: step === 1 ? 'block' : 'none' }}>
         <div style={{ marginBottom: 16 }}>
-          <label className="field-label">Username</label>
+          <label className="field-label">Username<span style={{ color: 'var(--color-danger)' }}> *</span></label>
           <input className="field-input" name="username" required />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div>
-            <label className="field-label">First name</label>
+            <label className="field-label">First name<span style={{ color: 'var(--color-danger)' }}> *</span></label>
             <input className="field-input" name="first_name" required />
           </div>
           <div>
@@ -95,7 +88,7 @@ export function CustomerRegistrationForm({ step: initialStep = 1 }: { step?: 1 |
             <input className="field-input" name="middle_name" />
           </div>
           <div>
-            <label className="field-label">Last name</label>
+            <label className="field-label">Last name<span style={{ color: 'var(--color-danger)' }}> *</span></label>
             <input className="field-input" name="last_name" required />
           </div>
         </div>
@@ -174,32 +167,13 @@ export function CustomerRegistrationForm({ step: initialStep = 1 }: { step?: 1 |
           <input className="field-input" name="how_heard_about_us" />
         </div>
 
-        <h4 style={{ marginBottom: 12 }}>Security questions</h4>
-        {[1, 2].map((n) => (
-          <div key={n} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label className="field-label">Question {n}</label>
-              <select className="field-input" name={`security_question_${n}`} defaultValue="">
-                <option value="" disabled>Select…</option>
-                {SECURITY_QUESTIONS.map((q) => (
-                  <option key={q} value={q}>{q}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="field-label">Answer</label>
-              <input className="field-input" name={`security_answer_${n}`} />
-            </div>
-          </div>
-        ))}
-
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 8px', fontSize: 14 }}>
           <input type="checkbox" name="terms_accepted" required />
-          I accept the Terms &amp; Conditions
+          I accept the Terms &amp; Conditions<span style={{ color: 'var(--color-danger)' }}> *</span>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, fontSize: 14 }}>
           <input type="checkbox" name="privacy_accepted" required />
-          I accept the Privacy Policy &amp; Agreements
+          I accept the Privacy Policy &amp; Agreements<span style={{ color: 'var(--color-danger)' }}> *</span>
         </label>
 
         {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}

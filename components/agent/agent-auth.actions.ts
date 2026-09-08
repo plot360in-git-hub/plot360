@@ -33,7 +33,7 @@ export async function agentSignUp(formData: FormData) {
   // success with no error even for an existing email, but the identities
   // array comes back empty when no new account was actually created.
   if (data.user && data.user.identities && data.user.identities.length === 0) {
-    return { error: 'An account with this email already exists. Please log in instead.' };
+    return { error: 'An account with this email already exists.', alreadyExists: true };
   }
 
   return { success: true, email };

@@ -13,7 +13,7 @@ export function ResendWhatsAppButton({ jobId }: { jobId: string }) {
     startTransition(async () => {
       const details = await getAssignmentWhatsAppDetails(jobId);
       if ('error' in details) {
-         setError(details.error ?? 'Something went wrong.');
+        setError(details.error ?? 'Something went wrong.');
         return;
       }
       const p = details.property!;

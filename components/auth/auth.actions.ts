@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { verifyTurnstileToken } from './turnstile.server';
 
 // Matches the Signup wireframe: username(email), password, re-enter password, captcha.
+// Supabase Auth owns the users table — we just create the row and let the
+// verification-email screen ("A verification email has been sent to...") do the rest.
 export async function signUp(formData: FormData) {
   const email = String(formData.get('email'));
   const password = String(formData.get('password'));
@@ -30,13 +32,19 @@ export async function signUp(formData: FormData) {
 
   if (error) return { error: error.message };
 
+  // Supabase deliberately returns success (no error) even when the email
+  // already exists, to avoid letting an attacker enumerate registered
+  // emails. When that happens, no new verification email is actually
+  // sent and the returned user has an empty identities array — that's
+  // the documented signal to detect this case ourselves.
   if (data.user && data.user.identities && data.user.identities.length === 0) {
-    return { error: 'An account with this email already exists. Please log in instead.' };
+    return { error: 'An account with this email already exists.', alreadyExists: true };
   }
 
   return { success: true, email };
 }
 
+// Matches the Home wireframe's login box: username, password, Login / Signup / forgot links.
 export async function logIn(formData: FormData) {
   const email = String(formData.get('email'));
   const password = String(formData.get('password'));

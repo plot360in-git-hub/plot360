@@ -35,7 +35,7 @@ export async function getEligiblePropertiesForAssignment() {
     query = query.not('id', 'in', `(${openPropertyIds.join(',')})`);
   }
 
-    const { data } = await query.order('next_monitoring_due_date', { ascending: true, nullsFirst: true });
+  const { data } = await query.order('next_monitoring_due_date', { ascending: true, nullsFirst: true });
   type CandidateProperty = {
     id: string;
     property_name: string;
