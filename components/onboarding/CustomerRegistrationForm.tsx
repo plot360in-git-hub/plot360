@@ -169,11 +169,19 @@ export function CustomerRegistrationForm({ step: initialStep = 1 }: { step?: 1 |
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 8px', fontSize: 14 }}>
           <input type="checkbox" name="terms_accepted" required />
-          I accept the Terms &amp; Conditions<span style={{ color: 'var(--color-danger)' }}> *</span>
+          I accept the{' '}
+          <a href="/legal/terms-of-use.html" target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+            Terms &amp; Conditions
+          </a>
+          <span style={{ color: 'var(--color-danger)' }}> *</span>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, fontSize: 14 }}>
           <input type="checkbox" name="privacy_accepted" required />
-          I accept the Privacy Policy &amp; Agreements<span style={{ color: 'var(--color-danger)' }}> *</span>
+          I accept the{' '}
+          <a href="/legal/privacy-policy.html" target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+            Privacy Policy &amp; Agreements
+          </a>
+          <span style={{ color: 'var(--color-danger)' }}> *</span>
         </label>
 
         {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}

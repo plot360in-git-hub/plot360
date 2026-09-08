@@ -147,13 +147,27 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
           "Without agent access to visit and photograph the property, we can't verify its security or condition. Please allow agent entry to continue, or contact support for other options.",
       };
     }
-  } else {
-    const approvalFile = formData.get('approval_letter') as File | null;
-    const nocFile = formData.get('noc_file') as File | null;
-    const ownerIdFile = formData.get('owner_id_proof') as File | null;
-    if (!approvalFile || approvalFile.size === 0) return { error: 'Approval letter is required.' };
-    if (!nocFile || nocFile.size === 0) return { error: 'NOC letter is required.' };
-    if (!ownerIdFile || ownerIdFile.size === 0) return { error: "Owner ID proof is required." };
+  }
+
+  const { data: existingOwnershipDocs } = await supabase
+    .from('property_documents')
+    .select('doc_type')
+    .eq('property_id', propertyId)
+    .in('doc_type', ['approval_letter', 'noc', 'owner_id']);
+  const existingDocTypes = new Set((existingOwnershipDocs ?? []).map((d) => d.doc_type));
+
+  const approvalFile = formData.get('approval_letter') as File | null;
+  const nocFile = formData.get('noc_file') as File | null;
+  const ownerIdFile = formData.get('owner_id_proof') as File | null;
+
+  if (!existingDocTypes.has('approval_letter') && (!approvalFile || approvalFile.size === 0)) {
+    return { error: 'Approval letter is required.' };
+  }
+  if (!existingDocTypes.has('noc') && (!nocFile || nocFile.size === 0)) {
+    return { error: 'NOC letter is required.' };
+  }
+  if (!existingDocTypes.has('owner_id') && (!ownerIdFile || ownerIdFile.size === 0)) {
+    return { error: 'Owner ID proof is required.' };
   }
 
   async function uploadIfPresent(field: string, docType: DocumentType) {
@@ -162,7 +176,7 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
 
     const { data: existing } = await supabase
       .from('property_documents')
-      .select('file_path')
+      .select('id, file_path')
       .eq('property_id', propertyId)
       .eq('doc_type', docType)
       .maybeSingle();
@@ -173,9 +187,14 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
       .upload(path, file, { upsert: true });
     if (uploadError) throw new Error(uploadError.message);
 
-    const { error: docError } = await supabase
-      .from('property_documents')
-      .upsert({ property_id: propertyId, doc_type: docType, file_path: path }, { onConflict: 'property_id,doc_type' });
+    // Explicit update-or-insert instead of .upsert()/ON CONFLICT — the
+    // property_documents unique index is partial (to allow multiple
+    // title_deed rows), and Postgres can't match ON CONFLICT against a
+    // partial index unless the exact predicate is included in the
+    // conflict clause, which the Supabase JS client has no way to pass.
+    const docError = existing
+      ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error
+      : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: docType, file_path: path })).error;
     if (docError) throw new Error(`Saving ${docType.replace(/_/g, ' ')} record failed: ${docError.message}`);
 
     // Replacing a file with a different name leaves the old one orphaned —
@@ -247,7 +266,7 @@ export async function saveDocumentsAndSubmit(propertyId: string, formData: FormD
 
     const { data: existing } = await supabase
       .from('property_documents')
-      .select('file_path')
+      .select('id, file_path')
       .eq('property_id', propertyId)
       .eq('doc_type', docType)
       .maybeSingle();
@@ -258,9 +277,9 @@ export async function saveDocumentsAndSubmit(propertyId: string, formData: FormD
       .upload(path, file, { upsert: true });
     if (uploadError) throw new Error(uploadError.message);
 
-    const { error: docError } = await supabase
-      .from('property_documents')
-      .upsert({ property_id: propertyId, doc_type: docType, file_path: path }, { onConflict: 'property_id,doc_type' });
+    const docError = existing
+      ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error
+      : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: docType, file_path: path })).error;
     if (docError) throw new Error(`Saving ${docType.replace(/_/g, ' ')} record failed: ${docError.message}`);
 
     if (existing?.file_path && existing.file_path !== path) {

@@ -81,7 +81,7 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
         ) : (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {documentsWithUrls.map((d) => (
-              <li key={d.doc_type} style={{ marginBottom: 10 }}>
+              <li key={d.file_path} style={{ marginBottom: 10 }}>
                 {d.url ? (
                   <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
                     {DOC_LABELS[d.doc_type as DocumentType] ?? d.doc_type}

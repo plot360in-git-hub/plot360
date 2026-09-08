@@ -29,6 +29,49 @@ function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
   );
 }
 
+function DownloadTemplateLink({ href }: { href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-accent)', marginLeft: 8 }}>
+      (download template)
+    </a>
+  );
+}
+
+function OwnershipDocsUpload({
+  intro,
+  hasExisting,
+}: {
+  intro: string;
+  hasExisting?: { noc: ExistingDoc; approval: ExistingDoc; ownerId: ExistingDoc };
+}) {
+  return (
+    <div className="card section-alt" style={{ marginBottom: 16 }}>
+      <p style={{ marginBottom: 16, fontSize: 14 }}>{intro}</p>
+      <div style={{ marginBottom: 12 }}>
+        <label className="field-label">
+          Approval letter<Required />
+          <DownloadTemplateLink href="/documents/approval-letter-template.pdf" />
+        </label>
+        <input className="field-input" type="file" name="approval_letter" accept="image/*,.pdf" required={!hasExisting?.approval} />
+        <ExistingDocLink doc={hasExisting?.approval ?? null} />
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label className="field-label">
+          NOC letter<Required />
+          <DownloadTemplateLink href="/documents/noc-template.pdf" />
+        </label>
+        <input className="field-input" type="file" name="noc_file" accept="image/*,.pdf" required={!hasExisting?.noc} />
+        <ExistingDocLink doc={hasExisting?.noc ?? null} />
+      </div>
+      <div>
+        <label className="field-label">Owner ID proof<Required /></label>
+        <input className="field-input" type="file" name="owner_id_proof" accept="image/*,.pdf" required={!hasExisting?.ownerId} />
+        <ExistingDocLink doc={hasExisting?.ownerId ?? null} />
+      </div>
+    </div>
+  );
+}
+
 export function OwnershipForm({
   propertyId,
   initialData,
@@ -115,28 +158,18 @@ export function OwnershipForm({
         </div>
       )}
 
+      {isOwner === 'yes' && !blockedByAgentEntry && (
+        <OwnershipDocsUpload
+          intro="Please provide an approval letter, NOC letter, and the owner's signed ID proof."
+          hasExisting={hasExisting}
+        />
+      )}
+
       {isOwner === 'no' && (
-        <div className="card section-alt" style={{ marginBottom: 16 }}>
-          <p style={{ marginBottom: 16, fontSize: 14 }}>
-            Since the plot owner is different from the registering user, please provide
-            an approval letter, NOC letter, and the owner's signed ID proof.
-          </p>
-          <div style={{ marginBottom: 12 }}>
-            <label className="field-label">Approval letter<Required /></label>
-            <input className="field-input" type="file" name="approval_letter" accept="image/*,.pdf" required={!hasExisting?.approval} />
-            <ExistingDocLink doc={hasExisting?.approval ?? null} />
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label className="field-label">NOC letter<Required /></label>
-            <input className="field-input" type="file" name="noc_file" accept="image/*,.pdf" required={!hasExisting?.noc} />
-            <ExistingDocLink doc={hasExisting?.noc ?? null} />
-          </div>
-          <div>
-            <label className="field-label">Owner ID proof<Required /></label>
-            <input className="field-input" type="file" name="owner_id_proof" accept="image/*,.pdf" required={!hasExisting?.ownerId} />
-            <ExistingDocLink doc={hasExisting?.ownerId ?? null} />
-          </div>
-        </div>
+        <OwnershipDocsUpload
+          intro="Since the plot owner is different from the registering user, please provide an approval letter, NOC letter, and the owner's signed ID proof."
+          hasExisting={hasExisting}
+        />
       )}
 
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
