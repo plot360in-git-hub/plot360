@@ -9,16 +9,12 @@ export async function AppHeader() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   const user = data.user;
+  const initial = user?.email?.[0]?.toUpperCase() ?? '?';
 
   return (
-    <header
-      style={{
-        borderBottom: '1px solid var(--color-border)',
-        background: '#fff',
-      }}
-    >
+    <header className="nav-sticky">
       <div
-        className="container-narrow"
+        className="container-wide"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -27,7 +23,7 @@ export async function AppHeader() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <Link href="/dashboard" style={{ fontWeight: 600, fontSize: 19, color: 'var(--color-text)', textDecoration: 'none' }}>
+          <Link href="/dashboard" style={{ fontWeight: 600, fontSize: 19, letterSpacing: '-0.01em', color: 'var(--color-text)', textDecoration: 'none' }}>
             Plot360
           </Link>
           <Link href="/dashboard" style={{ fontSize: 15, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
@@ -42,9 +38,10 @@ export async function AppHeader() {
         </div>
 
         {user && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link href="/profile/edit" style={{ fontSize: 14, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
-              {user.email}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <Link href="/profile/edit" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+              <span className="avatar-circle">{initial}</span>
+              <span style={{ fontSize: 14, color: 'var(--color-text)' }}>{user.email}</span>
             </Link>
             <form action={logOut}>
               <button

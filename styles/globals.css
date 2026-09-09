@@ -110,3 +110,78 @@ h1, h2, h3 {
 .status-pill.verified { background: #e6f4ea; color: var(--color-success); }
 .status-pill.pending { background: #fbf0da; color: var(--color-pending); }
 .status-pill.rejected { background: #fbe3e0; color: var(--color-danger); }
+
+/* --- Added for the marketing home page, app nav and dashboard card layout --- */
+
+.container-wide {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.nav-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  .grid-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .grid-cards { grid-template-columns: 1fr; }
+}
+
+.ghost-card {
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: var(--color-text-muted);
+  min-height: 200px;
+  text-decoration: none;
+}
+.ghost-card:hover { border-color: var(--color-accent); color: var(--color-text); }
+
+.btn-outline-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-button);
+  padding: 10px 20px;
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn-outline-danger:hover { background: rgba(192, 57, 43, 0.06); }
+
+@media (max-width: 860px) {
+  .stack-on-mobile { grid-template-columns: 1fr !important; }
+}

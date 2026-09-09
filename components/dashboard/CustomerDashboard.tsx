@@ -37,7 +37,7 @@ export async function CustomerDashboard() {
   const { profile, properties, paymentsByProperty, latestMonitoringByProperty, visitCountByProperty, summary } = data;
 
   return (
-    <div className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
+    <div className="container-wide" style={{ paddingTop: 40, paddingBottom: 60 }}>
       {/* Header: full name / username / email / phone + profile picture */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
         <div>
@@ -59,7 +59,7 @@ export async function CustomerDashboard() {
         )}
       </div>
 
-      {/* Summary: total / verified / pending / upcoming tasks */}
+      {/* Summary: total / verified / pending */}
       <div className="card section-alt" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 32 }}>
         <div>
           <p className="field-label">Total properties</p>
@@ -75,8 +75,8 @@ export async function CustomerDashboard() {
         </div>
       </div>
 
-      {/* Property listing table */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      {/* Property listing */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h3>Your properties</h3>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link href="/properties/new" className="btn-primary" style={{ textDecoration: 'none' }}>Add New Property</Link>
@@ -84,86 +84,102 @@ export async function CustomerDashboard() {
         </div>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 40 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 14 }}>
-            <th style={{ padding: '8px 0' }}>Property</th>
-            <th>Status</th>
-            <th>Payment</th>
-            <th>Valid until / Next due</th>
-            <th>Monitoring</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {properties.map((p) => {
-            const isDraft = !p.registration_date;
-            const payment = paymentsByProperty?.[p.id];
-            const daysUntilExpiry = p.expiration_date
-              ? Math.ceil((new Date(p.expiration_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-              : null;
-            const visitsCompleted = visitCountByProperty?.[p.id] ?? 0;
-            const canRenew =
-              p.status === 'verified' &&
-              !!p.expiration_date &&
-              visitsCompleted >= 2 &&
-              daysUntilExpiry !== null &&
-              daysUntilExpiry <= 15;
-            return (
-              <tr key={p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <td style={{ padding: '12px 0' }}>{p.property_name}</td>
-                <td>
-                  {isDraft ? (
-                    <span className="status-pill pending">Draft</span>
-                  ) : (
-                    <span className={`status-pill ${p.status}`}>{STATUS_LABEL[p.status] ?? p.status}</span>
-                  )}
-                </td>
-                <td>{isDraft ? '—' : paymentBadge(payment)}</td>
-                <td>
-                  {p.expiration_date ?? (payment?.status === 'pending' ? 'Awaiting payment' : '—')}
-                </td>
-                <td>
-                  {latestMonitoringByProperty?.[p.id] ? (
-                    <span className={`status-pill ${MONITORING_STATUS_CLASS[latestMonitoringByProperty[p.id]] ?? 'pending'}`}>
-                      {MONITORING_STATUS_LABEL[latestMonitoringByProperty[p.id]] ?? latestMonitoringByProperty[p.id]}
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>—</span>
-                  )}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  {isDraft ? (
-                    <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)' }}>Continue Registration</Link>
-                  ) : (
-                    <>
-                      <Link href={`/properties/${p.id}`} style={{ color: 'var(--color-accent)', marginRight: 12 }}>View</Link>
-                      {p.status === 'verified' ? (
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: 13, marginRight: 12 }}>
-                          Verified — contact admin to edit
-                        </span>
-                      ) : (
-                        <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)', marginRight: 12 }}>Edit</Link>
-                      )}
-                      {canRenew && (
-                        <Link href={`/properties/${p.id}/renew`} style={{ color: 'var(--color-accent)' }}>Renew</Link>
-                      )}
-                      {p.status === 'verified' && p.expiration_date && !canRenew && (
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }} title="Renew unlocks once 2 site verifications are complete and expiry is within 15 days">
-                          Renew (not yet available)
-                        </span>
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-          {properties.length === 0 && (
-            <tr><td colSpan={6} style={{ padding: '24px 0', color: 'var(--color-text-muted)' }}>No properties yet.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <div className="grid-cards" style={{ marginBottom: 40 }}>
+        {properties.map((p) => {
+          const isDraft = !p.registration_date;
+          const payment = paymentsByProperty?.[p.id];
+          const daysUntilExpiry = p.expiration_date
+            ? Math.ceil((new Date(p.expiration_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            : null;
+          const visitsCompleted = visitCountByProperty?.[p.id] ?? 0;
+          const canRenew =
+            p.status === 'verified' &&
+            !!p.expiration_date &&
+            visitsCompleted >= 2 &&
+            daysUntilExpiry !== null &&
+            daysUntilExpiry <= 15;
+
+          return (
+            <div key={p.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                {isDraft ? (
+                  <span className="status-pill pending">Draft</span>
+                ) : (
+                  <span className={`status-pill ${p.status}`}>{STATUS_LABEL[p.status] ?? p.status}</span>
+                )}
+                {!isDraft && paymentBadge(payment)}
+              </div>
+
+              <h4 style={{ margin: 0 }}>{p.property_name}</h4>
+
+              <p style={{ fontSize: 13.5, color: 'var(--color-text-muted)', margin: 0 }}>
+                {p.expiration_date
+                  ? `Valid until ${p.expiration_date}`
+                  : payment?.status === 'pending'
+                  ? 'Awaiting payment'
+                  : isDraft
+                  ? 'Registration incomplete'
+                  : '—'}
+              </p>
+
+              {latestMonitoringByProperty?.[p.id] && (
+                <span
+                  className={`status-pill ${MONITORING_STATUS_CLASS[latestMonitoringByProperty[p.id]] ?? 'pending'}`}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  {MONITORING_STATUS_LABEL[latestMonitoringByProperty[p.id]] ?? latestMonitoringByProperty[p.id]}
+                </span>
+              )}
+
+              <div
+                style={{
+                  marginTop: 'auto',
+                  paddingTop: 14,
+                  borderTop: '1px solid var(--color-border)',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 12,
+                  fontSize: 14,
+                }}
+              >
+                {isDraft ? (
+                  <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)' }}>Continue Registration</Link>
+                ) : (
+                  <>
+                    <Link href={`/properties/${p.id}`} style={{ color: 'var(--color-accent)' }}>View</Link>
+                    {p.status === 'verified' ? (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 12.5 }}>Verified — contact admin to edit</span>
+                    ) : (
+                      <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)' }}>Edit</Link>
+                    )}
+                    {canRenew && (
+                      <Link href={`/properties/${p.id}/renew`} style={{ color: 'var(--color-accent)' }}>Renew</Link>
+                    )}
+                    {p.status === 'verified' && p.expiration_date && !canRenew && (
+                      <span
+                        style={{ color: 'var(--color-text-muted)', fontSize: 12 }}
+                        title="Renew unlocks once 2 site verifications are complete and expiry is within 15 days"
+                      >
+                        Renew (not yet available)
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        <Link href="/properties/new" className="ghost-card">
+          <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
+          <span style={{ fontSize: 15, fontWeight: 500 }}>Add another property</span>
+        </Link>
+      </div>
+
+      {properties.length === 0 && (
+        <p style={{ color: 'var(--color-text-muted)', marginTop: -24, marginBottom: 40 }}>No properties yet — add your first one above.</p>
+      )}
     </div>
   );
 }
