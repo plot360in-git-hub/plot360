@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { getDocumentViewUrl } from '@/components/properties/registration/registration.actions';
 import { getLatestPaymentForProperty } from '@/components/payments/payments.actions';
+import { DeletePropertyButton } from '../DeletePropertyButton';
 import type { DocumentType } from '@/types/database.types';
 
 const DOC_LABELS: Record<DocumentType, string> = {
@@ -57,7 +58,10 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
             {property.status === 'verified' ? 'Verified' : property.status === 'rejected' ? 'Rejected' : 'Not Verified'}
           </span>
         </div>
-        <Link href="/dashboard" className="btn-primary" style={{ textDecoration: 'none' }}>Close</Link>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Link href="/dashboard" className="btn-primary" style={{ textDecoration: 'none' }}>Close</Link>
+          <DeletePropertyButton propertyId={property.id} propertyName={property.property_name} />
+        </div>
       </div>
 
       {/* Property Information */}

@@ -36,6 +36,9 @@ export async function AppHeader() {
           <Link href="/properties/new" style={{ fontSize: 15, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
             Add Property
           </Link>
+          <Link href="/service-requests" style={{ fontSize: 15, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+            Service Requests
+          </Link>
         </div>
 
         {user && (

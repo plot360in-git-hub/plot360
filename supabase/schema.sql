@@ -7,39 +7,39 @@
 -- ---------- Enums ----------
 do $$ begin
   create type property_type as enum ('residential','commercial','agricultural','industrial');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type plot_shape as enum ('square','rectangular','irregular','l_shape');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type verification_status as enum ('pending','verified','rejected');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type document_type as enum ('title_deed','encumbrance_certificate','noc','approval_letter','owner_id','ownership_proof','ec_reference_copy');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type task_status as enum ('not_done','in_progress','complete');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type media_type as enum ('photo','video','document');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type agent_document_type as enum ('driving_license','secondary_id');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type agent_status as enum ('pending','verified','rejected');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 do $$ begin
   create type monitoring_job_status as enum ('assigned','accepted','submitted','approved','rejected');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 -- ---------- profiles (Customer Registration wireframes) ----------
 create table if not exists profiles (
@@ -209,7 +209,7 @@ create table if not exists agent_documents (
 create index if not exists idx_agent_documents_agent on agent_documents(agent_id);
 do $$ begin
   alter table agent_documents add constraint agent_documents_agent_doctype_key unique (agent_id, doc_type);
-exception when duplicate_object then null; end $$;
+exception when duplicate_object or duplicate_table then null; end $$;
 
 -- ---------- monitoring_jobs (twice-yearly physical verification) ----------
 create table if not exists monitoring_jobs (
@@ -326,61 +326,88 @@ as $$
 $$;
 
 -- profiles: a user can only see/edit their own row
+drop policy if exists "profiles_select_own" on profiles;
 create policy "profiles_select_own" on profiles for select using (auth.uid() = id);
+drop policy if exists "profiles_select_admin" on profiles;
 create policy "profiles_select_admin" on profiles for select
   using (is_admin());
+drop policy if exists "profiles_insert_own" on profiles;
 create policy "profiles_insert_own" on profiles for insert with check (auth.uid() = id);
+drop policy if exists "profiles_update_own" on profiles;
 create policy "profiles_update_own" on profiles for update using (auth.uid() = id);
 
 -- properties: owner-only
+drop policy if exists "properties_select_own" on properties;
 create policy "properties_select_own" on properties for select using (auth.uid() = owner_id);
+drop policy if exists "properties_insert_own" on properties;
 create policy "properties_insert_own" on properties for insert with check (auth.uid() = owner_id);
+drop policy if exists "properties_update_own" on properties;
 create policy "properties_update_own" on properties for update using (auth.uid() = owner_id);
+drop policy if exists "properties_delete_own" on properties;
 create policy "properties_delete_own" on properties for delete using (auth.uid() = owner_id);
 
 -- admins: full read + status-update access across all properties/ownership/documents
+drop policy if exists "properties_select_admin" on properties;
 create policy "properties_select_admin" on properties for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "properties_update_admin" on properties;
 create policy "properties_update_admin" on properties for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "properties_delete_admin" on properties;
 create policy "properties_delete_admin" on properties for delete
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
 -- property_ownership: via parent property's owner_id
+drop policy if exists "ownership_select_own" on property_ownership;
 create policy "ownership_select_own" on property_ownership for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "ownership_insert_own" on property_ownership;
 create policy "ownership_insert_own" on property_ownership for insert
   with check (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "ownership_update_own" on property_ownership;
 create policy "ownership_update_own" on property_ownership for update
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
 
+drop policy if exists "ownership_select_admin" on property_ownership;
 create policy "ownership_select_admin" on property_ownership for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "ownership_insert_admin" on property_ownership;
 create policy "ownership_insert_admin" on property_ownership for insert
   with check (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "ownership_update_admin" on property_ownership;
 create policy "ownership_update_admin" on property_ownership for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "ownership_insert_admin" on property_ownership;
 create policy "ownership_insert_admin" on property_ownership for insert
   with check (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "ownership_update_admin" on property_ownership;
 create policy "ownership_update_admin" on property_ownership for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
 -- property_documents: via parent property's owner_id
+drop policy if exists "docs_select_own" on property_documents;
 create policy "docs_select_own" on property_documents for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "docs_insert_own" on property_documents;
 create policy "docs_insert_own" on property_documents for insert
   with check (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "docs_delete_own" on property_documents;
 create policy "docs_delete_own" on property_documents for delete
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "docs_update_own" on property_documents;
 create policy "docs_update_own" on property_documents for update
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
 
+drop policy if exists "docs_select_admin" on property_documents;
 create policy "docs_select_admin" on property_documents for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "docs_insert_admin" on property_documents;
 create policy "docs_insert_admin" on property_documents for insert
   with check (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "docs_delete_admin" on property_documents;
 create policy "docs_delete_admin" on property_documents for delete
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "docs_update_admin" on property_documents;
 create policy "docs_update_admin" on property_documents for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
@@ -388,55 +415,72 @@ create policy "docs_update_admin" on property_documents for update
 -- or deleting a task is admin-only (see admin policies below) — customers
 -- get read-only visibility into progress/status, matching the product
 -- decision that task scheduling is an admin/agent responsibility.
+drop policy if exists "tasks_select_own" on tasks;
 create policy "tasks_select_own" on tasks for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
 
 -- admins: can create/view/update tasks on any property (e.g. scheduling an inspection)
+drop policy if exists "tasks_select_admin" on tasks;
 create policy "tasks_select_admin" on tasks for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "tasks_insert_admin" on tasks;
 create policy "tasks_insert_admin" on tasks for insert
   with check (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "tasks_update_admin" on tasks;
 create policy "tasks_update_admin" on tasks for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "tasks_delete_admin" on tasks;
 create policy "tasks_delete_admin" on tasks for delete
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
 -- task_media: owners can VIEW media (part of "read-only progress"), but
 -- uploading or deleting media is admin-only, matching the task-mutation rule.
+drop policy if exists "task_media_select_own" on task_media;
 create policy "task_media_select_own" on task_media for select
   using (exists (
     select 1 from tasks t join properties p on p.id = t.property_id
     where t.id = task_id and p.owner_id = auth.uid()
   ));
+drop policy if exists "task_media_select_admin" on task_media;
 create policy "task_media_select_admin" on task_media for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "task_media_insert_admin" on task_media;
 create policy "task_media_insert_admin" on task_media for insert
   with check (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "task_media_delete_admin" on task_media;
 create policy "task_media_delete_admin" on task_media for delete
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
 -- renewal_requests: owner can create/view requests for their own property;
 -- admin can view and decide (approve/reject/modify) any request.
+drop policy if exists "renewals_select_own" on renewal_requests;
 create policy "renewals_select_own" on renewal_requests for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "renewals_insert_own" on renewal_requests;
 create policy "renewals_insert_own" on renewal_requests for insert
   with check (
     requested_by = auth.uid()
     and exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid())
   );
+drop policy if exists "renewals_select_admin" on renewal_requests;
 create policy "renewals_select_admin" on renewal_requests for select
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
+drop policy if exists "renewals_update_admin" on renewal_requests;
 create policy "renewals_update_admin" on renewal_requests for update
   using (exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin));
 
 -- payments: owner can view (read-only) their own property's payment
 -- history; only admin can create or update payment records.
+drop policy if exists "payments_select_own" on payments;
 create policy "payments_select_own" on payments for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "payments_select_admin" on payments;
 create policy "payments_select_admin" on payments for select
   using (is_admin());
+drop policy if exists "payments_insert_admin" on payments;
 create policy "payments_insert_admin" on payments for insert
   with check (is_admin());
+drop policy if exists "payments_update_admin" on payments;
 create policy "payments_update_admin" on payments for update
   using (is_admin());
 
@@ -448,47 +492,67 @@ language sql stable as $$
 $$;
 
 -- agent_profiles: an agent can see/update their own row; admin sees/updates all.
+drop policy if exists "agent_profiles_select_own" on agent_profiles;
 create policy "agent_profiles_select_own" on agent_profiles for select using (auth.uid() = id);
+drop policy if exists "agent_profiles_insert_own" on agent_profiles;
 create policy "agent_profiles_insert_own" on agent_profiles for insert with check (auth.uid() = id);
+drop policy if exists "agent_profiles_update_own" on agent_profiles;
 create policy "agent_profiles_update_own" on agent_profiles for update using (auth.uid() = id);
+drop policy if exists "agent_profiles_select_admin" on agent_profiles;
 create policy "agent_profiles_select_admin" on agent_profiles for select using (is_admin());
+drop policy if exists "agent_profiles_update_admin" on agent_profiles;
 create policy "agent_profiles_update_admin" on agent_profiles for update using (is_admin());
 
 -- agent_documents: owner agent can manage their own; admin can view all.
+drop policy if exists "agent_documents_select_own" on agent_documents;
 create policy "agent_documents_select_own" on agent_documents for select
   using (agent_id = auth.uid());
+drop policy if exists "agent_documents_insert_own" on agent_documents;
 create policy "agent_documents_insert_own" on agent_documents for insert
   with check (agent_id = auth.uid());
+drop policy if exists "agent_documents_update_own" on agent_documents;
 create policy "agent_documents_update_own" on agent_documents for update
   using (agent_id = auth.uid())
   with check (agent_id = auth.uid());
+drop policy if exists "agent_documents_select_admin" on agent_documents;
 create policy "agent_documents_select_admin" on agent_documents for select using (is_admin());
 
 -- monitoring_jobs: the assigned agent can see/update their own jobs;
 -- the property owner (customer) can view read-only; admin has full access.
+drop policy if exists "monitoring_jobs_select_agent" on monitoring_jobs;
 create policy "monitoring_jobs_select_agent" on monitoring_jobs for select
   using (is_my_agent_job(agent_id));
+drop policy if exists "monitoring_jobs_update_agent" on monitoring_jobs;
 create policy "monitoring_jobs_update_agent" on monitoring_jobs for update
   using (is_my_agent_job(agent_id));
+drop policy if exists "monitoring_jobs_select_owner" on monitoring_jobs;
 create policy "monitoring_jobs_select_owner" on monitoring_jobs for select
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "monitoring_jobs_select_admin" on monitoring_jobs;
 create policy "monitoring_jobs_select_admin" on monitoring_jobs for select using (is_admin());
+drop policy if exists "monitoring_jobs_insert_admin" on monitoring_jobs;
 create policy "monitoring_jobs_insert_admin" on monitoring_jobs for insert with check (is_admin());
+drop policy if exists "monitoring_jobs_update_admin" on monitoring_jobs;
 create policy "monitoring_jobs_update_admin" on monitoring_jobs for update using (is_admin());
 
 -- monitoring_media: agent can view/upload for their own job; owner can view
 -- read-only (once available); admin has full access.
+drop policy if exists "monitoring_media_select_agent" on monitoring_media;
 create policy "monitoring_media_select_agent" on monitoring_media for select
   using (exists (select 1 from monitoring_jobs j where j.id = job_id and is_my_agent_job(j.agent_id)));
+drop policy if exists "monitoring_media_insert_agent" on monitoring_media;
 create policy "monitoring_media_insert_agent" on monitoring_media for insert
   with check (exists (select 1 from monitoring_jobs j where j.id = job_id and is_my_agent_job(j.agent_id)));
+drop policy if exists "monitoring_media_delete_agent" on monitoring_media;
 create policy "monitoring_media_delete_agent" on monitoring_media for delete
   using (exists (select 1 from monitoring_jobs j where j.id = job_id and is_my_agent_job(j.agent_id)));
+drop policy if exists "monitoring_media_select_owner" on monitoring_media;
 create policy "monitoring_media_select_owner" on monitoring_media for select
   using (exists (
     select 1 from monitoring_jobs j join properties p on p.id = j.property_id
     where j.id = job_id and p.owner_id = auth.uid()
   ));
+drop policy if exists "monitoring_media_select_admin" on monitoring_media;
 create policy "monitoring_media_select_admin" on monitoring_media for select using (is_admin());
 
 -- monitoring_upload_tokens: only relevant for admin access through the
@@ -496,8 +560,11 @@ create policy "monitoring_media_select_admin" on monitoring_media for select usi
 -- goes through this RLS at all — it uses a service-role client (see
 -- lib/supabase/admin.ts) specifically because an anonymous visitor with
 -- just a token can't satisfy any auth.uid()-based policy.
+drop policy if exists "monitoring_upload_tokens_select_admin" on monitoring_upload_tokens;
 create policy "monitoring_upload_tokens_select_admin" on monitoring_upload_tokens for select using (is_admin());
+drop policy if exists "monitoring_upload_tokens_insert_admin" on monitoring_upload_tokens;
 create policy "monitoring_upload_tokens_insert_admin" on monitoring_upload_tokens for insert with check (is_admin());
+drop policy if exists "monitoring_upload_tokens_delete_admin" on monitoring_upload_tokens;
 create policy "monitoring_upload_tokens_delete_admin" on monitoring_upload_tokens for delete using (is_admin());
 
 -- properties: give an agent row-level SELECT only on properties they have
@@ -521,6 +588,7 @@ as $$
   );
 $$;
 
+drop policy if exists "properties_select_assigned_agent" on properties;
 create policy "properties_select_assigned_agent" on properties for select
   using (is_assigned_agent_for_property(id));
 
@@ -539,16 +607,19 @@ values
 on conflict (id) do nothing;
 
 -- avatars / identity-proofs: path is {user_id}/filename -> first path segment = auth.uid()
+drop policy if exists "avatars_owner_rw" on storage.objects;
 create policy "avatars_owner_rw" on storage.objects for all
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "identity_proofs_owner_rw" on storage.objects;
 create policy "identity_proofs_owner_rw" on storage.objects for all
   using (bucket_id = 'identity-proofs' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'identity-proofs' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- property-documents / property-photos / task-media: path is {property_id or task_id}/filename
 -- these need the join checks below rather than a plain foldername match
+drop policy if exists "property_documents_owner_rw" on storage.objects;
 create policy "property_documents_owner_rw" on storage.objects for all
   using (
     bucket_id = 'property-documents'
@@ -565,6 +636,7 @@ create policy "property_documents_owner_rw" on storage.objects for all
     )
   );
 
+drop policy if exists "property_photos_owner_rw" on storage.objects;
 create policy "property_photos_owner_rw" on storage.objects for all
   using (
     bucket_id = 'property-photos'
@@ -581,6 +653,7 @@ create policy "property_photos_owner_rw" on storage.objects for all
     )
   );
 
+drop policy if exists "task_media_owner_rw" on storage.objects;
 create policy "task_media_owner_rw" on storage.objects for all
   using (
     bucket_id = 'task-media'
@@ -598,14 +671,17 @@ create policy "task_media_owner_rw" on storage.objects for all
   );
 
 -- agent-documents: path is {agent_id}/filename -> agent owns their own folder; admin reads all
+drop policy if exists "agent_documents_owner_rw" on storage.objects;
 create policy "agent_documents_owner_rw" on storage.objects for all
   using (bucket_id = 'agent-documents' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'agent-documents' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "agent_documents_admin_read" on storage.objects;
 create policy "agent_documents_admin_read" on storage.objects for select
   using (bucket_id = 'agent-documents' and is_admin());
 
 -- monitoring-media: path is {job_id}/filename -> only the assigned agent can write; agent/owner/admin can read
+drop policy if exists "monitoring_media_agent_rw" on storage.objects;
 create policy "monitoring_media_agent_rw" on storage.objects for all
   using (
     bucket_id = 'monitoring-media'
@@ -622,6 +698,7 @@ create policy "monitoring_media_agent_rw" on storage.objects for all
     )
   );
 
+drop policy if exists "monitoring_media_owner_read" on storage.objects;
 create policy "monitoring_media_owner_read" on storage.objects for select
   using (
     bucket_id = 'monitoring-media'
@@ -631,6 +708,20 @@ create policy "monitoring_media_owner_read" on storage.objects for select
     )
   );
 
+-- Needed so a customer deleting their whole property (see
+-- deletePropertyPermanently) can also clean up monitoring media files —
+-- previously the owner could only read this bucket, not delete from it.
+drop policy if exists "monitoring_media_owner_delete" on storage.objects;
+create policy "monitoring_media_owner_delete" on storage.objects for delete
+  using (
+    bucket_id = 'monitoring-media'
+    and exists (
+      select 1 from monitoring_jobs j join properties p on p.id = j.property_id
+      where j.id::text = (storage.foldername(name))[1] and p.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists "monitoring_media_admin_read" on storage.objects;
 create policy "monitoring_media_admin_read" on storage.objects for select
   using (bucket_id = 'monitoring-media' and is_admin());
 
@@ -655,12 +746,14 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
 
+drop policy if exists "property_documents_admin_read" on storage.objects;
 create policy "property_documents_admin_read" on storage.objects for select
   using (
     bucket_id = 'property-documents'
     and exists (select 1 from profiles pr where pr.id = auth.uid() and pr.is_admin)
   );
 
+drop policy if exists "property_documents_admin_write" on storage.objects;
 create policy "property_documents_admin_write" on storage.objects for insert
   with check (
     bucket_id = 'property-documents'
@@ -696,3 +789,113 @@ create trigger trg_payments_touch before update on payments
 drop trigger if exists trg_agent_profiles_touch on agent_profiles;
 create trigger trg_agent_profiles_touch before update on agent_profiles
   for each row execute function touch_updated_at();
+
+-- ---------- service_requests (customer support ticketing) ----------
+do $$ begin
+  create type service_request_status as enum ('open', 'closed');
+exception when duplicate_object or duplicate_table then null; end $$;
+
+create table if not exists service_requests (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references profiles(id) on delete cascade,
+  property_id uuid references properties(id) on delete set null,
+  subject text not null,
+  status service_request_status not null default 'open',
+  closed_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  closed_at timestamptz
+);
+
+-- First row per request holds the original description; every reply
+-- (from either side) is just another row here, keeping the model simple.
+create table if not exists service_request_messages (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references service_requests(id) on delete cascade,
+  sender_id uuid not null references profiles(id) on delete cascade,
+  sender_role text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Attachments hang off a message (not the request directly) so both the
+-- original submission and any follow-up reply can carry files, following
+-- the multi-file-per-field rule: file_path always includes a unique
+-- suffix, and no single-file unique constraint exists here.
+create table if not exists service_request_attachments (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references service_request_messages(id) on delete cascade,
+  file_path text not null,
+  uploaded_at timestamptz not null default now()
+);
+
+create index if not exists idx_service_requests_customer on service_requests(customer_id);
+create index if not exists idx_service_request_messages_request on service_request_messages(request_id);
+create index if not exists idx_service_request_attachments_message on service_request_attachments(message_id);
+
+alter table service_requests enable row level security;
+alter table service_request_messages enable row level security;
+alter table service_request_attachments enable row level security;
+
+drop policy if exists "service_requests_select_own" on service_requests;
+create policy "service_requests_select_own" on service_requests for select using (customer_id = auth.uid());
+drop policy if exists "service_requests_select_admin" on service_requests;
+create policy "service_requests_select_admin" on service_requests for select using (is_admin());
+drop policy if exists "service_requests_insert_own" on service_requests;
+create policy "service_requests_insert_own" on service_requests for insert with check (customer_id = auth.uid());
+drop policy if exists "service_requests_update_own" on service_requests;
+create policy "service_requests_update_own" on service_requests for update using (customer_id = auth.uid());
+drop policy if exists "service_requests_update_admin" on service_requests;
+create policy "service_requests_update_admin" on service_requests for update using (is_admin());
+
+drop policy if exists "service_request_messages_select_own" on service_request_messages;
+create policy "service_request_messages_select_own" on service_request_messages for select
+  using (exists (select 1 from service_requests r where r.id = request_id and r.customer_id = auth.uid()));
+drop policy if exists "service_request_messages_select_admin" on service_request_messages;
+create policy "service_request_messages_select_admin" on service_request_messages for select using (is_admin());
+drop policy if exists "service_request_messages_insert_own" on service_request_messages;
+create policy "service_request_messages_insert_own" on service_request_messages for insert
+  with check (
+    sender_id = auth.uid()
+    and exists (select 1 from service_requests r where r.id = request_id and r.customer_id = auth.uid())
+  );
+drop policy if exists "service_request_messages_insert_admin" on service_request_messages;
+create policy "service_request_messages_insert_admin" on service_request_messages for insert
+  with check (sender_id = auth.uid() and is_admin());
+
+drop policy if exists "service_request_attachments_select_own" on service_request_attachments;
+create policy "service_request_attachments_select_own" on service_request_attachments for select
+  using (exists (
+    select 1 from service_request_messages m join service_requests r on r.id = m.request_id
+    where m.id = message_id and r.customer_id = auth.uid()
+  ));
+drop policy if exists "service_request_attachments_select_admin" on service_request_attachments;
+create policy "service_request_attachments_select_admin" on service_request_attachments for select using (is_admin());
+drop policy if exists "service_request_attachments_insert_own" on service_request_attachments;
+create policy "service_request_attachments_insert_own" on service_request_attachments for insert
+  with check (exists (
+    select 1 from service_request_messages m join service_requests r on r.id = m.request_id
+    where m.id = message_id and r.customer_id = auth.uid()
+  ));
+drop policy if exists "service_request_attachments_insert_admin" on service_request_attachments;
+create policy "service_request_attachments_insert_admin" on service_request_attachments for insert with check (is_admin());
+
+insert into storage.buckets (id, name, public) values ('service-request-files', 'service-request-files', false)
+on conflict (id) do nothing;
+
+drop policy if exists "service_files_select_own" on storage.objects;
+create policy "service_files_select_own" on storage.objects for select
+  using (bucket_id = 'service-request-files' and exists (
+    select 1 from service_requests r where r.id::text = (storage.foldername(name))[1] and r.customer_id = auth.uid()
+  ));
+drop policy if exists "service_files_select_admin" on storage.objects;
+create policy "service_files_select_admin" on storage.objects for select
+  using (bucket_id = 'service-request-files' and is_admin());
+drop policy if exists "service_files_insert_own" on storage.objects;
+create policy "service_files_insert_own" on storage.objects for insert
+  with check (bucket_id = 'service-request-files' and exists (
+    select 1 from service_requests r where r.id::text = (storage.foldername(name))[1] and r.customer_id = auth.uid()
+  ));
+drop policy if exists "service_files_insert_admin" on storage.objects;
+create policy "service_files_insert_admin" on storage.objects for insert
+  with check (bucket_id = 'service-request-files' and is_admin());

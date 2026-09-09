@@ -45,6 +45,7 @@ export async function AdminHeader() {
           <Link href="/admin/agents" style={NAV_LINK_STYLE}>Agents</Link>
           <Link href="/admin/monitoring" style={NAV_LINK_STYLE}>Monitoring</Link>
           <Link href="/admin/users" style={NAV_LINK_STYLE}>Users</Link>
+          <Link href="/admin/service-requests" style={NAV_LINK_STYLE}>Service Requests</Link>
         </div>
 
         {user && (

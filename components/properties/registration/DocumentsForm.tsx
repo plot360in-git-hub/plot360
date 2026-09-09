@@ -78,8 +78,8 @@ export function DocumentsForm({
           details clearly state property &amp; the owner details match)<Required />
         </label>
         <input className="field-input" type="file" name="title_deed" accept="image/*,.pdf" multiple required={!hasTitleDeed} />
-        {(existingTitleDeedDocs ?? []).map((doc, i) => (
-          <p key={i} style={{ fontSize: 13, marginTop: 6 }}>
+        {(existingTitleDeedDocs ?? []).map((doc) => (
+          <p key={doc?.name} style={{ fontSize: 13, marginTop: 6 }}>
             Uploaded:{' '}
             {doc?.url ? (
               <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{doc.name}</a>

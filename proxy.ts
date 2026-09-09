@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const CUSTOMER_PREFIXES = ['/dashboard', '/properties', '/tasks', '/onboarding', '/profile'];
+const CUSTOMER_PREFIXES = ['/dashboard', '/properties', '/tasks', '/onboarding', '/profile', '/service-requests'];
 const AGENT_PREFIXES = ['/agent/dashboard', '/agent/jobs', '/agent/profile'];
 
 // Runs before any protected page renders. Three zones, each locked to the
@@ -71,6 +71,7 @@ export const config = {
     '/tasks/:path*',
     '/onboarding/:path*',
     '/profile/:path*',
+    '/service-requests/:path*',
     '/agent/dashboard/:path*',
     '/agent/jobs/:path*',
     '/agent/profile/:path*',
