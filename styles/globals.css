@@ -82,10 +82,12 @@ h1, h2, h3 {
   font-family: var(--font-sans);
   background: #fff;
   color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .field-input:focus {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.16);
 }
 
 .field-input::placeholder {
@@ -96,7 +98,9 @@ h1, h2, h3 {
 .field-label {
   display: block;
   font-size: 14px;
-  color: var(--color-text-muted);
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.005em;
   margin-bottom: 6px;
 }
 

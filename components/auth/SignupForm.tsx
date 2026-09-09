@@ -72,10 +72,13 @@ export function SignupForm() {
 
   return (
     <form action={handleSubmit} className="card" style={{ maxWidth: 440, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 24 }}>Sign up</h2>
+      <h2 style={{ fontSize: 22, marginBottom: 4 }}>Create your account</h2>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: 14.5, marginBottom: 24 }}>
+        Register your property and start monitoring it in minutes.
+      </p>
 
       <div style={{ marginBottom: 16 }}>
-        <label className="field-label" htmlFor="email">Username (email)<span style={{ color: 'var(--color-danger)' }}> *</span></label>
+        <label className="field-label" htmlFor="email">Email address<span style={{ color: 'var(--color-danger)' }}> *</span></label>
         <input className="field-input" id="email" name="email" type="email" required />
       </div>
 
@@ -97,11 +100,15 @@ export function SignupForm() {
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <button className="btn-primary" type="submit" disabled={isPending}>
-          {isPending ? 'Submitting…' : 'Submit'}
+        <button className="btn-primary" type="submit" disabled={isPending} style={{ flex: 1 }}>
+          {isPending ? 'Submitting…' : 'Create account'}
         </button>
         <button className="btn-primary" type="reset">Reset</button>
       </div>
+
+      <p style={{ marginTop: 20, textAlign: 'center', fontSize: 14.5, color: 'var(--color-text-muted)' }}>
+        Already have an account? <Link href="/" style={{ color: 'var(--color-accent)' }}>Log in</Link>
+      </p>
     </form>
   );
 }

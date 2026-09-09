@@ -7,7 +7,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
   return (
     <main>
       <PropertyView propertyId={id} />
-      <div className="container-narrow" style={{ paddingBottom: 60 }}>
+      <div className="container-wide" style={{ paddingBottom: 60 }}>
         <MonitoringStatus propertyId={id} />
         <TaskList propertyId={id} />
       </div>
