@@ -122,6 +122,12 @@ export async function CustomerDashboard() {
                   : '—'}
               </p>
 
+              {p.status === 'rejected' && p.rejection_reason && (
+                <p style={{ fontSize: 12.5, color: 'var(--color-danger)', margin: 0 }}>
+                  {p.rejection_reason.length > 80 ? `${p.rejection_reason.slice(0, 80)}…` : p.rejection_reason}
+                </p>
+              )}
+
               {latestMonitoringByProperty?.[p.id] && (
                 <span
                   className={`status-pill ${MONITORING_STATUS_CLASS[latestMonitoringByProperty[p.id]] ?? 'pending'}`}

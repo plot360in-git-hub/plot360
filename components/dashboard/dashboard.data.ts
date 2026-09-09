@@ -10,7 +10,7 @@ export async function getDashboardData() {
     supabase.from('profiles').select('*').eq('id', userData.user.id).single(),
     supabase
       .from('properties')
-      .select('id, property_name, status, registration_date, expiration_date')
+      .select('id, property_name, status, registration_date, expiration_date, rejection_reason')
       .eq('owner_id', userData.user.id)
       .order('created_at', { ascending: false }),
   ]);

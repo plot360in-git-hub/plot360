@@ -112,6 +112,8 @@ create table if not exists properties (
   updated_at timestamptz not null default now()
 );
 
+alter table properties add column if not exists rejection_reason text;
+
 create index if not exists idx_properties_owner on properties(owner_id);
 
 -- ---------- property_ownership (Proofs of Ownership screen) ----------

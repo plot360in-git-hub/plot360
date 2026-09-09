@@ -65,14 +65,24 @@ export async function deleteProperty(propertyId: string) {
   return { success: true };
 }
 
-export async function setPropertyStatus(propertyId: string, status: 'verified' | 'rejected') {
+export async function setPropertyStatus(propertyId: string, status: 'verified' | 'rejected', rejectionReason?: string) {
   const supabase = await createClient();
 
   // Belt-and-suspenders: RLS already blocks this for non-admins, but check
   // explicitly so the UI can show a clean error instead of a raw DB failure.
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
 
-  const { error } = await supabase.from('properties').update({ status }).eq('id', propertyId);
+  if (status === 'rejected' && !rejectionReason?.trim()) {
+    return { error: 'Please explain why the property is being rejected and what the customer needs to fix.' };
+  }
+
+  const { error } = await supabase
+    .from('properties')
+    .update({
+      status,
+      rejection_reason: status === 'rejected' ? rejectionReason!.trim() : null,
+    })
+    .eq('id', propertyId);
   if (error) return { error: error.message };
 
   // Approving content doesn't activate the property on its own anymore —

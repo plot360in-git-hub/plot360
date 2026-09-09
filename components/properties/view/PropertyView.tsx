@@ -109,6 +109,13 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
       </div>
 
       {/* Property Information */}
+      {property.status === 'rejected' && property.rejection_reason && (
+        <div className="card section-alt" style={{ marginBottom: 24, borderColor: 'var(--color-danger)' }}>
+          <p className="field-label" style={{ marginBottom: 6 }}>Why this was rejected</p>
+          <p style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{property.rejection_reason}</p>
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: 24 }}>
         <h3 style={{ marginBottom: 16 }}>Property Information</h3>
         <dl style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 12, columnGap: 24 }}>
