@@ -169,7 +169,18 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <h3 style={{ marginBottom: 16 }}>Payment</h3>
         {!payment ? (
-          <p style={{ color: 'var(--color-text-muted)' }}>No payment required yet — this stage comes after admin verification.</p>
+          property.status === 'verified' ? (
+            <div>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 12 }}>
+                Your property is verified — subscribe to activate monitoring and set your validity period.
+              </p>
+              <Link href={`/properties/${propertyId}/subscribe`} className="btn-primary" style={{ textDecoration: 'none' }}>
+                Subscribe now
+              </Link>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-text-muted)' }}>No payment required yet — this stage comes after admin verification.</p>
+          )
         ) : payment.status === 'completed' ? (
           <dl style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 12, columnGap: 24 }}>
             <div><dt className="field-label">Status</dt><dd><span className="status-pill verified">Completed</span></dd></div>
@@ -177,14 +188,21 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
             <div><dt className="field-label">Valid from</dt><dd>{payment.valid_from}</dd></div>
             <div><dt className="field-label">Next payment due</dt><dd>{payment.valid_until}</dd></div>
           </dl>
+        ) : payment.transaction_reference ? (
+          <div>
+            <span className="status-pill pending" style={{ marginBottom: 12, display: 'inline-block' }}>Awaiting confirmation</span>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+              You've submitted payment proof — an admin will verify and confirm it shortly.
+            </p>
+          </div>
         ) : (
           <div>
-            <span className="status-pill pending" style={{ marginBottom: 12, display: 'inline-block' }}>Pending</span>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
-              {payment.payment_type === 'renewal' ? 'Your renewal' : 'Your registration'} has been approved and is
-              awaiting payment confirmation. Please complete payment and contact support with your reference —
-              an admin will confirm it here once received.
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 12 }}>
+              Your property is verified — subscribe to activate monitoring and set your validity period.
             </p>
+            <Link href={`/properties/${propertyId}/subscribe`} className="btn-primary" style={{ textDecoration: 'none' }}>
+              Subscribe now
+            </Link>
           </div>
         )}
       </div>

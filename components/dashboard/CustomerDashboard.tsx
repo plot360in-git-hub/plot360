@@ -22,12 +22,30 @@ const MONITORING_STATUS_CLASS: Record<string, string> = {
   rejected: 'rejected',
 };
 
-function paymentBadge(payment: any) {
-  if (!payment) return <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>—</span>;
-  if (payment.status === 'completed') {
+function paymentBadge(payment: any, propertyStatus: string, propertyId: string) {
+  if (payment?.status === 'completed') {
     return <span className="status-pill verified">Completed</span>;
   }
-  return <span className="status-pill pending">Pending</span>;
+  // Not yet submitted proof (no payment row, or a blank pending one) —
+  // make it a direct link to the subscribe page instead of a static "—"
+  // or "Pending" pill, so the customer doesn't need to open the property
+  // and scroll down to find the action.
+  if (propertyStatus === 'verified' && !payment?.transaction_reference) {
+    return (
+      <Link
+        href={`/properties/${propertyId}/subscribe`}
+        className="status-pill pending"
+        style={{ textDecoration: 'none', cursor: 'pointer' }}
+      >
+        Payment Pending — Subscribe
+      </Link>
+    );
+  }
+  // Already submitted proof, waiting on admin — nothing left to click.
+  if (payment?.transaction_reference) {
+    return <span className="status-pill pending">Awaiting Confirmation</span>;
+  }
+  return <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>—</span>;
 }
 
 export async function CustomerDashboard() {
@@ -107,7 +125,7 @@ export async function CustomerDashboard() {
                 ) : (
                   <span className={`status-pill ${p.status}`}>{STATUS_LABEL[p.status] ?? p.status}</span>
                 )}
-                {!isDraft && paymentBadge(payment)}
+                {!isDraft && paymentBadge(payment, p.status, p.id)}
               </div>
 
               <h4 style={{ margin: 0 }}>{p.property_name}</h4>

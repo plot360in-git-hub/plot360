@@ -901,3 +901,73 @@ create policy "service_files_insert_own" on storage.objects for insert
 drop policy if exists "service_files_insert_admin" on storage.objects;
 create policy "service_files_insert_admin" on storage.objects for insert
   with check (bucket_id = 'service-request-files' and is_admin());
+
+-- ---------- subscription_plans + payment_settings + payment proof fields ----------
+create table if not exists subscription_plans (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  price numeric not null,
+  validity_months integer not null default 12,
+  is_active boolean not null default true,
+  display_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- Singleton row: admin-configurable UPI/bank/QR shown on the customer
+-- subscribe page.
+create table if not exists payment_settings (
+  id uuid primary key default gen_random_uuid(),
+  upi_id text,
+  bank_account_name text,
+  bank_account_number text,
+  bank_ifsc text,
+  bank_name text,
+  qr_code_image_path text,
+  updated_at timestamptz not null default now()
+);
+
+alter table payments add column if not exists plan_id uuid references subscription_plans(id);
+alter table payments add column if not exists screenshot_path text;
+
+do $$ begin
+  if not exists (select 1 from subscription_plans) then
+    insert into subscription_plans (name, price, validity_months, display_order) values
+      ('6-Month Plan', 999, 6, 1),
+      ('1-Year Plan', 1799, 12, 2);
+  end if;
+end $$;
+
+alter table subscription_plans enable row level security;
+alter table payment_settings enable row level security;
+
+drop policy if exists "subscription_plans_select_all" on subscription_plans;
+create policy "subscription_plans_select_all" on subscription_plans for select using (true);
+drop policy if exists "subscription_plans_write_admin" on subscription_plans;
+create policy "subscription_plans_write_admin" on subscription_plans for all using (is_admin()) with check (is_admin());
+
+drop policy if exists "payment_settings_select_all" on payment_settings;
+create policy "payment_settings_select_all" on payment_settings for select using (true);
+drop policy if exists "payment_settings_write_admin" on payment_settings;
+create policy "payment_settings_write_admin" on payment_settings for all using (is_admin()) with check (is_admin());
+
+insert into storage.buckets (id, name, public) values ('payment-info', 'payment-info', true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('payment-proofs', 'payment-proofs', false) on conflict (id) do nothing;
+
+drop policy if exists "payment_info_admin_write" on storage.objects;
+create policy "payment_info_admin_write" on storage.objects for all
+  using (bucket_id = 'payment-info' and is_admin()) with check (bucket_id = 'payment-info' and is_admin());
+
+drop policy if exists "payment_proofs_owner_insert" on storage.objects;
+create policy "payment_proofs_owner_insert" on storage.objects for insert
+  with check (bucket_id = 'payment-proofs' and exists (
+    select 1 from payments pay join properties p on p.id = pay.property_id
+    where pay.id::text = (storage.foldername(name))[1] and p.owner_id = auth.uid()
+  ));
+drop policy if exists "payment_proofs_select" on storage.objects;
+create policy "payment_proofs_select" on storage.objects for select
+  using (bucket_id = 'payment-proofs' and (
+    is_admin() or exists (
+      select 1 from payments pay join properties p on p.id = pay.property_id
+      where pay.id::text = (storage.foldername(name))[1] and p.owner_id = auth.uid()
+    )
+  ));

@@ -2,6 +2,7 @@ import {
   getPendingPayments,
   getCompletedPayments,
   getUpcomingRenewalsDue,
+  getPaymentProofUrl,
 } from '@/components/payments/payments.actions';
 import { profileDisplayName } from './displayName';
 import { PaymentRecordForm } from './PaymentRecordForm';
@@ -15,6 +16,11 @@ export async function PaymentsOverview() {
     getCompletedPayments(),
     getUpcomingRenewalsDue(30),
   ]);
+
+  const screenshotUrls: Record<string, string | null> = {};
+  for (const p of pending) {
+    if (p.screenshot_path) screenshotUrls[p.screenshot_path] = await getPaymentProofUrl(p.screenshot_path);
+  }
 
   return (
     <div className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
@@ -39,7 +45,40 @@ export async function PaymentsOverview() {
                 View property
               </Link>
             </div>
-            <PaymentRecordForm paymentId={p.id} propertyId={p.properties?.id} />
+
+            <div className="card section-alt" style={{ marginBottom: 12 }}>
+              <p className="field-label" style={{ marginBottom: 8 }}>Customer-submitted proof</p>
+              {p.subscription_plans || p.transaction_reference ? (
+                <>
+                  {p.subscription_plans && (
+                    <p style={{ fontSize: 14, marginBottom: 4 }}>
+                      Plan: {p.subscription_plans.name} — ₹{p.subscription_plans.price} ({p.subscription_plans.validity_months} months)
+                    </p>
+                  )}
+                  {p.payment_method && <p style={{ fontSize: 14, marginBottom: 4 }}>Method: {p.payment_method}</p>}
+                  {p.transaction_reference && <p style={{ fontSize: 14, marginBottom: 4 }}>Transaction ID: {p.transaction_reference}</p>}
+                  {p.screenshot_path && screenshotUrls[p.screenshot_path] ? (
+                    <a href={screenshotUrls[p.screenshot_path]!} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)', fontSize: 14 }}>
+                      View screenshot
+                    </a>
+                  ) : (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No screenshot uploaded.</p>
+                  )}
+                </>
+              ) : (
+                <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+                  Customer hasn't submitted payment proof yet — nothing to review.
+                </p>
+              )}
+            </div>
+
+            <PaymentRecordForm
+              paymentId={p.id}
+              propertyId={p.properties?.id}
+              defaultAmount={p.amount ?? p.subscription_plans?.price}
+              defaultMethod={p.payment_method}
+              defaultReference={p.transaction_reference}
+            />
           </div>
         ))}
         {pending.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No payments waiting on confirmation.</p>}

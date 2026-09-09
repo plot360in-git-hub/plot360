@@ -1,0 +1,90 @@
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
+
+export async function getMyPendingPaymentForProperty(propertyId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('payments')
+    .select('*, subscription_plans(name, price)')
+    .eq('property_id', propertyId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+export async function submitSubscriptionPayment(propertyId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+
+  const { data: property } = await supabase.from('properties').select('owner_id, status').eq('id', propertyId).single();
+  if (!property) return { error: 'Property not found.' };
+  if (property.owner_id !== userData.user.id) return { error: 'Not authorized.' };
+  if (property.status !== 'verified') return { error: 'This property must be verified by admin before subscribing.' };
+
+  const planId = String(formData.get('plan_id') || '');
+  const paymentMethod = String(formData.get('payment_method') || '');
+  const transactionId = String(formData.get('transaction_id') || '').trim();
+  if (!planId) return { error: 'Please select a plan.' };
+  if (!paymentMethod) return { error: 'Please select how you paid.' };
+  if (!transactionId) return { error: 'Transaction ID is required.' };
+
+  const { data: plan } = await supabase.from('subscription_plans').select('price').eq('id', planId).single();
+
+  const { data: existingPending } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('property_id', propertyId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let paymentId = existingPending?.id as string | undefined;
+  if (!paymentId) {
+    const { data: newPayment, error: insertError } = await supabase
+      .from('payments')
+      .insert({ property_id: propertyId, payment_type: 'initial', status: 'pending' })
+      .select('id')
+      .single();
+    if (insertError) return { error: insertError.message };
+    paymentId = newPayment.id;
+  }
+
+  let screenshotPath: string | null = null;
+  const screenshotFile = formData.get('screenshot') as File | null;
+  if (screenshotFile && screenshotFile.size > 0) {
+    const path = `${paymentId}/${Date.now()}-${screenshotFile.name}`;
+    const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(path, screenshotFile);
+    if (uploadError) return { error: uploadError.message };
+    screenshotPath = path;
+  }
+
+  const { data: updated, error } = await supabase
+    .from('payments')
+    .update({
+      plan_id: planId,
+      amount: plan?.price ?? null,
+      payment_method: paymentMethod,
+      transaction_reference: transactionId,
+      ...(screenshotPath ? { screenshot_path: screenshotPath } : {}),
+    })
+    .eq('id', paymentId)
+    .select('id')
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!updated) {
+    // RLS silently matched zero rows — Supabase doesn't treat this as an
+    // error by default, so without this explicit check the customer would
+    // see "success" while nothing was actually saved.
+    return { error: 'Could not save your submission — please contact support.' };
+  }
+
+  revalidatePath(`/properties/${propertyId}`);
+  revalidatePath(`/properties/${propertyId}/subscribe`);
+  return { success: true };
+}

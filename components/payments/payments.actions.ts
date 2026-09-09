@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { sendReceiptEmail } from './email';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -85,10 +86,17 @@ export async function getPendingPayments() {
   const supabase = await createClient();
   const { data } = await supabase
     .from('payments')
-    .select('*, properties(id, property_name, owner_id, profiles(username, first_name, last_name, email))')
+    .select('*, subscription_plans(name, price, validity_months), properties(id, property_name, owner_id, profiles(username, first_name, last_name, email))')
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
   return data ?? [];
+}
+
+export async function getPaymentProofUrl(filePath: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(filePath, 60 * 10);
+  if (error) return null;
+  return data.signedUrl;
 }
 
 export async function getCompletedPayments() {
@@ -132,12 +140,22 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
 
   if (!paymentMethod) return { error: 'Payment method is required.' };
 
+  const { data: paymentRow } = await supabase
+    .from('payments')
+    .select('payment_type, plan_id, subscription_plans(name, validity_months)')
+    .eq('id', paymentId)
+    .single();
+
+  // Validity comes from the selected plan's validity_months when one was
+  // chosen (the normal customer-initiated flow); falls back to 1 year for
+  // any payment recorded without a plan attached.
+  const plan: any = paymentRow?.subscription_plans;
+  const validityMonths = plan?.validity_months ?? 12;
+
   const validFrom = paidAt;
   const validUntilDate = new Date(paidAt);
-  validUntilDate.setFullYear(validUntilDate.getFullYear() + 1);
+  validUntilDate.setMonth(validUntilDate.getMonth() + validityMonths);
   const validUntil = validUntilDate.toISOString().slice(0, 10);
-
-  const { data: paymentRow } = await supabase.from('payments').select('payment_type').eq('id', paymentId).single();
 
   const { error: paymentError } = await supabase
     .from('payments')
@@ -165,11 +183,40 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
     propertyPatch.next_monitoring_due_date = firstMonitoringDue.toISOString().slice(0, 10);
   }
 
-  const { error: propertyError } = await supabase
+  const { data: property, error: propertyError } = await supabase
     .from('properties')
     .update(propertyPatch)
-    .eq('id', propertyId);
+    .eq('id', propertyId)
+    .select('property_name, street_address, village_town, district, state, owner_id')
+    .single();
   if (propertyError) return { error: propertyError.message };
+
+  // Best-effort — a failed email shouldn't undo an already-successful
+  // payment confirmation, so this never returns an error to the admin.
+  if (property) {
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', property.owner_id)
+      .single();
+    if (ownerProfile?.email) {
+      const address = [property.street_address, property.village_town, property.district, property.state]
+        .filter(Boolean)
+        .join(', ');
+      await sendReceiptEmail({
+        to: ownerProfile.email,
+        customerName: `${ownerProfile.first_name ?? ''} ${ownerProfile.last_name ?? ''}`.trim() || 'there',
+        propertyName: property.property_name,
+        address,
+        planName: plan?.name ?? 'Subscription',
+        price: amount ?? 0,
+        paymentMethod,
+        transactionId: transactionReference || '—',
+        validFrom,
+        validUntil,
+      });
+    }
+  }
 
   revalidatePath('/admin/payments');
   revalidatePath(`/properties/${propertyId}`);
