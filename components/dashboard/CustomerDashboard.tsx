@@ -52,7 +52,7 @@ export async function CustomerDashboard() {
   const data = await getDashboardData();
   if (!data) return <p>Please sign in.</p>;
 
-  const { profile, properties, paymentsByProperty, latestMonitoringByProperty, visitCountByProperty, summary } = data;
+  const { profile, properties, paymentsByProperty, latestMonitoringByProperty, visitCountByProperty, maxVisitsByProperty, summary } = data;
 
   return (
     <div className="container-wide" style={{ paddingTop: 40, paddingBottom: 60 }}>
@@ -110,10 +110,11 @@ export async function CustomerDashboard() {
             ? Math.ceil((new Date(p.expiration_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
             : null;
           const visitsCompleted = visitCountByProperty?.[p.id] ?? 0;
+          const requiredVisits = maxVisitsByProperty?.[p.id] ?? 1;
           const canRenew =
             p.status === 'verified' &&
             !!p.expiration_date &&
-            visitsCompleted >= 2 &&
+            visitsCompleted >= requiredVisits &&
             daysUntilExpiry !== null &&
             daysUntilExpiry <= 15;
 
@@ -183,7 +184,7 @@ export async function CustomerDashboard() {
                     {p.status === 'verified' && p.expiration_date && !canRenew && (
                       <span
                         style={{ color: 'var(--color-text-muted)', fontSize: 12 }}
-                        title="Renew unlocks once 2 site verifications are complete and expiry is within 15 days"
+                        title="Renew unlocks once your plan's required site verification(s) are complete and expiry is within 15 days"
                       >
                         Renew (not yet available)
                       </span>

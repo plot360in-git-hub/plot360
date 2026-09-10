@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { RequestRenewalForm } from '@/components/properties/renewal/RequestRenewalForm';
 import { getPendingRenewalForProperty } from '@/components/properties/renewal/renewal.actions';
+import { maxVisitsForPlan } from '@/lib/subscription';
 
 export default async function RenewPropertyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,7 +37,7 @@ export default async function RenewPropertyPage({ params }: { params: Promise<{ 
 
   const { data: latestPayment } = await supabase
     .from('payments')
-    .select('valid_from')
+    .select('valid_from, subscription_plans(validity_months)')
     .eq('property_id', id)
     .eq('status', 'completed')
     .order('created_at', { ascending: false })
@@ -53,14 +54,17 @@ export default async function RenewPropertyPage({ params }: { params: Promise<{ 
       .gte('decided_at', latestPayment.valid_from);
     visitsCompleted = count ?? 0;
   }
+  const plan: any = latestPayment?.subscription_plans;
+  const requiredVisits = maxVisitsForPlan(plan?.validity_months);
 
-  if (visitsCompleted < 2 || daysUntilExpiry > 15) {
+  if (visitsCompleted < requiredVisits || daysUntilExpiry > 15) {
     return (
       <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
         <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
           <p>
-            Renewal isn't available yet. It unlocks once both twice-yearly site verifications are
-            complete ({visitsCompleted}/2 done) and your listing is within 15 days of expiring
+            Renewal isn't available yet. It unlocks once your plan's required site verification
+            {requiredVisits > 1 ? 's are' : ' is'} complete ({visitsCompleted}/{requiredVisits} done) and your
+            listing is within 15 days of expiring
             {daysUntilExpiry > 15 ? ` (currently ${daysUntilExpiry} days away)` : ''}.
           </p>
         </div>

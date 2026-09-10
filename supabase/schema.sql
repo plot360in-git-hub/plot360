@@ -486,6 +486,28 @@ drop policy if exists "payments_update_admin" on payments;
 create policy "payments_update_admin" on payments for update
   using (is_admin());
 
+-- Lets the property owner submit their own subscription payment proof
+-- (plan, method, transaction ID, screenshot) — but the "with check"
+-- constrains every such write to STAY status='pending', so a customer
+-- can never set their own payment to 'completed' or otherwise grant
+-- themselves validity; only payments_update_admin above can do that.
+drop policy if exists "payments_update_own" on payments;
+create policy "payments_update_own" on payments for update
+  using (
+    status = 'pending'
+    and exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid())
+  )
+  with check (
+    status = 'pending'
+    and exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid())
+  );
+drop policy if exists "payments_insert_own" on payments;
+create policy "payments_insert_own" on payments for insert
+  with check (
+    status = 'pending'
+    and exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid())
+  );
+
 -- helper: is the current user the agent (via profiles.id) on this job?
 -- Used repeatedly below instead of repeating the join.
 create or replace function is_my_agent_job(job_agent_id uuid) returns boolean

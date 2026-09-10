@@ -33,7 +33,7 @@ export async function getLatestPaymentsForProperties(propertyIds: string[]) {
   const supabase = await createClient();
   const { data } = await supabase
     .from('payments')
-    .select('*')
+    .select('*, subscription_plans(validity_months)')
     .in('property_id', propertyIds)
     .order('created_at', { ascending: false });
 

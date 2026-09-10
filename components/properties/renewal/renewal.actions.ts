@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { createPendingPayment } from '@/components/payments/payments.actions';
+import { maxVisitsForPlan } from '@/lib/subscription';
 
 // Owner-side: submits a renewal REQUEST. Does not touch properties.expiration_date —
 // that only changes once an admin approves (see decideRenewal below).
@@ -24,7 +25,7 @@ export async function requestRenewal(propertyId: string, formData: FormData) {
   const daysUntilExpiry = Math.ceil((new Date(property.expiration_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const { data: latestPayment } = await supabase
     .from('payments')
-    .select('valid_from')
+    .select('valid_from, subscription_plans(validity_months)')
     .eq('property_id', propertyId)
     .eq('status', 'completed')
     .order('created_at', { ascending: false })
@@ -40,8 +41,10 @@ export async function requestRenewal(propertyId: string, formData: FormData) {
       .gte('decided_at', latestPayment.valid_from);
     visitsCompleted = count ?? 0;
   }
-  if (visitsCompleted < 2 || daysUntilExpiry > 15) {
-    return { error: 'Renewal is not yet available — requires 2 completed site verifications and being within 15 days of expiry.' };
+  const plan: any = latestPayment?.subscription_plans;
+  const requiredVisits = maxVisitsForPlan(plan?.validity_months);
+  if (visitsCompleted < requiredVisits || daysUntilExpiry > 15) {
+    return { error: `Renewal is not yet available — requires ${requiredVisits} completed site verification(s) and being within 15 days of expiry.` };
   }
 
   const { data: existingPending } = await supabase

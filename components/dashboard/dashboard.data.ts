@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { getLatestPaymentsForProperties } from '@/components/payments/payments.actions';
+import { maxVisitsForPlan } from '@/lib/subscription';
 
 export async function getDashboardData() {
   const supabase = await createClient();
@@ -68,6 +69,12 @@ export async function getDashboardData() {
   const verified = properties?.filter((p) => p.status === 'verified').length ?? 0;
   const pending = total - verified;
 
+  const maxVisitsByProperty: Record<string, number> = {};
+  for (const id of propertyIds) {
+    const plan: any = paymentsByProperty?.[id]?.subscription_plans;
+    maxVisitsByProperty[id] = maxVisitsForPlan(plan?.validity_months);
+  }
+
   return {
     profile,
     properties: properties ?? [],
@@ -76,6 +83,7 @@ export async function getDashboardData() {
     monitoringJobs: monitoringJobs ?? [],
     latestMonitoringByProperty,
     visitCountByProperty,
+    maxVisitsByProperty,
     summary: { total, verified, pending },
   };
 }

@@ -4,18 +4,22 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { isCurrentUserAdmin } from './admin.actions';
 import { getOrCreateUploadToken } from '@/components/agent/magic-link.actions';
+import { maxVisitsForPlan } from '@/lib/subscription';
 
 // Eligible = verified + the MOST RECENT payment for the property is
 // actually 'completed' + no currently-open monitoring job (assigned/
-// accepted/submitted) + fewer than 2 approved verifications since the
-// current payment cycle started + next due date is within 15 days (or
-// already overdue). Checking the latest payment's status directly
-// (rather than just "expiration_date is set") matters because a property
-// can have an old expiration_date from a prior paid cycle while its
-// newest payment (e.g. a renewal) is still pending — that property is
-// NOT currently eligible until that payment is confirmed.
+// accepted/submitted) + fewer visits done than the plan allows.
+//
+// The FIRST visit of a cycle is available immediately on payment
+// confirmation — no due-date window applies to it. Only the SECOND visit
+// (only relevant for 12-month plans, which allow 2) waits for the
+// 15-day-before-due window, matching the twice-yearly cadence.
+//
+// How many visits a plan allows: 6-month plan → 1 visit, 12-month plan →
+// 2 visits (every ~6 months). Falls back to 1 visit for a payment with no
+// plan attached (e.g. one recorded manually by an admin without going
+// through the subscribe flow).
 const DUE_WINDOW_DAYS = 15;
-const MAX_VISITS_PER_CYCLE = 2;
 
 export async function getEligiblePropertiesForAssignment() {
   const supabase = await createClient();
@@ -52,29 +56,25 @@ export async function getEligiblePropertiesForAssignment() {
   const candidates: CandidateProperty[] = data ?? [];
   if (candidates.length === 0) return [];
 
-  // Only within the 15-day window (or already overdue) even gets checked further.
-  const today = new Date();
-  const dueSoon = candidates.filter((p) => {
-    if (!p.next_monitoring_due_date) return false;
-    const daysUntilDue = Math.ceil((new Date(p.next_monitoring_due_date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilDue <= DUE_WINDOW_DAYS;
-  });
-  if (dueSoon.length === 0) return [];
-
   const { data: payments } = await supabase
     .from('payments')
-    .select('property_id, status, valid_from, created_at')
-    .in('property_id', dueSoon.map((p) => p.id))
+    .select('property_id, status, valid_from, created_at, subscription_plans(validity_months)')
+    .in('property_id', candidates.map((p) => p.id))
     .order('created_at', { ascending: false });
 
-  const latestPaymentByProperty: Record<string, { status: string; valid_from: string | null }> = {};
+  const latestPaymentByProperty: Record<string, { status: string; valid_from: string | null; validityMonths: number | null }> = {};
   for (const payment of payments ?? []) {
     if (!latestPaymentByProperty[payment.property_id]) {
-      latestPaymentByProperty[payment.property_id] = { status: payment.status, valid_from: payment.valid_from };
+      const plan: any = payment.subscription_plans;
+      latestPaymentByProperty[payment.property_id] = {
+        status: payment.status,
+        valid_from: payment.valid_from,
+        validityMonths: plan?.validity_months ?? null,
+      };
     }
   }
 
-  const paidCandidates = dueSoon.filter((p) => latestPaymentByProperty[p.id]?.status === 'completed');
+  const paidCandidates = candidates.filter((p) => latestPaymentByProperty[p.id]?.status === 'completed');
   if (paidCandidates.length === 0) return [];
 
   // Count approved visits since the CURRENT cycle started (the latest
@@ -95,7 +95,21 @@ export async function getEligiblePropertiesForAssignment() {
     }
   }
 
-  return paidCandidates.filter((p) => (visitCountByProperty[p.id] ?? 0) < MAX_VISITS_PER_CYCLE);
+  const today = new Date();
+
+  return paidCandidates.filter((p) => {
+    const visitsDone = visitCountByProperty[p.id] ?? 0;
+    const maxVisits = maxVisitsForPlan(latestPaymentByProperty[p.id]?.validityMonths);
+    if (visitsDone >= maxVisits) return false;
+
+    // First visit: always immediately eligible, no due-date window.
+    if (visitsDone === 0) return true;
+
+    // Second (and only) subsequent visit: apply the 15-day-before-due window.
+    if (!p.next_monitoring_due_date) return false;
+    const daysUntilDue = Math.ceil((new Date(p.next_monitoring_due_date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntilDue <= DUE_WINDOW_DAYS;
+  });
 }
 
 export async function getVerifiedAgentsList() {
@@ -114,7 +128,7 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
 
   const { data: latestPayment } = await supabase
     .from('payments')
-    .select('status, valid_from')
+    .select('status, valid_from, subscription_plans(validity_months)')
     .eq('property_id', propertyId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -130,8 +144,10 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
       .eq('property_id', propertyId)
       .eq('status', 'approved')
       .gte('decided_at', latestPayment.valid_from);
-    if ((count ?? 0) >= MAX_VISITS_PER_CYCLE) {
-      return { error: 'This property already has 2 completed verifications for the current cycle.' };
+    const plan: any = latestPayment.subscription_plans;
+    const maxVisits = maxVisitsForPlan(plan?.validity_months);
+    if ((count ?? 0) >= maxVisits) {
+      return { error: `This property already has ${maxVisits} completed verification${maxVisits > 1 ? 's' : ''} for the current cycle.` };
     }
   }
 
