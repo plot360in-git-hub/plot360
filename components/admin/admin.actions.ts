@@ -5,6 +5,27 @@ import { revalidatePath } from 'next/cache';
 import { createPendingPayment } from '@/components/payments/payments.actions';
 import { sendPropertyStatusEmail } from '@/components/properties/registration/email';
 
+export async function getAdminPendingCounts() {
+  const supabase = await createClient();
+  const [verification, renewals, payments, agents, monitoring, serviceRequests] = await Promise.all([
+    supabase.from('properties').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('renewal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('agent_profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('monitoring_jobs').select('id', { count: 'exact', head: true }).eq('status', 'submitted'),
+    supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+  ]);
+
+  return {
+    verification: verification.count ?? 0,
+    renewals: renewals.count ?? 0,
+    payments: payments.count ?? 0,
+    agents: agents.count ?? 0,
+    monitoring: monitoring.count ?? 0,
+    serviceRequests: serviceRequests.count ?? 0,
+  };
+}
+
 export async function isCurrentUserAdmin() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();

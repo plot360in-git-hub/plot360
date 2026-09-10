@@ -9,6 +9,15 @@ async function getSenderRole(supabase: any, userId: string) {
   return profile?.is_admin ? 'admin' : 'customer';
 }
 
+export async function getMyOpenServiceRequestCount() {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from('service_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'open');
+  return count ?? 0;
+}
+
 export async function createServiceRequest(formData: FormData) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
