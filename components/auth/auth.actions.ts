@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { verifyTurnstileToken } from './turnstile.server';
+import { sendNotificationEmail } from '@/lib/email';
 
 // Matches the Signup wireframe: username(email), password, re-enter password, captcha.
 // Supabase Auth owns the users table — we just create the row and let the
@@ -91,6 +92,19 @@ export async function updatePassword(formData: FormData) {
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
+
+  if (userData.user.email) {
+    await sendNotificationEmail({
+      to: userData.user.email,
+      subject: 'Your Plot360 password was changed',
+      heading: 'Password changed',
+      accent: '#b3261e',
+      bodyLines: [
+        'This confirms your Plot360 account password was just changed.',
+        "If this wasn't you, contact support immediately.",
+      ],
+    });
+  }
 
   redirect('/dashboard');
 }

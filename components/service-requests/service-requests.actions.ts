@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { sendNotificationEmail } from '@/lib/email';
 
 async function getSenderRole(supabase: any, userId: string) {
   const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userId).single();
@@ -84,7 +85,7 @@ export async function postServiceRequestMessage(requestId: string, formData: For
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
 
-  const { data: request } = await supabase.from('service_requests').select('status').eq('id', requestId).single();
+  const { data: request } = await supabase.from('service_requests').select('status, subject, customer_id').eq('id', requestId).single();
   if (!request) return { error: 'Request not found.' };
   if (request.status === 'closed') return { error: "This request is closed — please submit a new request." };
 
@@ -109,6 +110,29 @@ export async function postServiceRequestMessage(requestId: string, formData: For
   }
 
   await supabase.from('service_requests').update({ updated_at: new Date().toISOString() }).eq('id', requestId);
+
+  // Only notify the customer when it's the ADMIN side replying — a
+  // customer's own message doesn't need to notify themself.
+  if (senderRole === 'admin') {
+    const { data: customerProfile } = await supabase
+      .from('profiles')
+      .select('email, first_name')
+      .eq('id', request.customer_id)
+      .single();
+    if (customerProfile?.email) {
+      await sendNotificationEmail({
+        to: customerProfile.email,
+        subject: `New reply: ${request.subject}`,
+        heading: 'You have a new reply',
+        bodyLines: [
+          `Hi ${customerProfile.first_name || 'there'},`,
+          `Plot360 Support replied to your request "${request.subject}". Log in to view the full message and continue the conversation.`,
+        ],
+        ctaText: 'View request',
+        ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in'}/service-requests/${requestId}`,
+      });
+    }
+  }
 
   revalidatePath(`/service-requests/${requestId}`);
   revalidatePath(`/admin/service-requests/${requestId}`);

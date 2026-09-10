@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { isCurrentUserAdmin } from './admin.actions';
 import { getOrCreateUploadToken } from '@/components/agent/magic-link.actions';
 import { maxVisitsForPlan } from '@/lib/subscription';
+import { sendNotificationEmail } from '@/lib/email';
 
 // Eligible = verified + the MOST RECENT payment for the property is
 // actually 'completed' + no currently-open monitoring job (assigned/
@@ -259,16 +260,40 @@ export async function decideMonitoringJob(
   if (decision === 'approved') {
     const nextDue = new Date();
     nextDue.setMonth(nextDue.getMonth() + 6);
-    const { error: propertyError } = await supabase
+    const { data: property, error: propertyError } = await supabase
       .from('properties')
       .update({ next_monitoring_due_date: nextDue.toISOString().slice(0, 10) })
-      .eq('id', propertyId);
+      .eq('id', propertyId)
+      .select('property_name, owner_id')
+      .single();
     if (propertyError) return { error: propertyError.message };
 
     // Revoke the agent's upload link the moment work is confirmed complete —
     // per the requirement that access ends as soon as the job is approved,
     // not just after the token's 7-day window.
     await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
+
+    if (property) {
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('email, first_name')
+        .eq('id', property.owner_id)
+        .single();
+      if (ownerProfile?.email) {
+        await sendNotificationEmail({
+          to: ownerProfile.email,
+          subject: `Visit verified: ${property.property_name}`,
+          heading: 'Your property visit is verified',
+          accent: '#1a7f37',
+          bodyLines: [
+            `Hi ${ownerProfile.first_name || 'there'},`,
+            `The recent physical verification for "${property.property_name}" has been reviewed and approved. Photos and videos are now available to download from your property page.`,
+          ],
+          ctaText: 'View property',
+          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in'}/properties/${propertyId}`,
+        });
+      }
+    }
   }
 
   revalidatePath('/admin/monitoring');

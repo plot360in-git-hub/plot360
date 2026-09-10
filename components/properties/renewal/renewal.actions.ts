@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { createPendingPayment } from '@/components/payments/payments.actions';
 import { maxVisitsForPlan } from '@/lib/subscription';
+import { sendNotificationEmail } from '@/lib/email';
 
 // Owner-side: submits a renewal REQUEST. Does not touch properties.expiration_date —
 // that only changes once an admin approves (see decideRenewal below).
@@ -125,6 +126,33 @@ export async function decideRenewal(
   if (decision === 'approved') {
     const paymentResult = await createPendingPayment(propertyId, 'renewal', requestId);
     if (paymentResult?.error) return { error: paymentResult.error };
+
+    const { data: property } = await supabase
+      .from('properties')
+      .select('property_name, owner_id')
+      .eq('id', propertyId)
+      .single();
+    if (property) {
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('email, first_name')
+        .eq('id', property.owner_id)
+        .single();
+      if (ownerProfile?.email) {
+        await sendNotificationEmail({
+          to: ownerProfile.email,
+          subject: `Renewal approved: ${property.property_name}`,
+          heading: 'Your renewal has been approved',
+          accent: '#1a7f37',
+          bodyLines: [
+            `Hi ${ownerProfile.first_name || 'there'},`,
+            `Your renewal request for "${property.property_name}" has been approved. Log in to complete payment and keep monitoring active.`,
+          ],
+          ctaText: 'Complete payment',
+          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in'}/properties/${propertyId}`,
+        });
+      }
+    }
   }
 
   revalidatePath('/admin/renewals');

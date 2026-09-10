@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { sendNotificationEmail } from '@/lib/email';
 
 export async function getMyPendingPaymentForProperty(propertyId: string) {
   const supabase = await createClient();
@@ -21,7 +22,7 @@ export async function submitSubscriptionPayment(propertyId: string, formData: Fo
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
 
-  const { data: property } = await supabase.from('properties').select('owner_id, status').eq('id', propertyId).single();
+  const { data: property } = await supabase.from('properties').select('owner_id, status, property_name').eq('id', propertyId).single();
   if (!property) return { error: 'Property not found.' };
   if (property.owner_id !== userData.user.id) return { error: 'Not authorized.' };
   if (property.status !== 'verified') return { error: 'This property must be verified by admin before subscribing.' };
@@ -82,6 +83,18 @@ export async function submitSubscriptionPayment(propertyId: string, formData: Fo
     // error by default, so without this explicit check the customer would
     // see "success" while nothing was actually saved.
     return { error: 'Could not save your submission — please contact support.' };
+  }
+
+  if (userData.user.email) {
+    await sendNotificationEmail({
+      to: userData.user.email,
+      subject: `Payment proof received — ${property.property_name}`,
+      heading: 'We received your payment proof',
+      bodyLines: [
+        `Thanks — we've received your Transaction ID for "${property.property_name}".`,
+        'An admin will verify it shortly and confirm your subscription. You\'ll get another email once that\'s done.',
+      ],
+    });
   }
 
   revalidatePath(`/properties/${propertyId}`);

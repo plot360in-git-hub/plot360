@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { sendNotificationEmail } from '@/lib/email';
 
 // Deletes a property and everything attached to it. DB cascade (see
 // schema.sql) handles removing property_ownership, property_documents,
@@ -15,7 +16,7 @@ export async function deletePropertyPermanently(propertyId: string) {
 
   const { data: property } = await supabase
     .from('properties')
-    .select('id, owner_id')
+    .select('id, owner_id, property_name')
     .eq('id', propertyId)
     .single();
   if (!property) return { error: 'Property not found.' };
@@ -53,6 +54,19 @@ export async function deletePropertyPermanently(propertyId: string) {
 
   const { error } = await supabase.from('properties').delete().eq('id', propertyId);
   if (error) return { error: error.message };
+
+  if (userData.user.email) {
+    await sendNotificationEmail({
+      to: userData.user.email,
+      subject: `Property deleted: ${property.property_name}`,
+      heading: 'Property deleted',
+      accent: '#b3261e',
+      bodyLines: [
+        `This confirms "${property.property_name}" and all its documents, photos, tasks, and history have been permanently deleted from your Plot360 account.`,
+        "If you didn't do this, contact support immediately.",
+      ],
+    });
+  }
 
   redirect('/dashboard');
 }

@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { createPendingPayment } from '@/components/payments/payments.actions';
+import { sendPropertyStatusEmail } from '@/components/properties/registration/email';
 
 export async function isCurrentUserAdmin() {
   const supabase = await createClient();
@@ -76,13 +77,15 @@ export async function setPropertyStatus(propertyId: string, status: 'verified' |
     return { error: 'Please explain why the property is being rejected and what the customer needs to fix.' };
   }
 
-  const { error } = await supabase
+  const { data: property, error } = await supabase
     .from('properties')
     .update({
       status,
       rejection_reason: status === 'rejected' ? rejectionReason!.trim() : null,
     })
-    .eq('id', propertyId);
+    .eq('id', propertyId)
+    .select('property_name, street_address, village_town, district, state, owner_id')
+    .single();
   if (error) return { error: error.message };
 
   // Approving content doesn't activate the property on its own anymore —
@@ -90,6 +93,30 @@ export async function setPropertyStatus(propertyId: string, status: 'verified' |
   // the admin will confirm from the Payments page once payment comes in.
   if (status === 'verified') {
     await createPendingPayment(propertyId, 'initial');
+  }
+
+  // Best-effort — a failed email shouldn't undo an already-successful
+  // status decision, so this never returns an error to the admin.
+  if (property) {
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', property.owner_id)
+      .single();
+    if (ownerProfile?.email) {
+      const address = [property.street_address, property.village_town, property.district, property.state]
+        .filter(Boolean)
+        .join(', ');
+      await sendPropertyStatusEmail({
+        to: ownerProfile.email,
+        customerName: `${ownerProfile.first_name ?? ''} ${ownerProfile.last_name ?? ''}`.trim() || 'there',
+        propertyName: property.property_name,
+        address,
+        status,
+        rejectionReason: status === 'rejected' ? rejectionReason : null,
+        siteUrl: process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in',
+      });
+    }
   }
 
   revalidatePath('/admin');
