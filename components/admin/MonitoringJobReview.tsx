@@ -6,7 +6,7 @@ import { BackButton } from './BackButton';
 import { ResendWhatsAppButton } from './ResendWhatsAppButton';
 
 export async function MonitoringJobReview({ jobId }: { jobId: string }) {
-  const { job, media } = await getJobForReview(jobId);
+  const { job, media, ecRequested, ecUploaded } = await getJobForReview(jobId);
   if (!job) return <p>Job not found.</p>;
 
   const mediaWithUrls = await Promise.all(
@@ -21,11 +21,31 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
         <h1>{property?.property_name}</h1>
         {job.status !== 'submitted' && job.status !== 'approved' && <ResendWhatsAppButton jobId={job.id} />}
       </div>
-      <p style={{ color: 'var(--color-text-muted)', marginBottom: 24 }}>
+      <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>
         Agent: {profileDisplayName(job.agent_profiles?.profiles)} · {job.agent_profiles?.profiles?.phone_number}
         {' · '}
         <Link href={`/admin/${property?.id}`} style={{ color: 'var(--color-link)' }}>View full property</Link>
       </p>
+
+      {ecRequested && (
+        <div
+          className="card section-alt"
+          style={{ marginBottom: 24, borderColor: ecUploaded ? 'var(--color-success)' : 'var(--color-pending)' }}
+        >
+          <p style={{ fontSize: 14 }}>
+            <strong>Digital EC requested:</strong>{' '}
+            {ecUploaded ? (
+              <span style={{ color: 'var(--color-success)' }}>Already uploaded — approving will close this job normally.</span>
+            ) : (
+              <span style={{ color: 'var(--color-pending)' }}>
+                Not uploaded yet. Approving will release media to the customer but the job will stay
+                open as "EC pending" until the EC is uploaded from{' '}
+                <Link href={`/admin/${property?.id}`} style={{ color: 'var(--color-link)' }}>the property page</Link>.
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h3 style={{ marginBottom: 16 }}>Uploaded media</h3>
@@ -69,7 +89,7 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
         />
       ) : (
         <span className={`status-pill ${job.status === 'approved' ? 'verified' : job.status === 'rejected' ? 'rejected' : 'pending'}`}>
-          {job.status}
+          {job.status === 'ec_pending' ? 'EC pending — job not closed' : job.status}
         </span>
       )}
     </div>

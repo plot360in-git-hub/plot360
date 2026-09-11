@@ -3,6 +3,28 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitSubscriptionPayment } from './subscribe.actions';
+import { computePlanPrice, effectiveDiscountPercent } from '@/lib/subscription';
+
+function PlanPriceDisplay({ plan, isRenewal }: { plan: any; isRenewal: boolean }) {
+  const basePrice = plan.base_price ?? plan.price;
+  const discount = effectiveDiscountPercent(plan, isRenewal);
+  const finalPrice = computePlanPrice(basePrice, discount);
+
+  if (discount > 0) {
+    return (
+      <span>
+        <span style={{ textDecoration: 'line-through', color: 'var(--color-text-muted)', marginRight: 8, fontSize: 13 }}>
+          ₹{basePrice}
+        </span>
+        <span style={{ background: '#fbe9d0', color: '#8a5a10', borderRadius: 6, padding: '1px 6px', fontSize: 12, marginRight: 8 }}>
+          {discount}% off
+        </span>
+        <strong>₹{finalPrice}</strong>
+      </span>
+    );
+  }
+  return <strong>₹{finalPrice}</strong>;
+}
 
 export function SubscribeForm({
   propertyId,
@@ -23,13 +45,14 @@ export function SubscribeForm({
   const [method, setMethod] = useState(pendingPayment?.payment_method ?? '');
   const router = useRouter();
 
+  const isRenewal = pendingPayment?.payment_type === 'renewal';
+
   if (pendingPayment?.transaction_reference) {
     return (
       <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
         <span className="status-pill pending" style={{ marginBottom: 16, display: 'inline-block' }}>Awaiting confirmation</span>
         <p style={{ marginBottom: 8 }}>
-          You've submitted <strong>{pendingPayment.subscription_plans?.name}</strong> (₹{pendingPayment.subscription_plans?.price})
-          via {pendingPayment.payment_method}.
+          You've submitted <strong>{pendingPayment.subscription_plans?.name}</strong> via {pendingPayment.payment_method}.
         </p>
         <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
           Transaction ID: {pendingPayment.transaction_reference}
@@ -52,7 +75,10 @@ export function SubscribeForm({
 
   return (
     <form action={handleSubmit} className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 24 }}>Subscribe</h2>
+      <h2 style={{ marginBottom: 8 }}>Subscribe</h2>
+      {isRenewal && (
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>Renewing your subscription</p>
+      )}
 
       <label className="field-label" style={{ marginBottom: 12, display: 'block' }}>
         Choose a plan<span style={{ color: 'var(--color-danger)' }}> *</span>
@@ -71,7 +97,7 @@ export function SubscribeForm({
               <input type="radio" name="plan_id" value={p.id} checked={planId === p.id} onChange={() => setPlanId(p.id)} required />
               <span>{p.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>({p.validity_months} months)</span></span>
             </span>
-            <strong>₹{p.price}</strong>
+            <PlanPriceDisplay plan={p} isRenewal={isRenewal} />
           </label>
         ))}
       </div>
@@ -84,13 +110,12 @@ export function SubscribeForm({
         <option value="UPI">UPI</option>
         <option value="Bank Transfer">Bank Transfer</option>
         <option value="QR Code">QR Code</option>
-        <option value="Other">Other</option>
       </select>
 
       {(method === 'UPI' || method === 'QR Code') && paymentSettings?.upi_id && (
         <div className="card section-alt" style={{ marginBottom: 16 }}>
           <p className="field-label" style={{ marginBottom: 4 }}>UPI ID</p>
-          <p style={{ fontSize: 15 }}>{paymentSettings.upi_id}</p>
+          <p style={{ fontSize: 15 }}><strong>{paymentSettings.upi_id}</strong></p>
         </div>
       )}
       {method === 'QR Code' && qrUrl && (
@@ -101,10 +126,10 @@ export function SubscribeForm({
       )}
       {method === 'Bank Transfer' && paymentSettings && (
         <div className="card section-alt" style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 14, marginBottom: 4 }}>Account Name: {paymentSettings.bank_account_name}</p>
-          <p style={{ fontSize: 14, marginBottom: 4 }}>Account Number: {paymentSettings.bank_account_number}</p>
-          <p style={{ fontSize: 14, marginBottom: 4 }}>IFSC: {paymentSettings.bank_ifsc}</p>
-          <p style={{ fontSize: 14 }}>Bank: {paymentSettings.bank_name}</p>
+          <p style={{ fontSize: 14, marginBottom: 4 }}>Account Name: <strong>{paymentSettings.bank_account_name}</strong></p>
+          <p style={{ fontSize: 14, marginBottom: 4 }}>Account Number: <strong>{paymentSettings.bank_account_number}</strong></p>
+          <p style={{ fontSize: 14, marginBottom: 4 }}>IFSC: <strong>{paymentSettings.bank_ifsc}</strong></p>
+          <p style={{ fontSize: 14 }}>Bank: <strong>{paymentSettings.bank_name}</strong></p>
         </div>
       )}
 
@@ -120,9 +145,14 @@ export function SubscribeForm({
 
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
 
-      <button className="btn-primary" type="submit" disabled={isPending}>
-        {isPending ? 'Submitting…' : 'Submit for verification'}
-      </button>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button className="btn-primary" type="submit" disabled={isPending}>
+          {isPending ? 'Submitting…' : 'Submit for verification'}
+        </button>
+        <button type="button" className="btn-primary" onClick={() => router.push(`/properties/${propertyId}`)}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

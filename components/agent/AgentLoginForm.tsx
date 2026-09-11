@@ -28,6 +28,12 @@ export function AgentLoginForm() {
         <input className="field-input" name="password" type="password" required />
       </div>
 
+      <div style={{ marginBottom: 16, textAlign: 'right' }}>
+        <Link href="/forgot-password" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          Forgot password?
+        </Link>
+      </div>
+
       {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16, fontSize: 14 }}>{error}</p>}
 
       <button className="btn-primary" type="submit" disabled={isPending} style={{ width: '100%', marginBottom: 12 }}>

@@ -12,6 +12,7 @@ const MONITORING_STATUS_LABEL: Record<string, string> = {
   accepted: 'Agent visiting the property',
   submitted: 'Agent submitted — under admin review',
   approved: 'Verified by field agent',
+  ec_pending: 'Verified — Encumbrance Certificate pending',
   rejected: 'Sent back to agent for changes',
 };
 const STATUS_CLASS: Record<string, string> = {
@@ -22,6 +23,7 @@ const STATUS_CLASS: Record<string, string> = {
   accepted: 'pending',
   submitted: 'pending',
   approved: 'verified',
+  ec_pending: 'pending',
   rejected: 'rejected',
 };
 

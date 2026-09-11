@@ -22,6 +22,8 @@ export async function completeAgentRegistration(formData: FormData) {
   const district = String(formData.get('district') || '').trim();
   const state = String(formData.get('state') || '').trim();
   const zip = String(formData.get('zip') || '').trim();
+  const sroName = String(formData.get('sro_name') || '').trim();
+  const sroCode = String(formData.get('sro_code') || '').trim();
 
   if (!firstName || !lastName) return { error: 'First and last name are required.' };
   if (!phoneNumber) return { error: 'Phone number is required.' };
@@ -31,6 +33,8 @@ export async function completeAgentRegistration(formData: FormData) {
   if (!district) return { error: 'District is required.' };
   if (!state) return { error: 'State is required.' };
   if (!zip) return { error: 'Zip / Postal code is required.' };
+  if (!sroName) return { error: 'SRO Name is required.' };
+  if (!sroCode) return { error: 'SRO Code is required.' };
 
   const homeAddress: Address & { district?: string } = { street, city, district, state, zip };
 
@@ -92,6 +96,8 @@ export async function completeAgentRegistration(formData: FormData) {
     id: userData.user.id,
     status: 'pending',
     admin_notes: null,
+    sro_name: sroName,
+    sro_code: sroCode,
   });
   if (agentError) return { error: agentError.message };
 
@@ -166,12 +172,15 @@ export async function updateAgentContactInfo(formData: FormData) {
   const district = String(formData.get('district') || '').trim();
   const state = String(formData.get('state') || '').trim();
   const zip = String(formData.get('zip') || '').trim();
+  const sroName = String(formData.get('sro_name') || '').trim();
+  const sroCode = String(formData.get('sro_code') || '').trim();
 
   if (!phoneNumber) return { error: 'Phone number is required.' };
   if (!email) return { error: 'Email is required.' };
   if (!street || !city || !district || !state || !zip) {
     return { error: 'Please complete the full address.' };
   }
+  if (!sroName || !sroCode) return { error: 'SRO Name and SRO Code are required.' };
 
   const homeAddress: Address & { district?: string } = { street, city, district, state, zip };
 
@@ -219,7 +228,7 @@ export async function updateAgentContactInfo(formData: FormData) {
 
   const { error: agentError } = await supabase
     .from('agent_profiles')
-    .update({ status: 'pending', admin_notes: null })
+    .update({ status: 'pending', admin_notes: null, sro_name: sroName, sro_code: sroCode })
     .eq('id', userData.user.id);
   if (agentError) return { error: agentError.message };
 

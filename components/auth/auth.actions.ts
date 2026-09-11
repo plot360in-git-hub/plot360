@@ -106,5 +106,6 @@ export async function updatePassword(formData: FormData) {
     });
   }
 
-  redirect('/dashboard');
+  const { data: agentProfile } = await supabase.from('agent_profiles').select('id').eq('id', userData.user.id).maybeSingle();
+  redirect(agentProfile ? '/agent/dashboard' : '/dashboard');
 }

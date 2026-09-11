@@ -12,6 +12,7 @@ const MONITORING_STATUS_LABEL: Record<string, string> = {
   accepted: 'Agent assigned',
   submitted: 'Under admin review',
   approved: 'Site Visit Verified',
+  ec_pending: 'Verified — EC pending',
   rejected: 'Changes requested',
 };
 const MONITORING_STATUS_CLASS: Record<string, string> = {
@@ -19,6 +20,7 @@ const MONITORING_STATUS_CLASS: Record<string, string> = {
   accepted: 'pending',
   submitted: 'pending',
   approved: 'verified',
+  ec_pending: 'pending',
   rejected: 'rejected',
 };
 
@@ -70,7 +72,7 @@ function getSortRank(property: any, payment: any, monitoringStatus: string | und
   // in spirit to "agent assigned" than to any of the other buckets.
   if (monitoringStatus === 'assigned' || monitoringStatus === 'accepted' || monitoringStatus === 'rejected') return 5;
   if (monitoringStatus === 'submitted') return 6;
-  if (monitoringStatus === 'approved') return 8;
+  if (monitoringStatus === 'approved' || monitoringStatus === 'ec_pending') return 8;
   return 7;
 }
 

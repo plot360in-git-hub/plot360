@@ -6,6 +6,7 @@ import { BackButton } from './BackButton';
 import { AddTaskForm } from '@/components/tasks/AddTaskForm';
 import { TaskList } from '@/components/tasks/TaskList';
 import { getLatestPaymentForProperty } from '@/components/payments/payments.actions';
+import { EcUploadForm } from './EcUploadForm';
 
 export async function AdminReview({ propertyId }: { propertyId: string }) {
   const { property, ownership, documents } = await getPropertyForReview(propertyId);
@@ -64,6 +65,18 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
         </dl>
       </div>
 
+      {ownership?.ec_digital_copy_requested && (
+        <EcUploadForm
+          propertyId={property.id}
+          existingDoc={(() => {
+            const ecDoc = documentsWithUrls.find((d: any) => d.doc_type === 'ec_digital_copy');
+            if (!ecDoc) return null;
+            const parts = ecDoc.file_path.split('/');
+            return { name: parts[parts.length - 1], url: ecDoc.url };
+          })()}
+        />
+      )}
+
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3>Documents</h3>
@@ -71,9 +84,13 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
             Edit documents
           </Link>
         </div>
-        {documentsWithUrls.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No documents uploaded.</p>}
+        {documentsWithUrls.filter((d: any) => d.doc_type !== 'ec_digital_copy').length === 0 && (
+          <p style={{ color: 'var(--color-text-muted)' }}>No documents uploaded.</p>
+        )}
         <ul style={{ listStyle: 'none', padding: 0 }}>
-          {documentsWithUrls.map((d) => (
+          {documentsWithUrls
+            .filter((d: any) => d.doc_type !== 'ec_digital_copy')
+            .map((d) => (
             <li key={d.id} style={{ marginBottom: 8 }}>
               {d.url ? (
                 <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>

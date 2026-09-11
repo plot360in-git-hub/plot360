@@ -13,6 +13,7 @@ const DOC_LABELS: Record<DocumentType, string> = {
   owner_id: 'Owner ID Proof',
   ownership_proof: 'Ownership Proof',
   ec_reference_copy: 'Old EC / Sale Deed Reference Copy',
+  ec_digital_copy: 'Digital Signed EC',
 };
 
 async function getProperty(propertyId: string) {
@@ -26,7 +27,11 @@ async function getDocuments(propertyId: string) {
   const { data } = await supabase
     .from('property_documents')
     .select('doc_type, file_path')
-    .eq('property_id', propertyId);
+    .eq('property_id', propertyId)
+    // ec_digital_copy is uploaded by admin (from external verification),
+    // not by the customer — it belongs in the Physical Verification
+    // section instead, so it's excluded from this customer-uploads list.
+    .neq('doc_type', 'ec_digital_copy');
   return data ?? [];
 }
 

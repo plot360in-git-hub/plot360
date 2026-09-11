@@ -10,7 +10,7 @@ export default async function AgentProfileEditPage() {
 
   return (
     <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-      <AgentProfileEditForm profile={data.profile} />
+      <AgentProfileEditForm profile={data.profile} agentProfile={data.agentProfile} />
     </main>
   );
 }

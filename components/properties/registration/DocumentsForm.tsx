@@ -155,11 +155,22 @@ export function DocumentsForm({
         <h3 style={{ fontSize: 18, marginBottom: 16 }}>Declarations</h3>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12, fontSize: 14 }}>
           <input type="checkbox" name="no_legal_case" required />
-          No legal / criminal case or issue exists on this plot<Required />
+          <span>
+            There is no legal or criminal case, ongoing dispute, or any other issue on this plot
+            that could cause harm or problems for Plot360's agents or employees during a visit
+            <Required />
+          </span>
         </label>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16, fontSize: 14 }}>
           <input type="checkbox" name="agent_entry_terms" required />
-          You approve Plot360 to enter and take pictures/videos<Required />
+          <span>
+            You approve Plot360 to enter and take pictures/videos of this plot, and agree to
+            Plot360's{' '}
+            <a href="/legal/terms-of-use.html" target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
+              Terms &amp; Conditions
+            </a>
+            <Required />
+          </span>
         </label>
 
         <div>

@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { sendNotificationEmail } from '@/lib/email';
+import { computePlanPrice, effectiveDiscountPercent } from '@/lib/subscription';
 
 export async function getMyPendingPaymentForProperty(propertyId: string) {
   const supabase = await createClient();
@@ -34,16 +35,25 @@ export async function submitSubscriptionPayment(propertyId: string, formData: Fo
   if (!paymentMethod) return { error: 'Please select how you paid.' };
   if (!transactionId) return { error: 'Transaction ID is required.' };
 
-  const { data: plan } = await supabase.from('subscription_plans').select('price').eq('id', planId).single();
+  const { data: plan } = await supabase
+    .from('subscription_plans')
+    .select('price, base_price, discount_percent, renewal_discount_percent')
+    .eq('id', planId)
+    .single();
 
   const { data: existingPending } = await supabase
     .from('payments')
-    .select('id')
+    .select('id, payment_type')
     .eq('property_id', propertyId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const isRenewal = existingPending?.payment_type === 'renewal';
+  const amount = plan
+    ? computePlanPrice(plan.base_price ?? plan.price, effectiveDiscountPercent(plan, isRenewal))
+    : null;
 
   let paymentId = existingPending?.id as string | undefined;
   if (!paymentId) {
@@ -69,7 +79,7 @@ export async function submitSubscriptionPayment(propertyId: string, formData: Fo
     .from('payments')
     .update({
       plan_id: planId,
-      amount: plan?.price ?? null,
+      amount,
       payment_method: paymentMethod,
       transaction_reference: transactionId,
       ...(screenshotPath ? { screenshot_path: screenshotPath } : {}),

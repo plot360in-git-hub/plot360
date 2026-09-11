@@ -1,15 +1,46 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { upsertPlan, togglePlanActive, updatePaymentSettings } from './plans.actions';
+import { computePlanPrice } from '@/lib/subscription';
+
+function PlanPricePreview({ basePrice, discountPercent }: { basePrice: string; discountPercent: string }) {
+  const base = Number(basePrice) || 0;
+  const discount = Number(discountPercent) || 0;
+  if (!base) return null;
+  const final = computePlanPrice(base, discount);
+  return (
+    <div style={{ fontSize: 14, marginTop: 4 }}>
+      {discount > 0 ? (
+        <>
+          <span style={{ textDecoration: 'line-through', color: 'var(--color-text-muted)', marginRight: 8 }}>₹{base}</span>
+          <span style={{ background: '#fbe9d0', color: '#8a5a10', borderRadius: 6, padding: '1px 6px', fontSize: 12, marginRight: 8 }}>
+            {discount}% off
+          </span>
+          <strong>₹{final}</strong>
+        </>
+      ) : (
+        <strong>₹{base}</strong>
+      )}
+    </div>
+  );
+}
 
 export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: any[]; paymentSettings: any; qrUrl: string | null }) {
   const [isPending, startTransition] = useTransition();
   const [planError, setPlanError] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
+  const [basePriceInput, setBasePriceInput] = useState('');
+  const [discountInput, setDiscountInput] = useState('0');
   const router = useRouter();
+
+  function openEditor(plan: any) {
+    setEditingPlan(plan);
+    setBasePriceInput(plan.base_price != null ? String(plan.base_price) : '');
+    setDiscountInput(plan.discount_percent != null ? String(plan.discount_percent) : '0');
+  }
 
   function handlePlanSubmit(formData: FormData) {
     setPlanError(null);
@@ -48,8 +79,11 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
           <thead>
             <tr style={{ textAlign: 'left', fontSize: 13, color: 'var(--color-text-muted)' }}>
-              <th style={{ padding: '6px 0' }}>Name</th>
-              <th>Price</th>
+              <th style={{ padding: '6px 0' }}>Plan</th>
+              <th>Base price</th>
+              <th>Discount</th>
+              <th>You pay</th>
+              <th>Renewal discount</th>
               <th>Validity</th>
               <th>Status</th>
               <th></th>
@@ -59,15 +93,20 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
             {plans.map((p) => (
               <tr key={p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                 <td style={{ padding: '8px 0' }}>{p.name}</td>
-                <td>₹{p.price}</td>
+                <td style={{ textDecoration: p.discount_percent > 0 ? 'line-through' : 'none', color: p.discount_percent > 0 ? 'var(--color-text-muted)' : undefined }}>
+                  ₹{p.base_price ?? p.price}
+                </td>
+                <td>{p.discount_percent > 0 ? `${p.discount_percent}% off` : '—'}</td>
+                <td><strong>₹{p.price}</strong></td>
+                <td>{p.renewal_discount_percent != null ? `${p.renewal_discount_percent}% off` : 'Same as above'}</td>
                 <td>{p.validity_months} months</td>
                 <td>
                   <span className={`status-pill ${p.is_active ? 'verified' : 'rejected'}`}>
                     {p.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button className="btn-primary" style={{ padding: '4px 12px', fontSize: 13, marginRight: 8 }} onClick={() => setEditingPlan(p)}>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button className="btn-primary" style={{ padding: '4px 12px', fontSize: 13, marginRight: 8 }} onClick={() => openEditor(p)}>
                     Edit
                   </button>
                   <button
@@ -85,7 +124,7 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
         </table>
 
         {!editingPlan && (
-          <button className="btn-primary" onClick={() => setEditingPlan({})}>
+          <button className="btn-primary" onClick={() => openEditor({})}>
             + Add plan
           </button>
         )}
@@ -93,15 +132,53 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
         {editingPlan && (
           <form action={handlePlanSubmit} className="card section-alt" style={{ marginTop: 16 }}>
             <input type="hidden" name="id" defaultValue={editingPlan.id ?? ''} />
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div style={{ marginBottom: 12 }}>
+              <label className="field-label">Plan name</label>
+              <input className="field-input" name="name" required defaultValue={editingPlan.name ?? ''} placeholder="e.g. 1 visit / 6 months" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 4 }}>
               <div>
-                <label className="field-label">Name</label>
-                <input className="field-input" name="name" required defaultValue={editingPlan.name ?? ''} />
+                <label className="field-label">Base price (₹)</label>
+                <input
+                  className="field-input"
+                  type="number"
+                  name="base_price"
+                  required
+                  value={basePriceInput}
+                  onChange={(e) => setBasePriceInput(e.target.value)}
+                />
               </div>
               <div>
-                <label className="field-label">Price (₹)</label>
-                <input className="field-input" type="number" name="price" required defaultValue={editingPlan.price ?? ''} />
+                <label className="field-label">Discount % (first purchase)</label>
+                <input
+                  className="field-input"
+                  type="number"
+                  name="discount_percent"
+                  min={0}
+                  max={100}
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                />
               </div>
+              <div>
+                <label className="field-label">Renewal discount % (optional)</label>
+                <input
+                  className="field-input"
+                  type="number"
+                  name="renewal_discount_percent"
+                  min={0}
+                  max={100}
+                  defaultValue={editingPlan.renewal_discount_percent ?? ''}
+                  placeholder="Same as above"
+                />
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+              Leave renewal discount blank to use the same discount as a first purchase.
+            </p>
+            <PlanPricePreview basePrice={basePriceInput} discountPercent={discountInput} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '16px 0 12px' }}>
               <div>
                 <label className="field-label">Validity (months)</label>
                 <input className="field-input" type="number" name="validity_months" required defaultValue={editingPlan.validity_months ?? 12} />

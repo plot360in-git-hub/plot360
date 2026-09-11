@@ -199,6 +199,9 @@ create table if not exists agent_profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table agent_profiles add column if not exists sro_name text;
+alter table agent_profiles add column if not exists sro_code text;
+
 -- ---------- agent_documents (Driving License + second Govt ID) ----------
 create table if not exists agent_documents (
   id uuid primary key default gen_random_uuid(),
@@ -993,3 +996,29 @@ create policy "payment_proofs_select" on storage.objects for select
       where pay.id::text = (storage.foldername(name))[1] and p.owner_id = auth.uid()
     )
   ));
+
+-- ---------- subscription_plans pricing: base price + discount, tracked separately ----------
+-- price stays as the stored "current effective price for a first-time
+-- purchase" (kept in sync by upsertPlan whenever base_price/discount
+-- change), so any older code reading plan.price directly still works.
+-- base_price + discount_percent are the source of truth for display
+-- (struck-through base + badge + final) and are what admin actually
+-- edits; renewal_discount_percent is optional and only overrides the
+-- discount at renewal time — null means "same discount as first purchase".
+alter table subscription_plans add column if not exists base_price numeric;
+alter table subscription_plans add column if not exists discount_percent numeric not null default 0;
+alter table subscription_plans add column if not exists renewal_discount_percent numeric;
+
+-- Backfill any existing plans with no base_price yet: treat their current
+-- price as the base with 0% discount, so nothing changes in the UI until
+-- an admin actually sets a discount via the redesigned Plans page.
+update subscription_plans set base_price = price where base_price is null;
+
+-- ---------- reassign agent + EC-gated job completion ----------
+do $$ begin
+  alter type monitoring_job_status add value if not exists 'ec_pending';
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type document_type add value if not exists 'ec_digital_copy';
+exception when duplicate_object then null; end $$;

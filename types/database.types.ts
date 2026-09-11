@@ -12,9 +12,10 @@ export type DocumentType =
   | 'approval_letter'
   | 'owner_id'
   | 'ownership_proof'
-  | 'ec_reference_copy';
+  | 'ec_reference_copy'
+  | 'ec_digital_copy';
 export type TaskStatus = 'not_done' | 'in_progress' | 'complete';
-export type MediaType = 'photo' | 'video';
+export type MediaType = 'photo' | 'video' | 'document';
 
 export interface Address {
   street?: string;
@@ -146,12 +147,14 @@ export interface TaskMedia {
 
 export type AgentStatus = 'pending' | 'verified' | 'rejected';
 export type AgentDocumentType = 'driving_license' | 'secondary_id';
-export type MonitoringJobStatus = 'assigned' | 'accepted' | 'submitted' | 'approved' | 'rejected';
+export type MonitoringJobStatus = 'assigned' | 'accepted' | 'submitted' | 'approved' | 'ec_pending' | 'rejected';
 
 export interface AgentProfile {
   id: string;
   status: AgentStatus;
   admin_notes: string | null;
+  sro_name: string | null;
+  sro_code: string | null;
   created_at: string;
   updated_at: string;
 }

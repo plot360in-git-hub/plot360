@@ -22,6 +22,7 @@ export function MonitoringDecision({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState('');
   const [waLink, setWaLink] = useState<string | null>(null);
+  const [ecPending, setEcPending] = useState(false);
   const router = useRouter();
 
   function handleDecision(decision: 'approved' | 'rejected') {
@@ -36,12 +37,34 @@ export function MonitoringDecision({
         setError(result.error);
         return;
       }
+      if (decision === 'approved' && result?.ecPending) {
+        setEcPending(true);
+        return;
+      }
       if (decision === 'approved') {
         setWaLink(buildWhatsAppLink(agentPhoneCountryCode, agentPhoneNumber, buildCompletionMessage(propertyName)));
       } else {
         router.push('/admin/monitoring');
       }
     });
+  }
+
+  if (ecPending) {
+    return (
+      <div className="card" style={{ textAlign: 'center' }}>
+        <p style={{ color: 'var(--color-pending)', marginBottom: 12 }}>
+          Visit approved — photos/videos released to the customer. This property requested a
+          Digital EC copy, though, so the job stays open until that's uploaded from the property's
+          admin page.
+        </p>
+        <button className="btn-secondary" onClick={() => router.push(`/admin/${propertyId}`)}>
+          Go upload the EC now
+        </button>
+        <div style={{ marginTop: 8 }}>
+          <button className="btn-primary" onClick={() => router.push('/admin/monitoring')}>Back to monitoring</button>
+        </div>
+      </div>
+    );
   }
 
   if (waLink) {

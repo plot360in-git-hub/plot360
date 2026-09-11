@@ -8,6 +8,8 @@ function Required() {
   return <span style={{ color: 'var(--color-danger)' }}> *</span>;
 }
 
+const SRO_HELP_URL = 'https://registration.telangana.gov.in/jusrisdictionSro.htm';
+
 export function AgentOnboardingForm({
   profile,
   agentProfile,
@@ -107,6 +109,22 @@ export function AgentOnboardingForm({
           <label className="field-label">Zip / Postal Code<Required /></label>
           <input className="field-input" name="zip" required defaultValue={(address as any).zip ?? ''} />
         </div>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label className="field-label">Agent residing closest SRO Name<Required /></label>
+            <input className="field-input" name="sro_name" required defaultValue={agentProfile?.sro_name ?? ''} />
+          </div>
+          <div>
+            <label className="field-label">SRO Code<Required /></label>
+            <input className="field-input" name="sro_code" required defaultValue={agentProfile?.sro_code ?? ''} />
+          </div>
+        </div>
+        <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-link)' }}>
+          Find SRO?
+        </a>
       </div>
 
       <div style={{ marginBottom: 24 }}>

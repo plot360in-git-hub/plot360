@@ -44,3 +44,19 @@ export async function getMonitoringMediaDownloadUrl(filePath: string) {
   if (error) return null;
   return data.signedUrl;
 }
+
+// The Digital EC is uploaded by admin (not the customer) once received
+// externally, and belongs here in the monitoring/verification section
+// rather than the customer's own "Uploaded Documents" list.
+export async function getEcDigitalCopyForProperty(propertyId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('property_documents')
+    .select('file_path')
+    .eq('property_id', propertyId)
+    .eq('doc_type', 'ec_digital_copy')
+    .maybeSingle();
+  if (!data) return null;
+  const { data: signed } = await supabase.storage.from('property-documents').createSignedUrl(data.file_path, 60 * 10, { download: true });
+  return { filePath: data.file_path, url: signed?.signedUrl ?? null };
+}

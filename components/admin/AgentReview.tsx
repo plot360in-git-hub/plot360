@@ -31,6 +31,9 @@ export async function AgentReview({ agentId }: { agentId: string }) {
           <div><dt className="field-label">Home Address</dt><dd>
             {[profile?.current_address?.street, profile?.current_address?.city, (profile?.current_address as any)?.district, profile?.current_address?.state, profile?.current_address?.zip].filter(Boolean).join(', ') || '—'}
           </dd></div>
+          <div><dt className="field-label">Closest SRO</dt><dd>
+            {agentProfile.sro_name || '—'} / {agentProfile.sro_code || '—'}
+          </dd></div>
           <div><dt className="field-label">Photo</dt><dd>
             {profile?.profile_picture_url ? (
               // eslint-disable-next-line @next/next/no-img-element

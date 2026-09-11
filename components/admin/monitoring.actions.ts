@@ -27,7 +27,7 @@ export async function getEligiblePropertiesForAssignment() {
   const { data: openJobs } = await supabase
     .from('monitoring_jobs')
     .select('property_id')
-    .in('status', ['assigned', 'accepted', 'submitted']);
+    .in('status', ['assigned', 'accepted', 'submitted', 'ec_pending']);
   const openPropertyIds = (openJobs ?? []).map((j) => j.property_id);
 
   let query: any = supabase
@@ -172,6 +172,46 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
   return { success: true, jobId: data.id };
 }
 
+// Reassigns a job that's stuck with its current agent (dropped, no-show,
+// couldn't finish in time) to a different agent. Only allowed while the
+// job is still in progress — not once it's been submitted for review or
+// already approved, since that work shouldn't be discarded. Wipes any
+// partial uploads and revokes the old agent's upload link, since the new
+// agent will carry out their own fresh visit.
+export async function reassignMonitoringJob(jobId: string, newAgentId: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const { data: job } = await supabase.from('monitoring_jobs').select('status, agent_id').eq('id', jobId).single();
+  if (!job) return { error: 'Job not found.' };
+  if (!['assigned', 'accepted', 'rejected'].includes(job.status)) {
+    return { error: 'This job can only be reassigned while still in progress (not yet submitted or approved).' };
+  }
+  if (job.agent_id === newAgentId) return { error: 'Already assigned to that agent.' };
+
+  const { data: oldMedia } = await supabase.from('monitoring_media').select('file_path').eq('job_id', jobId);
+  if (oldMedia && oldMedia.length > 0) {
+    await supabase.storage.from('monitoring-media').remove(oldMedia.map((m) => m.file_path));
+    await supabase.from('monitoring_media').delete().eq('job_id', jobId);
+  }
+  await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
+
+  const { error } = await supabase
+    .from('monitoring_jobs')
+    .update({
+      agent_id: newAgentId,
+      status: 'assigned',
+      observations: null,
+      submitted_at: null,
+      decided_at: null,
+      admin_feedback: null,
+    })
+    .eq('id', jobId);
+  if (error) return { error: error.message };
+
+  return { success: true };
+}
+
 // Gathers everything needed to build the "job assigned" WhatsApp message:
 // property details, the agent's phone number, and a fresh magic upload link.
 export async function getAssignmentWhatsAppDetails(jobId: string) {
@@ -226,7 +266,19 @@ export async function getJobForReview(jobId: string) {
       .single(),
     supabase.from('monitoring_media').select('*').eq('job_id', jobId).order('uploaded_at', { ascending: true }),
   ]);
-  return { job, media: media ?? [] };
+
+  let ecRequested = false;
+  let ecUploaded = false;
+  if (job?.property_id) {
+    const [{ data: ownership }, { data: ecDoc }] = await Promise.all([
+      supabase.from('property_ownership').select('ec_digital_copy_requested').eq('property_id', job.property_id).maybeSingle(),
+      supabase.from('property_documents').select('id').eq('property_id', job.property_id).eq('doc_type', 'ec_digital_copy').maybeSingle(),
+    ]);
+    ecRequested = !!ownership?.ec_digital_copy_requested;
+    ecUploaded = !!ecDoc;
+  }
+
+  return { job, media: media ?? [], ecRequested, ecUploaded };
 }
 
 export async function getMonitoringMediaUrl(filePath: string) {
@@ -247,56 +299,143 @@ export async function decideMonitoringJob(
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
 
+  // If the customer asked for a Digital EC copy and admin hasn't uploaded
+  // it yet, the job can't be marked fully complete — the agent's photos/
+  // videos still get released to the customer (see MonitoringStatus,
+  // which treats 'ec_pending' the same as 'approved' for media display),
+  // but the job itself stays open until finalizeEcPendingJob runs (see
+  // uploadEcDigitalCopy) once the EC document is actually uploaded.
+  let effectiveDecision: 'approved' | 'rejected' | 'ec_pending' = decision;
+  if (decision === 'approved') {
+    const { data: ownership } = await supabase
+      .from('property_ownership')
+      .select('ec_digital_copy_requested')
+      .eq('property_id', propertyId)
+      .maybeSingle();
+    if (ownership?.ec_digital_copy_requested) {
+      const { data: ecDoc } = await supabase
+        .from('property_documents')
+        .select('id')
+        .eq('property_id', propertyId)
+        .eq('doc_type', 'ec_digital_copy')
+        .maybeSingle();
+      if (!ecDoc) effectiveDecision = 'ec_pending';
+    }
+  }
+
   const { error: jobError } = await supabase
     .from('monitoring_jobs')
     .update({
-      status: decision,
+      status: effectiveDecision,
       admin_feedback: decision === 'rejected' ? feedback || null : null,
       decided_at: new Date().toISOString(),
     })
     .eq('id', jobId);
   if (jobError) return { error: jobError.message };
 
-  if (decision === 'approved') {
-    const nextDue = new Date();
-    nextDue.setMonth(nextDue.getMonth() + 6);
-    const { data: property, error: propertyError } = await supabase
-      .from('properties')
-      .update({ next_monitoring_due_date: nextDue.toISOString().slice(0, 10) })
-      .eq('id', propertyId)
-      .select('property_name, owner_id')
-      .single();
-    if (propertyError) return { error: propertyError.message };
-
-    // Revoke the agent's upload link the moment work is confirmed complete —
-    // per the requirement that access ends as soon as the job is approved,
-    // not just after the token's 7-day window.
-    await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
-
-    if (property) {
-      const { data: ownerProfile } = await supabase
-        .from('profiles')
-        .select('email, first_name')
-        .eq('id', property.owner_id)
-        .single();
-      if (ownerProfile?.email) {
-        await sendNotificationEmail({
-          to: ownerProfile.email,
-          subject: `Visit verified: ${property.property_name}`,
-          heading: 'Your property visit is verified',
-          accent: '#1a7f37',
-          bodyLines: [
-            `Hi ${ownerProfile.first_name || 'there'},`,
-            `The recent physical verification for "${property.property_name}" has been reviewed and approved. Photos and videos are now available to download from your property page.`,
-          ],
-          ctaText: 'View property',
-          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in'}/properties/${propertyId}`,
-        });
-      }
-    }
+  if (effectiveDecision === 'approved') {
+    const result = await finalizeApprovedJob(jobId, propertyId);
+    if (result?.error) return { error: result.error };
   }
 
   revalidatePath('/admin/monitoring');
+  revalidatePath(`/properties/${propertyId}`);
+  return { success: true, ecPending: effectiveDecision === 'ec_pending' };
+}
+
+// Runs the "job is truly, fully done" side effects: advances the next
+// monitoring due date, revokes the agent's upload link, and emails the
+// customer. Shared by the normal approval path above and by
+// uploadEcDigitalCopy, which calls this once the outstanding EC document
+// finally comes in for a job that was held in 'ec_pending'.
+async function finalizeApprovedJob(jobId: string, propertyId: string) {
+  const supabase = await createClient();
+  const nextDue = new Date();
+  nextDue.setMonth(nextDue.getMonth() + 6);
+  const { data: property, error: propertyError } = await supabase
+    .from('properties')
+    .update({ next_monitoring_due_date: nextDue.toISOString().slice(0, 10) })
+    .eq('id', propertyId)
+    .select('property_name, owner_id')
+    .single();
+  if (propertyError) return { error: propertyError.message };
+
+  // Revoke the agent's upload link the moment work is confirmed complete —
+  // per the requirement that access ends as soon as the job is approved,
+  // not just after the token's 7-day window.
+  await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
+
+  if (property) {
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('email, first_name')
+      .eq('id', property.owner_id)
+      .single();
+    if (ownerProfile?.email) {
+      await sendNotificationEmail({
+        to: ownerProfile.email,
+        subject: `Visit verified: ${property.property_name}`,
+        heading: 'Your property visit is verified',
+        accent: '#1a7f37',
+        bodyLines: [
+          `Hi ${ownerProfile.first_name || 'there'},`,
+          `The recent physical verification for "${property.property_name}" has been reviewed and approved. Photos and videos are now available to download from your property page.`,
+        ],
+        ctaText: 'View property',
+        ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://uat.plot360.in'}/properties/${propertyId}`,
+      });
+    }
+  }
+  return { success: true };
+}
+
+// Admin uploads the actual Digital EC document for a property (received
+// externally, e.g. from the sub-registrar's office) — this is different
+// from ec_reference_copy, which is the customer's own reference upload
+// during registration. If a job for this property is sitting in
+// 'ec_pending', uploading the EC finally closes it out.
+export async function uploadEcDigitalCopy(propertyId: string, formData: FormData) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const file = formData.get('ec_digital_copy') as File | null;
+  if (!file || file.size === 0) return { error: 'Please choose a file to upload.' };
+
+  const { data: existing } = await supabase
+    .from('property_documents')
+    .select('id, file_path')
+    .eq('property_id', propertyId)
+    .eq('doc_type', 'ec_digital_copy')
+    .maybeSingle();
+
+  const path = `${propertyId}/ec_digital_copy-${Date.now()}-${file.name}`;
+  const { error: uploadError } = await supabase.storage.from('property-documents').upload(path, file);
+  if (uploadError) return { error: uploadError.message };
+
+  const docError = existing
+    ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error
+    : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: 'ec_digital_copy', file_path: path })).error;
+  if (docError) return { error: docError.message };
+
+  if (existing?.file_path && existing.file_path !== path) {
+    await supabase.storage.from('property-documents').remove([existing.file_path]);
+  }
+
+  // Close out any job that was waiting specifically on this document.
+  const { data: waitingJob } = await supabase
+    .from('monitoring_jobs')
+    .select('id')
+    .eq('property_id', propertyId)
+    .eq('status', 'ec_pending')
+    .maybeSingle();
+  if (waitingJob) {
+    await supabase.from('monitoring_jobs').update({ status: 'approved' }).eq('id', waitingJob.id);
+    const result = await finalizeApprovedJob(waitingJob.id, propertyId);
+    if (result?.error) return { error: result.error };
+  }
+
+  revalidatePath('/admin/monitoring');
+  revalidatePath(`/admin/${propertyId}`);
   revalidatePath(`/properties/${propertyId}`);
   return { success: true };
 }

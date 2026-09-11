@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { computePlanPrice } from '@/lib/subscription';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -34,15 +35,30 @@ export async function upsertPlan(formData: FormData) {
 
   const id = String(formData.get('id') || '') || undefined;
   const name = String(formData.get('name') || '').trim();
-  const price = Number(formData.get('price'));
+  const basePrice = Number(formData.get('base_price'));
+  const discountPercent = Number(formData.get('discount_percent')) || 0;
+  const renewalDiscountRaw = String(formData.get('renewal_discount_percent') || '').trim();
+  const renewalDiscountPercent = renewalDiscountRaw === '' ? null : Number(renewalDiscountRaw);
   const validityMonths = Number(formData.get('validity_months'));
   const displayOrder = Number(formData.get('display_order')) || 0;
 
   if (!name) return { error: 'Plan name is required.' };
-  if (!price || price <= 0) return { error: 'Enter a valid price.' };
+  if (!basePrice || basePrice <= 0) return { error: 'Enter a valid base price.' };
+  if (discountPercent < 0 || discountPercent > 100) return { error: 'Discount must be between 0 and 100.' };
+  if (renewalDiscountPercent !== null && (renewalDiscountPercent < 0 || renewalDiscountPercent > 100)) {
+    return { error: 'Renewal discount must be between 0 and 100.' };
+  }
   if (!validityMonths || validityMonths <= 0) return { error: 'Enter a valid validity period in months.' };
 
-  const payload = { name, price, validity_months: validityMonths, display_order: displayOrder };
+  const payload = {
+    name,
+    base_price: basePrice,
+    discount_percent: discountPercent,
+    renewal_discount_percent: renewalDiscountPercent,
+    price: computePlanPrice(basePrice, discountPercent), // kept in sync for any code still reading plan.price directly
+    validity_months: validityMonths,
+    display_order: displayOrder,
+  };
   const { error } = id
     ? await gate.supabase.from('subscription_plans').update(payload).eq('id', id)
     : await gate.supabase.from('subscription_plans').insert(payload);

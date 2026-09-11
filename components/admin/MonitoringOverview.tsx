@@ -4,6 +4,7 @@ import { getLatestPaymentsForProperties } from '@/components/payments/payments.a
 import { profileDisplayName } from './displayName';
 import { AssignAgentForm } from './AssignAgentForm';
 import { ResendWhatsAppButton } from './ResendWhatsAppButton';
+import { ReassignAgentForm } from './ReassignAgentForm';
 
 const STATUS_LABEL: Record<string, string> = {
   assigned: 'Assigned — ready for agent to work',
@@ -11,6 +12,7 @@ const STATUS_LABEL: Record<string, string> = {
   submitted: 'Submitted — needs review',
   approved: 'Completed',
   rejected: 'Rejected — resubmission needed',
+  ec_pending: 'EC pending — upload to close',
 };
 const STATUS_CLASS: Record<string, string> = {
   assigned: 'pending',
@@ -18,6 +20,7 @@ const STATUS_CLASS: Record<string, string> = {
   submitted: 'pending',
   approved: 'verified',
   rejected: 'rejected',
+  ec_pending: 'pending',
 };
 
 export async function MonitoringOverview() {
@@ -29,7 +32,7 @@ export async function MonitoringOverview() {
 
   const paymentsByProperty = await getLatestPaymentsForProperties(eligible.map((p: any) => p.id));
 
-  const active = allJobs.filter((j: any) => ['assigned', 'accepted', 'submitted'].includes(j.status));
+  const active = allJobs.filter((j: any) => ['assigned', 'accepted', 'submitted', 'rejected', 'ec_pending'].includes(j.status));
   const completed = allJobs.filter((j: any) => j.status === 'approved');
 
   return (
@@ -82,7 +85,10 @@ export async function MonitoringOverview() {
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className={`status-pill ${STATUS_CLASS[j.status]}`}>{STATUS_LABEL[j.status] ?? j.status}</span>
-              {j.status !== 'submitted' && <ResendWhatsAppButton jobId={j.id} />}
+              {j.status !== 'submitted' && j.status !== 'ec_pending' && <ResendWhatsAppButton jobId={j.id} />}
+              {['assigned', 'accepted', 'rejected'].includes(j.status) && (
+                <ReassignAgentForm jobId={j.id} agents={agents} currentAgentId={j.agent_id} />
+              )}
             </div>
           </div>
         ))}
