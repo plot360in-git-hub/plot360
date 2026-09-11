@@ -37,7 +37,7 @@ export default function ResetPasswordCallbackPage() {
         <div className="card" style={{ maxWidth: 400, margin: '80px auto 0', textAlign: 'center' }}>
           <p>
             This reset link is invalid or has expired. Please request a new one from the{' '}
-            <a href="/forgot-password" style={{ color: 'var(--color-accent)' }}>forgot password</a> page.
+            <a href="/forgot-password" style={{ color: 'var(--color-link)' }}>forgot password</a> page.
           </p>
         </div>
       </main>

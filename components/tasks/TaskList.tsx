@@ -33,7 +33,7 @@ export async function TaskList({ propertyId }: { propertyId: string }) {
               <td>{t.start_date ?? '—'}</td>
               <td>{t.completed_date ?? '—'}</td>
               <td style={{ textAlign: 'right' }}>
-                <Link href={`/tasks/${t.id}`} style={{ color: 'var(--color-accent)' }}>Open</Link>
+                <Link href={`/tasks/${t.id}`} style={{ color: 'var(--color-link)' }}>Open</Link>
               </td>
             </tr>
           ))}

@@ -83,7 +83,7 @@ export async function MonitoringStatus({ propertyId }: { propertyId: string }) {
                           href={m.url}
                           style={{
                             fontSize: 13,
-                            color: 'var(--color-accent)',
+                            color: 'var(--color-link)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 8,
                             padding: '4px 10px',

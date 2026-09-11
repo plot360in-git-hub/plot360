@@ -19,7 +19,7 @@ function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
     <p style={{ fontSize: 13, marginTop: 6 }}>
       Currently uploaded:{' '}
       {doc.url ? (
-        <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+        <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
           {doc.name}
         </a>
       ) : (
@@ -87,7 +87,7 @@ export function DocumentsForm({
             <p key={doc?.name} style={{ fontSize: 13, marginTop: 6 }}>
               Uploaded:{' '}
               {doc?.url ? (
-                <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{doc.name}</a>
+                <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{doc.name}</a>
               ) : (
                 <span style={{ color: 'var(--color-text-muted)' }}>{doc?.name}</span>
               )}
@@ -143,7 +143,7 @@ export function DocumentsForm({
             </div>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 12 }}>
               Please find these details in your sale deed, or search the government site:{' '}
-              <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+              <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                 Find SRO
               </a>
             </p>

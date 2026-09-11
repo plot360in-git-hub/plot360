@@ -115,7 +115,7 @@ export function AgentOnboardingForm({
         {profile?.profile_picture_url && (
           <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Currently uploaded:{' '}
-            <a href={profile.profile_picture_url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+            <a href={profile.profile_picture_url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
               view photo
             </a>
             {' — choose a file only to replace it.'}
@@ -131,7 +131,7 @@ export function AgentOnboardingForm({
           <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Currently uploaded:{' '}
             {dlDoc?.url ? (
-              <a href={dlDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{dlDoc.name}</a>
+              <a href={dlDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{dlDoc.name}</a>
             ) : (
               dlDoc?.name ?? 'file on record'
             )}
@@ -146,7 +146,7 @@ export function AgentOnboardingForm({
           <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Currently uploaded:{' '}
             {secondaryIdDoc?.url ? (
-              <a href={secondaryIdDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{secondaryIdDoc.name}</a>
+              <a href={secondaryIdDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{secondaryIdDoc.name}</a>
             ) : (
               secondaryIdDoc?.name ?? 'file on record'
             )}

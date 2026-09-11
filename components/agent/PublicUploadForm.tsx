@@ -158,7 +158,7 @@ export function PublicUploadForm({
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {documents.map((m) => (
               <li key={m.id} style={{ marginBottom: 6, display: 'flex', gap: 10, alignItems: 'center' }}>
-                {m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{m.file_path.split('/').pop()}</a>}
+                {m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{m.file_path.split('/').pop()}</a>}
                 {canEdit && (
                   <button type="button" onClick={() => handleDelete(m.id)} disabled={uploadPending} style={{ border: 'none', background: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: 13 }}>
                     {deletingId === m.id ? 'Removing…' : 'Remove'}

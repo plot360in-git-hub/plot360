@@ -147,7 +147,7 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
                 }}
               >
                 {d.url ? (
-                  <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+                  <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                     {DOC_LABELS[d.doc_type as DocumentType] ?? d.doc_type}
                   </a>
                 ) : (
@@ -159,7 +159,7 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
           </ul>
         )}
         {property.status !== 'verified' && (
-          <Link href={`/properties/${propertyId}/documents`} style={{ color: 'var(--color-accent)', fontSize: 14, display: 'inline-block', marginTop: 12 }}>
+          <Link href={`/properties/${propertyId}/documents`} style={{ color: 'var(--color-link)', fontSize: 14, display: 'inline-block', marginTop: 12 }}>
             Add or update documents
           </Link>
         )}

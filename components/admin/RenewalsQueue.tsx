@@ -24,7 +24,7 @@ export async function RenewalsQueue() {
                   {r.properties?.street_address}, {r.properties?.village_town}, {r.properties?.district}, {r.properties?.state}
                 </p>
               </div>
-              <Link href={`/admin/${r.property_id}`} style={{ color: 'var(--color-accent)', fontSize: 14, whiteSpace: 'nowrap', marginLeft: 16 }}>
+              <Link href={`/admin/${r.property_id}`} style={{ color: 'var(--color-link)', fontSize: 14, whiteSpace: 'nowrap', marginLeft: 16 }}>
                 View full property
               </Link>
             </div>

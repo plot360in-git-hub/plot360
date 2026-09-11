@@ -17,7 +17,7 @@ function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
     <p style={{ fontSize: 13, marginTop: 6 }}>
       Currently uploaded:{' '}
       {doc.url ? (
-        <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+        <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
           {doc.name}
         </a>
       ) : (
@@ -31,7 +31,7 @@ function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
 
 function DownloadTemplateLink({ href }: { href: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-accent)', marginLeft: 8 }}>
+    <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-link)', marginLeft: 8 }}>
       (download template)
     </a>
   );

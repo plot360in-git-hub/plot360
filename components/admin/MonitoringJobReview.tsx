@@ -24,7 +24,7 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
       <p style={{ color: 'var(--color-text-muted)', marginBottom: 24 }}>
         Agent: {profileDisplayName(job.agent_profiles?.profiles)} · {job.agent_profiles?.profiles?.phone_number}
         {' · '}
-        <Link href={`/admin/${property?.id}`} style={{ color: 'var(--color-accent)' }}>View full property</Link>
+        <Link href={`/admin/${property?.id}`} style={{ color: 'var(--color-link)' }}>View full property</Link>
       </p>
 
       <div className="card" style={{ marginBottom: 24 }}>
@@ -44,7 +44,7 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
           <ul style={{ listStyle: 'none', padding: 0, marginBottom: 12 }}>
             {mediaWithUrls.filter((m) => m.media_type === 'document').map((m) => (
               <li key={m.id}>
-                <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+                <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                   {m.file_path.split('/').pop()}
                 </a>
               </li>

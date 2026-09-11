@@ -41,7 +41,7 @@ export async function PaymentsOverview() {
                   {p.properties?.profiles?.email}
                 </p>
               </div>
-              <Link href={`/admin/${p.properties?.id}`} style={{ color: 'var(--color-accent)', fontSize: 14, whiteSpace: 'nowrap' }}>
+              <Link href={`/admin/${p.properties?.id}`} style={{ color: 'var(--color-link)', fontSize: 14, whiteSpace: 'nowrap' }}>
                 View property
               </Link>
             </div>
@@ -58,7 +58,7 @@ export async function PaymentsOverview() {
                   {p.payment_method && <p style={{ fontSize: 14, marginBottom: 4 }}>Method: {p.payment_method}</p>}
                   {p.transaction_reference && <p style={{ fontSize: 14, marginBottom: 4 }}>Transaction ID: {p.transaction_reference}</p>}
                   {p.screenshot_path && screenshotUrls[p.screenshot_path] ? (
-                    <a href={screenshotUrls[p.screenshot_path]!} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)', fontSize: 14 }}>
+                    <a href={screenshotUrls[p.screenshot_path]!} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)', fontSize: 14 }}>
                       View screenshot
                     </a>
                   ) : (

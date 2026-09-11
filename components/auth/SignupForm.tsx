@@ -107,7 +107,7 @@ export function SignupForm() {
       </div>
 
       <p style={{ marginTop: 20, textAlign: 'center', fontSize: 14.5, color: 'var(--color-text-muted)' }}>
-        Already have an account? <Link href="/" style={{ color: 'var(--color-accent)' }}>Log in</Link>
+        Already have an account? <Link href="/" style={{ color: 'var(--color-link)' }}>Log in</Link>
       </p>
     </form>
   );

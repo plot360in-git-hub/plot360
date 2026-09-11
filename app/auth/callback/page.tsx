@@ -39,7 +39,7 @@ export default function AuthCallbackPage() {
         <div className="card" style={{ maxWidth: 400, margin: '80px auto 0', textAlign: 'center' }}>
           <p>
             That confirmation link is invalid or has expired. If you already confirmed your
-            email, just <a href="/" style={{ color: 'var(--color-accent)' }}>log in</a> —
+            email, just <a href="/" style={{ color: 'var(--color-link)' }}>log in</a> —
             otherwise sign up again to get a fresh link.
           </p>
         </div>

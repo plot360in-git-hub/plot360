@@ -85,7 +85,7 @@ export function ServiceRequestThread({
                       href={attachmentUrls[a.file_path]!}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ fontSize: 13, color: 'var(--color-accent)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '4px 10px' }}
+                      style={{ fontSize: 13, color: 'var(--color-link)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '4px 10px' }}
                     >
                       📎 {a.file_path.split('/').pop()}
                     </a>

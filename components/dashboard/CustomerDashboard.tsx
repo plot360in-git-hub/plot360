@@ -11,7 +11,7 @@ const MONITORING_STATUS_LABEL: Record<string, string> = {
   assigned: 'Agent assigned',
   accepted: 'Agent assigned',
   submitted: 'Under admin review',
-  approved: 'Verified',
+  approved: 'Site Visit Verified',
   rejected: 'Changes requested',
 };
 const MONITORING_STATUS_CLASS: Record<string, string> = {
@@ -24,7 +24,7 @@ const MONITORING_STATUS_CLASS: Record<string, string> = {
 
 function paymentBadge(payment: any, propertyStatus: string, propertyId: string) {
   if (payment?.status === 'completed') {
-    return <span className="status-pill verified">Completed</span>;
+    return <span className="status-pill verified">Payment Completed</span>;
   }
   // Not yet submitted proof (no payment row, or a blank pending one) —
   // make it a direct link to the subscribe page instead of a static "—"
@@ -48,6 +48,32 @@ function paymentBadge(payment: any, propertyStatus: string, propertyId: string) 
   return <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>—</span>;
 }
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+// Card display order, per product spec:
+// 1 Draft · 2 Not Verified · 3 Rejected · 4 Verified+Payment Pending ·
+// 5 Verified+Paid+Agent assigned · 6 Verified+Paid+Under admin review ·
+// 7 Verified+Paid (no active monitoring cycle) · 8 Verified+Paid+Site verified
+function getSortRank(property: any, payment: any, monitoringStatus: string | undefined): number {
+  if (!property.registration_date) return 1;
+  if (property.status === 'pending') return 2;
+  if (property.status === 'rejected') return 3;
+
+  const paid = payment?.status === 'completed';
+  if (!paid) return 4;
+  // A rejected monitoring visit sends the work back to the agent — closer
+  // in spirit to "agent assigned" than to any of the other buckets.
+  if (monitoringStatus === 'assigned' || monitoringStatus === 'accepted' || monitoringStatus === 'rejected') return 5;
+  if (monitoringStatus === 'submitted') return 6;
+  if (monitoringStatus === 'approved') return 8;
+  return 7;
+}
+
 export async function CustomerDashboard() {
   const data = await getDashboardData();
   if (!data) return <p>Please sign in.</p>;
@@ -56,15 +82,12 @@ export async function CustomerDashboard() {
 
   return (
     <div className="container-wide" style={{ paddingTop: 40, paddingBottom: 60 }}>
-      {/* Header: full name / username / email / phone + profile picture */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
-        <div>
-          <h1>{profile?.first_name} {profile?.last_name}</h1>
-          <p style={{ color: 'var(--color-text-muted)' }}>
-            @{profile?.username} · {profile?.email} · {profile?.phone_country_code} {profile?.phone_number}
-          </p>
-          <Link href="/profile/edit" style={{ fontSize: 14, color: 'var(--color-accent)' }}>Edit Profile</Link>
-        </div>
+      {/* Header: greeting only — profile picture stays as a friendly touch,
+          all identity details (username/email/phone) and the separate
+          Edit Profile link were removed since the avatar+name in the top
+          nav already links there. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+        <h1>{greeting()}, {profile?.first_name} {profile?.last_name}</h1>
         {profile?.profile_picture_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -77,19 +100,27 @@ export async function CustomerDashboard() {
         )}
       </div>
 
-      {/* Summary: total / verified / pending */}
-      <div className="card section-alt" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 32 }}>
+      {/* Summary: total / verified / pending verification / rejected / pending payment */}
+      <div className="card section-alt" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 24, marginBottom: 32 }}>
         <div>
           <p className="field-label">Total properties</p>
           <h2>{summary.total}</h2>
         </div>
         <div>
           <p className="field-label">Verified</p>
-          <h2>{summary.verified}</h2>
+          <h2 style={{ color: '#1a7f37' }}>{summary.verified}</h2>
         </div>
         <div>
           <p className="field-label">Pending verification</p>
-          <h2>{summary.pending}</h2>
+          <h2 style={{ color: '#b98a2a' }}>{summary.pending}</h2>
+        </div>
+        <div>
+          <p className="field-label">Rejected</p>
+          <h2 style={{ color: '#8b1e1e' }}>{summary.rejected}</h2>
+        </div>
+        <div>
+          <p className="field-label">Pending payment</p>
+          <h2 style={{ color: '#b3261e' }}>{summary.pendingPayment}</h2>
         </div>
       </div>
 
@@ -103,7 +134,13 @@ export async function CustomerDashboard() {
       </div>
 
       <div className="grid-cards" style={{ marginBottom: 40 }}>
-        {properties.map((p) => {
+        {[...properties]
+          .sort(
+            (a, b) =>
+              getSortRank(a, paymentsByProperty?.[a.id], latestMonitoringByProperty?.[a.id]) -
+              getSortRank(b, paymentsByProperty?.[b.id], latestMonitoringByProperty?.[b.id])
+          )
+          .map((p) => {
           const isDraft = !p.registration_date;
           const payment = paymentsByProperty?.[p.id];
           const daysUntilExpiry = p.expiration_date
@@ -169,17 +206,17 @@ export async function CustomerDashboard() {
                 }}
               >
                 {isDraft ? (
-                  <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)' }}>Continue Registration</Link>
+                  <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-link)' }}>Continue Registration</Link>
                 ) : (
                   <>
-                    <Link href={`/properties/${p.id}`} style={{ color: 'var(--color-accent)' }}>View</Link>
+                    <Link href={`/properties/${p.id}`} style={{ color: 'var(--color-link)' }}>View</Link>
                     {p.status === 'verified' ? (
                       <span style={{ color: 'var(--color-text-muted)', fontSize: 12.5 }}>Verified — contact admin to edit</span>
                     ) : (
-                      <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-accent)' }}>Edit</Link>
+                      <Link href={`/properties/${p.id}/edit`} style={{ color: 'var(--color-link)' }}>Edit</Link>
                     )}
                     {canRenew && (
-                      <Link href={`/properties/${p.id}/renew`} style={{ color: 'var(--color-accent)' }}>Renew</Link>
+                      <Link href={`/properties/${p.id}/renew`} style={{ color: 'var(--color-link)' }}>Renew</Link>
                     )}
                     {p.status === 'verified' && p.expiration_date && !canRenew && (
                       <span

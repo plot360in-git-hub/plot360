@@ -28,7 +28,7 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3>Property details</h3>
-          <Link href={`/admin/${property.id}/edit`} style={{ color: 'var(--color-accent)', fontSize: 14 }}>
+          <Link href={`/admin/${property.id}/edit`} style={{ color: 'var(--color-link)', fontSize: 14 }}>
             Edit property details
           </Link>
         </div>
@@ -44,7 +44,7 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3>Ownership declaration</h3>
-          <Link href={`/admin/${property.id}/ownership`} style={{ color: 'var(--color-accent)', fontSize: 14 }}>
+          <Link href={`/admin/${property.id}/ownership`} style={{ color: 'var(--color-link)', fontSize: 14 }}>
             Edit ownership
           </Link>
         </div>
@@ -67,7 +67,7 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3>Documents</h3>
-          <Link href={`/admin/${property.id}/documents`} style={{ color: 'var(--color-accent)', fontSize: 14 }}>
+          <Link href={`/admin/${property.id}/documents`} style={{ color: 'var(--color-link)', fontSize: 14 }}>
             Edit documents
           </Link>
         </div>
@@ -76,7 +76,7 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
           {documentsWithUrls.map((d) => (
             <li key={d.id} style={{ marginBottom: 8 }}>
               {d.url ? (
-                <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+                <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                   {d.doc_type.replace(/_/g, ' ')}
                 </a>
               ) : (
@@ -90,7 +90,7 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3>Payment</h3>
-          <Link href="/admin/payments" style={{ color: 'var(--color-accent)', fontSize: 14 }}>Go to Payments</Link>
+          <Link href="/admin/payments" style={{ color: 'var(--color-link)', fontSize: 14 }}>Go to Payments</Link>
         </div>
         {!payment ? (
           <p style={{ color: 'var(--color-text-muted)' }}>No payment record yet — created automatically once this property is verified.</p>

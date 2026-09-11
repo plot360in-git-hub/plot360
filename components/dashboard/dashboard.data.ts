@@ -67,7 +67,10 @@ export async function getDashboardData() {
 
   const total = properties?.length ?? 0;
   const verified = properties?.filter((p) => p.status === 'verified').length ?? 0;
-  const pending = total - verified;
+  const rejected = properties?.filter((p) => p.status === 'rejected').length ?? 0;
+  const pending = total - verified - rejected;
+  const pendingPayment =
+    properties?.filter((p) => p.status === 'verified' && paymentsByProperty?.[p.id]?.status !== 'completed').length ?? 0;
 
   const maxVisitsByProperty: Record<string, number> = {};
   for (const id of propertyIds) {
@@ -84,6 +87,6 @@ export async function getDashboardData() {
     latestMonitoringByProperty,
     visitCountByProperty,
     maxVisitsByProperty,
-    summary: { total, verified, pending },
+    summary: { total, verified, pending, rejected, pendingPayment },
   };
 }

@@ -7,6 +7,8 @@
   --color-text-muted: #6e6e73;
   --color-accent: #7F7F7F;
   --color-accent-hover: #6b6b6b;
+  --color-link: #0a66c2;
+  --color-link-hover: #084d94;
   --color-border: #d2d2d7;
   --color-success: #1d8348;
   --color-pending: #b7791f;
@@ -15,6 +17,18 @@
   --radius-button: 980px;
   --radius-card: 20px;
   --radius-input: 12px;
+}
+
+/* Global default link color — plain text links (help text like "How do I
+   find this?", "Find SRO", etc.) read as clickable rather than blending
+   into body text. Buttons keep using --color-accent for their own
+   background/border, unaffected since this only targets bare <a> tags
+   without a .btn-primary/.btn-secondary class. */
+a:not(.btn-primary):not(.btn-secondary) {
+  color: var(--color-link);
+}
+a:not(.btn-primary):not(.btn-secondary):hover {
+  color: var(--color-link-hover);
 }
 
 * { box-sizing: border-box; }

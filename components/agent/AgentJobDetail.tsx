@@ -136,7 +136,7 @@ export function AgentJobDetail({ job, media }: { job: any; media: any[] }) {
           <ul style={{ listStyle: 'none', padding: 0, marginBottom: 0 }}>
             {documents.map((m) => (
               <li key={m.id} style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+                <a href={m.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                   {m.file_path.split('/').pop()}
                 </a>
                 {canUpload && (

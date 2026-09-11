@@ -148,7 +148,7 @@ export function PlotDetailsForm({
         </div>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
           Please find these details in your sale deed, or search the government site:{' '}
-          <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+          <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
             Find SRO
           </a>
         </p>
@@ -158,7 +158,7 @@ export function PlotDetailsForm({
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <h3 style={{ fontSize: 18 }}>GPS Coordinates</h3>
-          <a href={GPS_HELP_URL} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-accent)' }}>
+          <a href={GPS_HELP_URL} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-link)' }}>
             How do I find this?
           </a>
         </div>
@@ -201,7 +201,7 @@ export function PlotDetailsForm({
           <label className="field-label">Nearby Landmark (e.g. school, hospital) or Google Map pin URL</label>
           <input className="field-input" name="near_by_landmark" defaultValue={initialData?.near_by_landmark ?? ''} />
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 6 }}>
-            <a href={MAP_PIN_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+            <a href={MAP_PIN_HELP_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
               How do I find and copy a Google Maps pin link?
             </a>
           </p>

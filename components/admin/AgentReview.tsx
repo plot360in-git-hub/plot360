@@ -47,7 +47,7 @@ export async function AgentReview({ agentId }: { agentId: string }) {
           {documentsWithUrls.map((d) => (
             <li key={d.id} style={{ marginBottom: 8 }}>
               {d.url ? (
-                <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>
+                <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
                   {DOC_LABELS[d.doc_type] ?? d.doc_type}
                 </a>
               ) : (

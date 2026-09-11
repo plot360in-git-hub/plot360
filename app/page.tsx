@@ -51,7 +51,7 @@ export default async function HomePage({
         style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 48, alignItems: 'center', paddingTop: 64, paddingBottom: 96 }}
       >
         <div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-accent)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 16 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-link)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 16 }}>
             Property monitoring, simplified
           </p>
           <h1 style={{ fontSize: 48, marginBottom: 20 }}>Your property, watched over — wherever you are.</h1>
@@ -86,7 +86,7 @@ export default async function HomePage({
               'Trips home planned around checking on an investment, not living your life',
             ].map((text) => (
               <div key={text} className="card" style={{ display: 'flex', gap: 12, padding: 18 }}>
-                <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>✓</span>
+                <span style={{ color: 'var(--color-link)', fontWeight: 600 }}>✓</span>
                 <span style={{ fontSize: 15.5 }}>{text}</span>
               </div>
             ))}
@@ -122,7 +122,7 @@ export default async function HomePage({
               },
             ].map((s) => (
               <div key={s.step}>
-                <p style={{ color: 'var(--color-accent)', fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Step {s.step}</p>
+                <p style={{ color: 'var(--color-link)', fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Step {s.step}</p>
                 <h3 style={{ fontSize: 20, marginBottom: 8 }}>{s.title}</h3>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 15.5, lineHeight: 1.55 }}>{s.body}</p>
               </div>
@@ -168,7 +168,7 @@ export default async function HomePage({
                 'A dated, verifiable record — not a secondhand phone call',
               ].map((text) => (
                 <div key={text} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 15.5 }}>
-                  <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>✓</span>
+                  <span style={{ color: 'var(--color-link)', fontWeight: 600 }}>✓</span>
                   <span>{text}</span>
                 </div>
               ))}
