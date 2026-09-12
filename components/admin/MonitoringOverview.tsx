@@ -11,7 +11,7 @@ const STATUS_LABEL: Record<string, string> = {
   accepted: 'In progress',
   submitted: 'Submitted — needs review',
   approved: 'Completed',
-  rejected: 'Rejected — resubmission needed',
+  rejected: 'Rejected — resend for reverify',
   ec_pending: 'EC pending — upload to close',
 };
 const STATUS_CLASS: Record<string, string> = {
@@ -85,7 +85,7 @@ export async function MonitoringOverview() {
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className={`status-pill ${STATUS_CLASS[j.status]}`}>{STATUS_LABEL[j.status] ?? j.status}</span>
-              {j.status !== 'submitted' && j.status !== 'ec_pending' && <ResendWhatsAppButton jobId={j.id} />}
+              {j.status !== 'submitted' && j.status !== 'ec_pending' && <ResendWhatsAppButton jobId={j.id} status={j.status} />}
               {['assigned', 'accepted', 'rejected'].includes(j.status) && (
                 <ReassignAgentForm jobId={j.id} agents={agents} currentAgentId={j.agent_id} />
               )}

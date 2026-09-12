@@ -27,7 +27,7 @@ export async function getEligiblePropertiesForAssignment() {
   const { data: openJobs } = await supabase
     .from('monitoring_jobs')
     .select('property_id')
-    .in('status', ['assigned', 'accepted', 'submitted', 'ec_pending']);
+    .in('status', ['assigned', 'accepted', 'submitted', 'ec_pending', 'rejected']);
   const openPropertyIds = (openJobs ?? []).map((j) => j.property_id);
 
   let query: any = supabase
@@ -138,6 +138,16 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
     return { error: "This property's payment isn't completed yet — it can't be assigned for monitoring." };
   }
 
+  const { data: existingOpenJob } = await supabase
+    .from('monitoring_jobs')
+    .select('id')
+    .eq('property_id', propertyId)
+    .in('status', ['assigned', 'accepted', 'submitted', 'ec_pending', 'rejected'])
+    .maybeSingle();
+  if (existingOpenJob) {
+    return { error: 'This property already has an open monitoring job — use Reassign on it instead of creating a new one.' };
+  }
+
   if (latestPayment.valid_from) {
     const { count } = await supabase
       .from('monitoring_jobs')
@@ -212,7 +222,83 @@ export async function reassignMonitoringJob(jobId: string, newAgentId: string) {
   return { success: true };
 }
 
-// Gathers everything needed to build the "job assigned" WhatsApp message:
+// For the admin property page — full job history including who's
+// assigned and current status, so a stray/duplicate job (e.g. created
+// before the duplicate-job guard existed) can be spotted and removed.
+export async function getMonitoringJobHistoryForAdmin(propertyId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('monitoring_jobs')
+    .select('id, status, assigned_at, decided_at, agent_profiles(profiles(first_name, last_name))')
+    .eq('property_id', propertyId)
+    .order('assigned_at', { ascending: false });
+  return data ?? [];
+}
+
+// Deletes a stray/duplicate job entirely — cleans up its storage files
+// first (DB cascade removes the monitoring_media/monitoring_upload_tokens
+// rows automatically, but not the actual files sitting in storage).
+// Blocked on 'submitted' so a job actively awaiting review can't be
+// deleted out from under an admin mid-decision — everything else
+// (assigned/accepted/rejected/ec_pending/approved) can be removed as a
+// manual cleanup tool.
+export async function deleteMonitoringJob(jobId: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const { data: job } = await supabase.from('monitoring_jobs').select('status, property_id').eq('id', jobId).single();
+  if (!job) return { error: 'Job not found.' };
+  if (job.status === 'submitted') {
+    return { error: 'This job is currently awaiting review — decide it first, then delete if still needed.' };
+  }
+
+  const { data: media } = await supabase.from('monitoring_media').select('file_path').eq('job_id', jobId);
+  if (media && media.length > 0) {
+    await supabase.storage.from('monitoring-media').remove(media.map((m) => m.file_path));
+  }
+
+  const { error } = await supabase.from('monitoring_jobs').delete().eq('id', jobId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/${job.property_id}`);
+  revalidatePath('/admin/monitoring');
+  revalidatePath(`/properties/${job.property_id}`);
+  return { success: true };
+}
+// re-upload" WhatsApp message — agent's phone plus a valid upload link
+// (reuses the existing one if still valid, otherwise generates a fresh
+// 7-day one, exactly like the initial assignment message).
+export async function getRejectionWhatsAppDetails(jobId: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const { data: job } = await supabase
+    .from('monitoring_jobs')
+    .select('property_id, admin_feedback, agent_profiles(profiles(phone_country_code, phone_number))')
+    .eq('id', jobId)
+    .single();
+  if (!job) return { error: 'Job not found.' };
+
+  const { data: property } = await supabase
+    .from('properties')
+    .select('property_name')
+    .eq('id', job.property_id)
+    .single();
+  if (!property) return { error: 'Property not found.' };
+
+  const tokenResult = await getOrCreateUploadToken(jobId);
+  if ('error' in tokenResult) return { error: tokenResult.error };
+
+  const agentProfile: any = job.agent_profiles;
+  return {
+    success: true,
+    phoneCountryCode: agentProfile?.profiles?.phone_country_code,
+    phoneNumber: agentProfile?.profiles?.phone_number,
+    propertyName: property.property_name,
+    feedback: job.admin_feedback || 'Please review and resubmit.',
+    uploadLink: `${process.env.NEXT_PUBLIC_SITE_URL}/m/${tokenResult.token}`,
+  };
+}
 // property details, the agent's phone number, and a fresh magic upload link.
 export async function getAssignmentWhatsAppDetails(jobId: string) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
@@ -294,7 +380,8 @@ export async function decideMonitoringJob(
   jobId: string,
   propertyId: string,
   decision: 'approved' | 'rejected',
-  feedback?: string
+  feedback?: string,
+  adminRemarks?: string
 ) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
@@ -328,6 +415,7 @@ export async function decideMonitoringJob(
     .update({
       status: effectiveDecision,
       admin_feedback: decision === 'rejected' ? feedback || null : null,
+      admin_remarks: decision === 'approved' ? adminRemarks?.trim() || null : null,
       decided_at: new Date().toISOString(),
     })
     .eq('id', jobId);
@@ -336,6 +424,11 @@ export async function decideMonitoringJob(
   if (effectiveDecision === 'approved') {
     const result = await finalizeApprovedJob(jobId, propertyId);
     if (result?.error) return { error: result.error };
+  } else if (effectiveDecision === 'ec_pending') {
+    // Agent's submission has been reviewed and accepted — only the
+    // (admin-side) EC paperwork is outstanding, so the agent's upload
+    // link closes now too, same as full approval.
+    await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
   }
 
   revalidatePath('/admin/monitoring');

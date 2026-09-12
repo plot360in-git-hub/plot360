@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
+import { extractVisitAnswers } from '@/lib/visitReportQuestions';
 
 const TOKEN_VALIDITY_DAYS = 7;
 
@@ -76,8 +77,11 @@ async function validateToken(token: string) {
 
   const { data: job } = await admin.from('monitoring_jobs').select('*').eq('id', tokenRow.job_id).single();
   if (!job) return { valid: false as const, reason: 'Job not found.' };
-  if (job.status === 'approved') {
+  if (job.status === 'approved' || job.status === 'ec_pending') {
     return { valid: false as const, reason: 'This job is already complete — the upload link has been closed.' };
+  }
+  if (job.status === 'submitted') {
+    return { valid: false as const, reason: 'You already submitted this visit — it\u2019s awaiting admin review, so the link is closed until then.' };
   }
 
   return { valid: true as const, admin, job };
@@ -160,6 +164,9 @@ export async function submitByToken(token: string, formData: FormData) {
   const observations = String(formData.get('observations') || '').trim();
   if (!observations) return { error: 'Please add your observations before submitting.' };
 
+  const answersResult = extractVisitAnswers(formData);
+  if ('error' in answersResult) return { error: answersResult.error };
+
   const { count } = await check.admin
     .from('monitoring_media')
     .select('id', { count: 'exact', head: true })
@@ -173,6 +180,7 @@ export async function submitByToken(token: string, formData: FormData) {
       observations,
       submitted_at: new Date().toISOString(),
       admin_feedback: null,
+      ...answersResult.values,
     })
     .eq('id', check.job.id);
   if (error) return { error: error.message };

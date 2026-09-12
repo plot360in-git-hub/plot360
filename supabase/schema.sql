@@ -1022,3 +1022,18 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter type document_type add value if not exists 'ec_digital_copy';
 exception when duplicate_object then null; end $$;
+
+-- ---------- structured visit-report questions on monitoring_jobs ----------
+alter table monitoring_jobs add column if not exists q_boundary_intact boolean;
+alter table monitoring_jobs add column if not exists q_encroachment boolean;
+alter table monitoring_jobs add column if not exists q_illegal_dumping boolean;
+alter table monitoring_jobs add column if not exists q_vacant_as_expected boolean;
+alter table monitoring_jobs add column if not exists q_unauthorized_construction boolean;
+alter table monitoring_jobs add column if not exists q_boundary_markers_visible boolean;
+alter table monitoring_jobs add column if not exists q_govt_notice_posted boolean;
+alter table monitoring_jobs add column if not exists q_water_logging boolean;
+alter table monitoring_jobs add column if not exists q_overall_condition text;
+alter table monitoring_jobs add column if not exists q_attention_needed text;
+
+-- ---------- admin remarks on monitoring jobs (visible on customer visit report) ----------
+alter table monitoring_jobs add column if not exists admin_remarks text;

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { extractVisitAnswers } from '@/lib/visitReportQuestions';
 
 // Limited-field property view for agents — deliberately excludes size,
 // description, ownership, and documents. Only what's needed to locate and
@@ -91,6 +92,9 @@ export async function submitJobWork(jobId: string, formData: FormData) {
   const observations = String(formData.get('observations') || '').trim();
   if (!observations) return { error: 'Please add your observations before submitting.' };
 
+  const answersResult = extractVisitAnswers(formData);
+  if ('error' in answersResult) return { error: answersResult.error };
+
   const { count } = await supabase
     .from('monitoring_media')
     .select('id', { count: 'exact', head: true })
@@ -104,6 +108,7 @@ export async function submitJobWork(jobId: string, formData: FormData) {
       observations,
       submitted_at: new Date().toISOString(),
       admin_feedback: null,
+      ...answersResult.values,
     })
     .eq('id', jobId);
   if (error) return { error: error.message };

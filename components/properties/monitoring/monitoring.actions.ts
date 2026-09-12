@@ -38,6 +38,28 @@ export async function getApprovedMonitoringMedia(jobId: string) {
   return data ?? [];
 }
 
+// Full report data for one visit — property details, all 10 structured
+// answers, free-text observations, and downloadable media. RLS
+// (monitoring_jobs_select_owner) already scopes this to the requesting
+// customer's own properties; only approved/ec_pending jobs are meant to
+// be reachable here (enforced by the page, not this fetcher).
+export async function getVisitReportData(jobId: string) {
+  const supabase = await createClient();
+  const { data: job } = await supabase
+    .from('monitoring_jobs')
+    .select('*, properties(property_name, street_address, village_town, district, state, plot_size, plot_size_unit)')
+    .eq('id', jobId)
+    .single();
+  if (!job) return null;
+
+  const media = await getApprovedMonitoringMedia(jobId);
+  const mediaWithUrls = await Promise.all(
+    media.map(async (m) => ({ ...m, url: await getMonitoringMediaDownloadUrl(m.file_path) }))
+  );
+
+  return { job, media: mediaWithUrls };
+}
+
 export async function getMonitoringMediaDownloadUrl(filePath: string) {
   const supabase = await createClient();
   const { data, error } = await supabase.storage.from('monitoring-media').createSignedUrl(filePath, 60 * 10, { download: true });

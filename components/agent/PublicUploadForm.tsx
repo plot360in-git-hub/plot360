@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { uploadMediaByToken, deleteMediaByToken, submitByToken } from './magic-link.actions';
+import { VisitQuestionsFields } from './VisitQuestionsFields';
 
 export function PublicUploadForm({
   token,
@@ -183,14 +184,15 @@ export function PublicUploadForm({
 
       <form action={handleSubmit} className="card">
         <h4 style={{ marginBottom: 16 }}>{job.status === 'rejected' ? 'Resubmit your visit' : 'Submit your visit'}</h4>
+        <VisitQuestionsFields defaultValues={job.status === 'rejected' ? job : undefined} />
         <div style={{ marginBottom: 16 }}>
-          <label className="field-label">Observations<span style={{ color: 'var(--color-danger)' }}> *</span></label>
+          <label className="field-label">Additional observations<span style={{ color: 'var(--color-danger)' }}> *</span></label>
           <textarea
             className="field-input"
             name="observations"
             rows={4}
             required
-            placeholder="Anything the admin should know: plot condition, access issues, discrepancies, etc."
+            placeholder="Anything else the admin should know: access issues, discrepancies, etc."
             defaultValue={job.status === 'rejected' ? job.observations ?? '' : ''}
           />
         </div>

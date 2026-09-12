@@ -7,9 +7,12 @@ import { AddTaskForm } from '@/components/tasks/AddTaskForm';
 import { TaskList } from '@/components/tasks/TaskList';
 import { getLatestPaymentForProperty } from '@/components/payments/payments.actions';
 import { EcUploadForm } from './EcUploadForm';
+import { MonitoringJobHistoryAdmin } from './MonitoringJobHistoryAdmin';
+import { getMonitoringJobHistoryForAdmin } from './monitoring.actions';
 
 export async function AdminReview({ propertyId }: { propertyId: string }) {
   const { property, ownership, documents } = await getPropertyForReview(propertyId);
+  const jobHistory = await getMonitoringJobHistoryForAdmin(propertyId);
   if (!property) return <p>Property not found.</p>;
 
   const [documentsWithUrls, payment] = await Promise.all([
@@ -76,6 +79,8 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
           })()}
         />
       )}
+
+      <MonitoringJobHistoryAdmin jobs={jobHistory} />
 
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>

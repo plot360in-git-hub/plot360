@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitJobWork, uploadJobMedia, deleteJobMedia } from './agent-jobs.actions';
+import { VisitQuestionsFields } from './VisitQuestionsFields';
 
 export function AgentJobDetail({ job, media }: { job: any; media: any[] }) {
   const [isPending, startTransition] = useTransition();
@@ -171,14 +172,15 @@ export function AgentJobDetail({ job, media }: { job: any; media: any[] }) {
       {canUpload && (
         <form action={handleSubmit} className="card">
           <h4 style={{ marginBottom: 16 }}>{job.status === 'rejected' ? 'Resubmit your visit' : 'Submit your visit'}</h4>
+          <VisitQuestionsFields defaultValues={job.status === 'rejected' ? job : undefined} />
           <div style={{ marginBottom: 16 }}>
-            <label className="field-label">Observations<span style={{ color: 'var(--color-danger)' }}> *</span></label>
+            <label className="field-label">Additional observations<span style={{ color: 'var(--color-danger)' }}> *</span></label>
             <textarea
               className="field-input"
               name="observations"
               rows={4}
               required
-              placeholder="Anything the admin should know: plot condition, access issues, discrepancies, etc."
+              placeholder="Anything else the admin should know: access issues, discrepancies, etc."
               defaultValue={job.status === 'rejected' ? job.observations ?? '' : ''}
             />
           </div>

@@ -4,6 +4,7 @@ import { profileDisplayName } from './displayName';
 import { MonitoringDecision } from './MonitoringDecision';
 import { BackButton } from './BackButton';
 import { ResendWhatsAppButton } from './ResendWhatsAppButton';
+import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
 
 export async function MonitoringJobReview({ jobId }: { jobId: string }) {
   const { job, media, ecRequested, ecUploaded } = await getJobForReview(jobId);
@@ -19,7 +20,7 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
       <BackButton />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
         <h1>{property?.property_name}</h1>
-        {job.status !== 'submitted' && job.status !== 'approved' && <ResendWhatsAppButton jobId={job.id} />}
+        {job.status !== 'submitted' && job.status !== 'approved' && <ResendWhatsAppButton jobId={job.id} status={job.status} />}
       </div>
       <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>
         Agent: {profileDisplayName(job.agent_profiles?.profiles)} · {job.agent_profiles?.profiles?.phone_number}
@@ -72,6 +73,28 @@ export async function MonitoringJobReview({ jobId }: { jobId: string }) {
           </ul>
         )}
         {mediaWithUrls.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No media uploaded yet.</p>}
+      </div>
+
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h3 style={{ marginBottom: 16 }}>Verification Checklist</h3>
+        <dl style={{ display: 'grid', rowGap: 10 }}>
+          {VISIT_QUESTIONS.map((q) => (
+            <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 8 }}>
+              <dt style={{ fontSize: 14 }}>{q.label}</dt>
+              <dd style={{ fontWeight: 500, textAlign: 'right', marginLeft: 16 }}>
+                {q.type === 'boolean' ? (
+                  job[q.key] === null || job[q.key] === undefined ? (
+                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                  ) : (
+                    <span className={`status-pill ${job[q.key] ? 'pending' : 'verified'}`}>{job[q.key] ? 'Yes' : 'No'}</span>
+                  )
+                ) : (
+                  job[q.key] || <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
       <div className="card" style={{ marginBottom: 24 }}>

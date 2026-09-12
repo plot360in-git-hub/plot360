@@ -1,16 +1,32 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { getAssignmentWhatsAppDetails } from './monitoring.actions';
-import { buildWhatsAppLink, buildAssignmentMessage } from './whatsapp';
+import { getAssignmentWhatsAppDetails, getRejectionWhatsAppDetails } from './monitoring.actions';
+import { buildWhatsAppLink, buildAssignmentMessage, buildRejectionMessage } from './whatsapp';
 
-export function ResendWhatsAppButton({ jobId }: { jobId: string }) {
+export function ResendWhatsAppButton({ jobId, status }: { jobId: string; status?: string }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const isRejected = status === 'rejected';
 
   function handleClick() {
     setError(null);
     startTransition(async () => {
+      if (isRejected) {
+        const details = await getRejectionWhatsAppDetails(jobId);
+        if ('error' in details) {
+          setError(details.error ?? 'Something went wrong.');
+          return;
+        }
+        const message = buildRejectionMessage({
+          propertyName: details.propertyName!,
+          feedback: details.feedback!,
+          uploadLink: details.uploadLink!,
+        });
+        window.open(buildWhatsAppLink(details.phoneCountryCode, details.phoneNumber, message), '_blank');
+        return;
+      }
+
       const details = await getAssignmentWhatsAppDetails(jobId);
       if ('error' in details) {
         setError(details.error ?? 'Something went wrong.');
@@ -42,7 +58,7 @@ export function ResendWhatsAppButton({ jobId }: { jobId: string }) {
         className="btn-primary"
         style={{ padding: '6px 16px', fontSize: 13 }}
       >
-        {isPending ? 'Preparing…' : 'Resend WhatsApp'}
+        {isPending ? 'Preparing…' : isRejected ? 'Resend rejection WhatsApp' : 'Resend WhatsApp'}
       </button>
       {error && <p style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>{error}</p>}
     </div>

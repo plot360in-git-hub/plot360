@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { reassignMonitoringJob, getAssignmentWhatsAppDetails } from './monitoring.actions';
-import { buildWhatsAppLink, buildAssignmentMessage } from './whatsapp';
+import { buildWhatsAppLink, buildReassignmentMessage } from './whatsapp';
 
 export function ReassignAgentForm({ jobId, agents, currentAgentId }: { jobId: string; agents: any[]; currentAgentId: string }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +33,7 @@ export function ReassignAgentForm({ jobId, agents, currentAgentId }: { jobId: st
       const p = details.property!;
       const address = [p.street_address, p.village_town, p.district, p.state].filter(Boolean).join(', ');
       const mapUrl = p.google_map_lat && p.google_map_lng ? `https://www.google.com/maps?q=${p.google_map_lat},${p.google_map_lng}` : null;
-      const message = buildAssignmentMessage({
+      const message = buildReassignmentMessage({
         propertyName: p.property_name,
         plotSize: `${p.plot_size ?? ''} ${p.plot_size_unit ?? ''}`.trim(),
         address,

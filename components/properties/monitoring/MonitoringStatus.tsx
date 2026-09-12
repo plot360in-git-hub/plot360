@@ -104,7 +104,7 @@ export async function MonitoringStatus({ propertyId }: { propertyId: string }) {
                   <p className="field-label" style={{ marginBottom: 6 }}>
                     Verification {visitNumberByJob[j.id]} of 2 — photos/videos
                   </p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                     {jobMedia.map((m) =>
                       m.url ? (
                         <a
@@ -124,6 +124,9 @@ export async function MonitoringStatus({ propertyId }: { propertyId: string }) {
                       ) : null
                     )}
                   </div>
+                  <a href={`/properties/${propertyId}/visit-report/${j.id}`} style={{ fontSize: 13, color: 'var(--color-link)' }}>
+                    View full visit report (printable / save as PDF)
+                  </a>
                 </div>
               )}
             </div>
