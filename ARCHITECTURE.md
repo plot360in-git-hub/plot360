@@ -325,3 +325,153 @@ simplification was an explicit decision earlier in this redesign.
 
 Not done yet: admin console, the 4-page visit report PDF, and the agent
 signup/onboarding/profile visual redesign noted above.
+
+## 11. Redesign 2026-09 — admin console
+
+Source: `design/Plot360 Admin.dc.html`. The biggest phase — six queues,
+their detail screens, a shared rejection dialog, owner-only Plans &
+pricing and Users, and the two follow-ups flagged at the end of §9
+(`visit_requests` → real assignment, bank-transfer confirm → issuing
+`visit_credits`). Old components (`AdminQueue.tsx`, `AdminReview.tsx`,
+`MonitoringOverview.tsx`, `MonitoringJobReview.tsx`, `AgentReview.tsx`,
+`PlansSettingsPage.tsx`, `AdminUsersList.tsx`, `components/layout/
+AdminHeader.tsx`, and the routes that only they served —
+`/admin/monitoring`, `/admin/renewals`) are all kept intact, just no
+longer linked from the new nav (`AdminShell.tsx`) or wired into their
+old routes.
+
+**New routes**: `/admin` (Dashboard), `/admin/queue/{property-
+verification,job-assignment,agent-submissions,agent-verification,
+service-requests,payments}` (the six queues), `/admin/assign/[kind]/
+[id]` (Assign screen; `kind` is `legacy`, `visit_request`, or `stuck`),
+`/admin/payments/[id]` (Payment detail — new, doesn't collide with the
+old `/admin/payments` index). **Reused, re-wired routes**: `/admin/[id]`,
+`/admin/monitoring/[jobId]`, `/admin/agents/[id]`, `/admin/service-
+requests/[id]`, `/admin/plans`, `/admin/users` now render new
+components. `/admin/[id]/edit`, `/admin/[id]/ownership`, `/admin/[id]/
+documents` are untouched and still the full editing flow.
+
+**Owner vs operations role** — didn't exist before this phase; access
+was purely `profiles.is_admin`. Added `profiles.admin_role` (`'operations'
+| 'owner'`), gating Plans & pricing and Users **server-side**
+(`getCurrentAdminContext`/`requireOwnerAdmin`, `components/admin/
+admin-role.actions.ts`) per the design. Every admin that already existed
+was backfilled to `'owner'` in the same migration so nobody loses access
+they already had — only admins added after this migration default to
+`'operations'` and need to be promoted by hand (no admin-creation UI
+exists to do this from the app). Flagging this here the same way the
+registration-scope and agent-onboarding decisions were flagged earlier
+in this redesign — it's a real access-control change, just one designed
+to be a no-op for every existing admin.
+
+**Agent banning, implemented from scratch** — before this phase nothing
+blocked a banned agent from working; `agent_profiles.status` only ever
+took pending/verified/rejected. This wires the `bans` table (added,
+unused, in the foundation phase) into real enforcement:
+`agent-bans.actions.ts`'s `toggleAgentBan`/`isAgentBanned` read/write it,
+`agent-auth.actions.ts`'s `agentLogIn`/`getAgentGateStatus` check it
+(new `'banned'` gate status, handled on `/agent/dashboard`), and
+`getVerifiedAgentsExcludingBanned`/`getSuggestedAgents` exclude banned
+agents from assignment. The agent-detail Disable/Enable toggle and the
+Users → Field agents row both call `toggleAgentBan` and both read
+`isAgentBanned`/`getAgentsForUsersTab`, so there is exactly one flag —
+the README's "one source of truth" requirement. Customer banning was
+already fully implemented (Supabase Auth `ban_duration`) and is
+untouched.
+
+**WhatsApp outbox, implemented from scratch** — `whatsapp_messages`
+existed in schema since the foundation phase but nothing wrote to it;
+every "send" was a client-side `wa.me` link only. `whatsapp-log.
+actions.ts` now logs a row (state `'sent'`) every time an admin action
+opens one of those links (assignment, rejection, verification,
+approval, payment mismatch), and the Dashboard's "Failed WhatsApp
+messages" + each screen's "WhatsApp outbox" panel read from it. There is
+no real WhatsApp Business API wired up (the design handoff's own
+"placeholders to replace" note) — delivery status can't be detected
+automatically, so, matching the schema's own comment, a message only
+becomes `'failed'` when an admin explicitly marks it (`markWhatsApp
+MessageFailed`); nothing does that automatically yet. This is a known
+limitation, not a bug: it means the Dashboard's failed-message list will
+stay empty until that manual flagging (or a real send integration) is
+added.
+
+**Internal timeline, implemented from scratch** — `admin_actions`
+existed in schema, unused; `timeline.actions.ts`'s `logAdminAction` is
+now called from every decision wrapper in `review-decisions.actions.ts`
+(verify/reject a property, approve/reject a submission, verify an agent,
+ban/unban, flag a payment mismatch), and `TimelineOutboxPanel.tsx`
+renders it on the Property verification and Submission review screens.
+Properties/jobs from before this phase simply show no internal history
+— there's no synthesized backfill from `created_at`/`paid_at`/etc.
+
+**Job assignment queue merges three origins** (`assignment.actions.ts`):
+`getLegacyAssignmentTargets` (the untouched, existing subscription/
+due-date model, `monitoring.actions.ts`'s `getEligiblePropertiesFor
+Assignment`), `getVisitRequestAssignmentTargets` (open `visit_requests`
+rows — the customer self-service scheduling flow from §9), and
+`getStuckAssignmentTargets` (jobs already assigned but stuck — see
+below). Assigning an agent to a `visit_request` (`assignAgentToTarget`)
+is the wiring that was explicitly left as follow-up work in §9: it
+creates a real `monitoring_jobs` row (`visit_number`,
+`requested_window_start/end`, `visit_credit_id` carried over from the
+request), marks the `visit_requests` row `'assigned'`, and links
+`monitoring_job_id` back. **Suggested-agent ranking is new** too —
+`getSuggestedAgents` matches `agent_profiles.sro_code` to the
+property's, ranked by fewest currently open jobs (least loaded first),
+ties broken by more completed visits; nothing like this existed before
+(the old `getVerifiedAgentsList` was unranked and unfiltered by SRO).
+
+**"Reassignment needed" — a third assignment kind, `'stuck'`** — the
+pre-redesign `MonitoringOverview.tsx` (now unreferenced) had a separate
+"Active assignments → Reassign" list for jobs stuck with their current
+agent; the design's own Job assignment queue instead lists
+`'Reassignment needed'` as a state *within* that one queue, not a
+separate screen, so that's how this was wired: `getStuckAssignment
+Targets` surfaces any `monitoring_jobs` row still `assigned`/`accepted`
+past `STUCK_DAYS` (7) or its requested window, plus any `'rejected'`
+row (the agent explicitly declined — always urgent regardless of age).
+Picking a new agent for one of these routes through the same Assign
+screen (`/admin/assign/stuck/[jobId]`) and dispatches to the existing,
+untouched `reassignMonitoringJob` (which itself wipes the old agent's
+partial uploads/upload link and re-opens the job as `'assigned'`),
+followed by the same WhatsApp-log + timeline-log pattern used for the
+other two kinds. This closes the capability gap the old component's
+removal from the nav would otherwise have created.
+
+**Bank-transfer payment confirm now issues `visit_credits`** — the
+other follow-up flagged in §9. `recordPayment` (`components/payments/
+payments.actions.ts`, untouched otherwise) now also inserts a
+`visit_credits` row when the payment has a `plan_id` with a
+`visit_quantity` and hasn't already had one issued (guarded against
+double-issue). Legacy payments with no `plan_id` are skipped — the old
+subscription model never used `visit_credits` at all. Payment mismatch
+flagging (`flagPaymentMismatch`) is additive columns on `payments`
+(`mismatch_reason`, `mismatch_flagged_at`, `mismatch_flagged_by`) rather
+than a new status value, since `'pending'`/`'completed'` are relied on
+elsewhere.
+
+**Agent verification screen shows two documents, not four** — the
+design mock shows Driving Licence + Aadhaar, front and back (four
+cards). The real schema (`agent_documents.doc_type`) only ever collects
+two: `driving_license`, `secondary_id`. Shown honestly as two rather
+than fabricating a front/back split the data doesn't have.
+
+**Deliberately not rebuilt, reused instead**: the Property verification
+detail screen's document "Upload from WhatsApp"/"Replace" buttons and
+the owned/not-owned ownership toggle are no-ops in the design's own mock
+(`onClick={{noop}}`) — rather than inventing that logic, the screen
+links out to the existing, fully-working `/admin/[id]/ownership` and
+`/admin/[id]/documents` edit routes for anything beyond the inline-
+editable location fields (street address, village/city, mandal, SRO,
+map pin, plot size — genuinely new, `updatePropertyLocationFields`) and
+the approve/reject decision itself.
+
+**Queues are paginated/searched in memory** (`lib/adminQueue.ts` —
+`paginate`, `matchesQuery`, `hoursSince`/`formatWait`/`isLate` for the
+24-hour lateness rule) rather than with SQL `LIMIT`/`OFFSET` — reasonable
+at this business's scale, worth revisiting if any queue grows into the
+thousands of rows.
+
+Not done yet: the 4-page visit report PDF (next phase), the agent
+signup/onboarding/profile visual redesign (still open from §10), and
+real WhatsApp Business API delivery-status integration (noted above).

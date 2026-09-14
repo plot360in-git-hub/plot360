@@ -144,6 +144,39 @@ export async function setPropertyStatus(propertyId: string, status: 'verified' |
   return { success: true };
 }
 
+// Redesign 2026-09 — admin console, Property verification detail
+// screen's editable "Site location" fields (street address, village/
+// city, mandal, SRO name and number, map pin, plot size) — the quick
+// registration flow (components/properties/registration/registration.
+// actions.ts, createPropertyQuick) leaves most of these blank, and this
+// is where an admin fills them in while verifying. Deliberately
+// separate from the existing full PlotDetailsForm edit flow at
+// /admin/[id]/edit (kept intact, still reachable) rather than replacing
+// it — this covers just the fields the design's verification screen
+// shows inline.
+export async function updatePropertyLocationFields(propertyId: string, formData: FormData) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const str = (key: string) => String(formData.get(key) || '').trim() || null;
+  const patch: Record<string, unknown> = {
+    street_address: str('street_address'),
+    village_town: str('village_town'),
+    mandal_taluka: str('mandal_taluka'),
+    sro_name: str('sro_name'),
+    sro_code: str('sro_code'),
+    plot_gps_coordinate: str('plot_gps_coordinate'),
+  };
+  const plotSize = formData.get('plot_size');
+  if (plotSize !== null && String(plotSize).trim() !== '') patch.plot_size = Number(plotSize);
+
+  const { error } = await supabase.from('properties').update(patch).eq('id', propertyId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/${propertyId}`);
+  return { success: true };
+}
+
 // Generates a short-lived signed URL so an admin can view a private document
 // without the bucket needing to be public.
 export async function getDocumentSignedUrl(filePath: string) {

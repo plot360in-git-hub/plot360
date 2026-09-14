@@ -56,3 +56,33 @@ export async function getVerifiedAgents() {
     .eq('status', 'verified');
   return data ?? [];
 }
+
+// Redesign 2026-09 — admin console, Agent verification detail screen's
+// "Request missing documents": sends the agent a WhatsApp and logs it,
+// but — unlike setAgentStatus('rejected') — does NOT change
+// agent_profiles.status, since the agent isn't being turned away, just
+// asked for one more thing while their application stays pending.
+export async function requestAgentDocuments(agentId: string, reasonText: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+
+  const { data: agentProfile } = await supabase
+    .from('agent_profiles')
+    .select('profiles(phone_country_code, phone_number)')
+    .eq('id', agentId)
+    .single();
+  const profile: any = agentProfile?.profiles;
+  const phone = profile ? `${profile.phone_country_code ?? ''}${profile.phone_number ?? ''}` : '';
+
+  const { logWhatsAppMessage } = await import('./whatsapp-log.actions');
+  const { logAdminAction } = await import('./timeline.actions');
+
+  const body = `Plot360: Before we can verify your agent account, we need one more thing. ${reasonText.trim()} Reply here with a photo and we will add it for you.`;
+  if (phone) {
+    await logWhatsAppMessage({ relatedEntityType: 'agent_profile', relatedEntityId: agentId, recipientPhone: phone, body });
+  }
+  await logAdminAction({ entityType: 'agent_profile', entityId: agentId, action: 'Requested missing documents', note: reasonText.trim() });
+
+  revalidatePath(`/admin/agents/${agentId}`);
+  return { success: true };
+}

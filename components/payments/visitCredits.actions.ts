@@ -226,6 +226,67 @@ export async function requestVisit(propertyId: string, windowStart: string, wind
   };
 }
 
+// ---------- Redesign 2026-09 — admin console ----------
+
+// Property verification screen, "Visit credits" panel: +30/+60/+90 days
+// with a reason. "One extension per property" — enforced by refusing a
+// second extension on any credit batch that's already been extended.
+export async function extendVisitCredits(propertyId: string, days: number, reason: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).single();
+  if (!profile?.is_admin) return { error: 'Only an admin can do this.' };
+
+  if (![30, 60, 90].includes(days)) return { error: 'Choose +30, +60 or +90 days.' };
+  if (!reason.trim()) return { error: 'A reason is required.' };
+
+  const { data: batch } = await supabase
+    .from('visit_credits')
+    .select('id, expires_at, extension_granted')
+    .eq('property_id', propertyId)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!batch) return { error: 'This property has no visit credits to extend.' };
+  if (batch.extension_granted) return { error: 'This property has already had one extension.' };
+
+  const newExpiry = new Date(batch.expires_at);
+  newExpiry.setDate(newExpiry.getDate() + days);
+
+  const { error } = await supabase
+    .from('visit_credits')
+    .update({
+      expires_at: newExpiry.toISOString().slice(0, 10),
+      extension_granted: true,
+      extension_reason: reason.trim(),
+      extension_days: days,
+      extended_by: userData.user.id,
+      extended_at: new Date().toISOString(),
+    })
+    .eq('id', batch.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/${propertyId}`);
+  revalidatePath(`/properties/${propertyId}`);
+  return { success: true, newExpiry: newExpiry.toISOString().slice(0, 10) };
+}
+
+// Property verification screen's "Visit credits" panel summary —
+// most-recently-issued batch (mirrors extendVisitCredits' choice of
+// "the" batch for a property).
+export async function getLatestVisitCreditBatch(propertyId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('visit_credits')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
 export async function cancelVisitRequest(requestId: string, propertyId: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();

@@ -24,6 +24,22 @@ export default async function AgentDashboardPage() {
     );
   }
   if (gate === 'rejected') redirect('/agent/onboarding');
+  // Redesign 2026-09 — admin console: banned agents (components/admin/
+  // agent-bans.actions.ts) are signed out at login, but this covers an
+  // already-open session too.
+  if (gate === 'banned') {
+    return (
+      <main className="p360" style={{ minHeight: '60vh' }}>
+        <div style={{ background: 'var(--color-text)', color: 'var(--color-bg)', padding: '26px 22px 24px' }}>
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8 }}>Account disabled</p>
+          <h1 style={{ fontSize: 24, marginTop: 12 }}>This account can no longer sign in.</h1>
+          <p style={{ fontSize: 13, lineHeight: 1.55, marginTop: 11 }}>
+            Contact Plot360 support if you believe this is a mistake.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return <AgentJobsHome />;
 }

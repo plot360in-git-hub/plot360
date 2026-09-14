@@ -1310,3 +1310,28 @@ create policy "visit_requests_update_own" on visit_requests for update
   using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
 drop policy if exists "visit_requests_update_admin" on visit_requests;
 create policy "visit_requests_update_admin" on visit_requests for update using (is_admin());
+
+-- ---------- Redesign 2026-09 — admin console ----------
+
+-- Owner vs operations admin role (design_handoff_plot360_redesign,
+-- "Plot360 Admin.dc.html" — Plans & pricing and Users are owner-only,
+-- gated SERVER-side, not just hidden in the nav). Nothing like this
+-- existed before this phase — admin access was purely the binary
+-- profiles.is_admin flag, with every admin seeing every screen.
+-- Backfilling every EXISTING admin to 'owner' is a deliberate,
+-- backward-compatible choice: it preserves the access every current
+-- admin already has today (nobody who could open Plans/Users before
+-- this migration loses that ability). Only admins added after this
+-- migration default to 'operations' and need to be explicitly
+-- promoted to 'owner' by editing this column.
+alter table profiles add column if not exists admin_role text check (admin_role in ('operations','owner'));
+update profiles set admin_role = 'owner' where is_admin and admin_role is null;
+
+-- Payment mismatch flag (Payments queue → Payment detail → "Flag a
+-- mismatch"). Additive rather than a new payments.status value, since
+-- 'pending'/'completed' are relied on elsewhere (recordPayment,
+-- getPendingPayments, getUpcomingRenewalsDue) — a flagged payment stays
+-- 'pending' (still awaiting resolution) but carries a visible reason.
+alter table payments add column if not exists mismatch_reason text;
+alter table payments add column if not exists mismatch_flagged_at timestamptz;
+alter table payments add column if not exists mismatch_flagged_by uuid references profiles(id);

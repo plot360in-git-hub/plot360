@@ -142,7 +142,7 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
 
   const { data: paymentRow } = await supabase
     .from('payments')
-    .select('payment_type, plan_id, subscription_plans(name, validity_months)')
+    .select('payment_type, plan_id, subscription_plans(name, validity_months, visit_quantity)')
     .eq('id', paymentId)
     .single();
 
@@ -218,8 +218,77 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
     }
   }
 
+  // Redesign 2026-09 — admin console: confirming a bank-transfer payment
+  // for a plan (visit_quantity set) must also issue the visit_credits
+  // row — purchaseVisitCredits' UPI branch already does this instantly;
+  // this was explicitly left as admin-console follow-up work (see
+  // ARCHITECTURE.md §9) because recordPayment previously only extended
+  // property.expiration_date. Skipped for legacy payments with no
+  // plan_id (the old subscription model doesn't use visit_credits at
+  // all) and guarded against double-issue if a payment is ever
+  // re-recorded.
+  if (paymentRow?.plan_id) {
+    const { data: existingCredit } = await supabase
+      .from('visit_credits')
+      .select('id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+    if (!existingCredit) {
+      const visitQuantity = plan?.visit_quantity ?? 1;
+      await supabase.from('visit_credits').insert({
+        property_id: propertyId,
+        payment_id: paymentId,
+        quantity_purchased: visitQuantity,
+        purchased_at: paidAt,
+        expires_at: validUntil,
+      });
+    }
+  }
+
   revalidatePath('/admin/payments');
+  revalidatePath('/admin/queue/payments');
   revalidatePath(`/properties/${propertyId}`);
   revalidatePath('/dashboard');
   return { success: true, validUntil };
+}
+
+// ---------- Redesign 2026-09 — admin console ----------
+
+// Payment detail screen, "Flag a mismatch" — additive, doesn't touch
+// payments.status (still 'pending', still shows in getPendingPayments);
+// see supabase/schema.sql for why this is separate columns rather than
+// a new status value.
+export async function flagPaymentMismatch(paymentId: string, reason: string) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+  if (!reason.trim()) return { error: 'A reason is required.' };
+
+  const { data: payment, error } = await gate.supabase
+    .from('payments')
+    .update({
+      mismatch_reason: reason.trim(),
+      mismatch_flagged_at: new Date().toISOString(),
+      mismatch_flagged_by: gate.userId,
+    })
+    .eq('id', paymentId)
+    .select('property_id')
+    .single();
+  if (error) return { error: error.message };
+
+  revalidatePath('/admin/payments');
+  revalidatePath('/admin/queue/payments');
+  revalidatePath(`/admin/payments/${paymentId}`);
+  return { success: true, propertyId: payment?.property_id as string | undefined };
+}
+
+export async function getPaymentDetail(paymentId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('payments')
+    .select(
+      '*, subscription_plans(name, price, base_price, discount_percent, visit_quantity, validity_months), properties(id, property_name, owner_id, profiles(username, first_name, last_name, email, phone_country_code, phone_number))'
+    )
+    .eq('id', paymentId)
+    .single();
+  return data ?? null;
 }

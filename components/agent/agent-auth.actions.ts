@@ -55,12 +55,29 @@ export async function agentLogIn(formData: FormData) {
     .maybeSingle();
 
   if (!agentProfile) redirect('/agent/onboarding');
+
+  // Redesign 2026-09 — admin console: a banned agent (components/admin/
+  // agent-bans.actions.ts, toggleAgentBan) can still sign in with
+  // correct credentials but must not reach the dashboard — signed out
+  // again immediately, same pattern as admin-auth.actions.ts's adminLogIn.
+  const { data: ban } = await supabase
+    .from('bans')
+    .select('id')
+    .eq('subject_type', 'agent')
+    .eq('subject_id', userData.user!.id)
+    .eq('active', true)
+    .maybeSingle();
+  if (ban) {
+    await supabase.auth.signOut();
+    return { error: 'This account has been disabled. Contact Plot360 support.' };
+  }
+
   redirect('/agent/dashboard');
 }
 
 // Distinguishes "not signed in" from "signed in but registration incomplete
 // or awaiting verification" so pages can route accordingly.
-type AgentGateStatus = 'unauthenticated' | 'needs_onboarding' | 'pending' | 'rejected' | 'verified';
+type AgentGateStatus = 'unauthenticated' | 'needs_onboarding' | 'pending' | 'rejected' | 'verified' | 'banned';
 
 export async function getAgentGateStatus(): Promise<AgentGateStatus> {
   const supabase = await createClient();
@@ -74,5 +91,18 @@ export async function getAgentGateStatus(): Promise<AgentGateStatus> {
     .maybeSingle();
 
   if (!agentProfile) return 'needs_onboarding';
+
+  // Redesign 2026-09 — admin console: checked after onboarding so a
+  // banned agent (even a still-'pending' one) is routed to the
+  // "disabled" message rather than the ordinary status screens.
+  const { data: ban } = await supabase
+    .from('bans')
+    .select('id')
+    .eq('subject_type', 'agent')
+    .eq('subject_id', userData.user.id)
+    .eq('active', true)
+    .maybeSingle();
+  if (ban) return 'banned';
+
   return agentProfile.status;
 }
