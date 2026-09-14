@@ -1037,3 +1037,211 @@ alter table monitoring_jobs add column if not exists q_attention_needed text;
 
 -- ---------- admin remarks on monitoring jobs (visible on customer visit report) ----------
 alter table monitoring_jobs add column if not exists admin_remarks text;
+
+-- =========================================================
+-- Redesign 2026-09 — foundation
+-- Visit credits (replaces the subscription/renewal model), a WhatsApp
+-- outbox log, an internal admin timeline, a shared bans table, and the
+-- landing page's call-back form. See
+-- design_handoff_plot360_redesign/README.md for the full product spec —
+-- this section only adds what the redesign's data model needs; it doesn't
+-- remove or rename anything, per the "don't delete/rewrite without
+-- asking" rule in that handoff.
+-- =========================================================
+
+-- ---------- visit_credits (replaces payment.valid_from/valid_until + plan validity_months as the visit-count source) ----------
+-- One property can accumulate several purchases over time (buys 1 visit,
+-- uses it, buys 4 more later) — quantity_used only increments when a visit
+-- (monitoring_jobs row) reaches 'approved'. This is the same fact
+-- dashboard.data.ts today derives by counting approved jobs since
+-- payments.valid_from; visit_credits makes it an explicit ledger instead,
+-- which the redesign needs for the "warn under 60 days" + one-time
+-- admin extension rules. Existing payments/subscription_plans rows are
+-- untouched — nothing here is backfilled automatically, since mapping old
+-- validity-based payments onto credit quantities is a product decision,
+-- not a mechanical one; the customer-app phase will decide how (if at
+-- all) to migrate historical payments into credits.
+create table if not exists visit_credits (
+  id uuid primary key default gen_random_uuid(),
+  property_id uuid not null references properties(id) on delete cascade,
+  payment_id uuid references payments(id) on delete set null,
+  quantity_purchased integer not null check (quantity_purchased > 0),
+  quantity_used integer not null default 0 check (quantity_used >= 0),
+  purchased_at date not null default current_date,
+  expires_at date not null,               -- purchased_at + 1 year (+ any extension)
+  extension_granted boolean not null default false,
+  extension_reason text,
+  extension_days integer,
+  extended_by uuid references profiles(id),
+  extended_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_visit_credits_property on visit_credits(property_id);
+
+alter table visit_credits enable row level security;
+
+drop policy if exists "visit_credits_select_own" on visit_credits;
+create policy "visit_credits_select_own" on visit_credits for select
+  using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "visit_credits_select_admin" on visit_credits;
+create policy "visit_credits_select_admin" on visit_credits for select using (is_admin());
+drop policy if exists "visit_credits_insert_admin" on visit_credits;
+create policy "visit_credits_insert_admin" on visit_credits for insert with check (is_admin());
+drop policy if exists "visit_credits_update_admin" on visit_credits;
+create policy "visit_credits_update_admin" on visit_credits for update using (is_admin());
+
+-- ---------- visits: monitoring_jobs already IS this table — extend, don't duplicate ----------
+-- monitoring_jobs already carries agent, property, status and the ten
+-- q_* visit answers (see lib/visitReportQuestions.ts). Add only what the
+-- redesign needs on top: which visit number this is for the property, the
+-- requested scheduling window (distinct from assigned_at), the GPS
+-- distance from the recorded pin ("warn, never block"), a reviewer flag,
+-- and which credit ledger row this visit draws down.
+alter table monitoring_jobs add column if not exists visit_number integer;
+alter table monitoring_jobs add column if not exists requested_window_start date;
+alter table monitoring_jobs add column if not exists requested_window_end date;
+alter table monitoring_jobs add column if not exists gps_distance_meters numeric;
+alter table monitoring_jobs add column if not exists flagged boolean not null default false;
+alter table monitoring_jobs add column if not exists visit_credit_id uuid references visit_credits(id) on delete set null;
+
+-- Backfill visit_number for existing jobs (assignment order per property)
+-- so nothing shows a blank visit number once the customer app reads it.
+with numbered as (
+  select id, row_number() over (partition by property_id order by assigned_at) as rn
+  from monitoring_jobs
+)
+update monitoring_jobs j set visit_number = n.rn
+from numbered n
+where j.id = n.id and j.visit_number is null;
+
+-- ---------- visit_media: monitoring_media + which boundary side (N/E/S/W) a photo covers ----------
+do $$ begin
+  create type boundary_side as enum ('N','E','S','W');
+exception when duplicate_object or duplicate_table then null; end $$;
+
+alter table monitoring_media add column if not exists boundary_side boundary_side;
+
+-- ---------- agent_upload_links: monitoring_upload_tokens + consumed_at ----------
+-- "stops working once you submit, or after 7 days" needs both: expires_at
+-- already covers the 7 days, consumed_at is set the moment a submission
+-- goes through so the link dies immediately even if well within its window.
+alter table monitoring_upload_tokens add column if not exists consumed_at timestamptz;
+
+-- ---------- whatsapp_messages: outbox log for every wa.me link opened ----------
+-- The app only ever builds a https://wa.me/... deep link for a human to
+-- send (see components/admin/whatsapp.ts) — there is no WhatsApp Business
+-- API integration, so real delivery/read receipts are never knowable from
+-- here. 'sent' is logged the moment the link is opened; 'failed' is set
+-- only when an admin explicitly marks a message as not gone through (e.g.
+-- wrong number on file), which is what the redesign's dashboard "Failed
+-- WhatsApp messages + Resend" list acts on.
+do $$ begin
+  create type whatsapp_message_state as enum ('sent','failed');
+exception when duplicate_object or duplicate_table then null; end $$;
+
+create table if not exists whatsapp_messages (
+  id uuid primary key default gen_random_uuid(),
+  related_entity_type text not null, -- 'monitoring_job' | 'property' | 'agent_profile' | 'payment' | 'service_request' | 'enquiry'
+  related_entity_id uuid,
+  recipient_phone text,
+  body text not null,
+  state whatsapp_message_state not null default 'sent',
+  failure_reason text,
+  sent_by uuid references profiles(id),
+  resent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_whatsapp_messages_entity on whatsapp_messages(related_entity_type, related_entity_id);
+create index if not exists idx_whatsapp_messages_state on whatsapp_messages(state);
+
+alter table whatsapp_messages enable row level security;
+drop policy if exists "whatsapp_messages_all_admin" on whatsapp_messages;
+create policy "whatsapp_messages_all_admin" on whatsapp_messages for all using (is_admin()) with check (is_admin());
+
+-- ---------- admin_actions: internal-only timeline, never shown to customers ----------
+create table if not exists admin_actions (
+  id uuid primary key default gen_random_uuid(),
+  entity_type text not null,
+  entity_id uuid not null,
+  action text not null,
+  actor uuid references profiles(id),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_admin_actions_entity on admin_actions(entity_type, entity_id);
+
+alter table admin_actions enable row level security;
+drop policy if exists "admin_actions_all_admin" on admin_actions;
+create policy "admin_actions_all_admin" on admin_actions for all using (is_admin()) with check (is_admin());
+
+-- ---------- bans: single source of truth for customer + agent bans ----------
+-- Customer bans already work today via Supabase Auth's ban_duration (see
+-- components/admin/users.actions.ts) — this table adds agent banning
+-- (nothing currently implements that) and gives both a shared, queryable
+-- record so the agent-detail toggle and the Users list can never disagree,
+-- per the README's "one source of truth" rule. The customer-facing
+-- Auth ban stays authoritative for actually blocking sign-in; this table
+-- is what the UI reads/writes so both surfaces agree.
+do $$ begin
+  create type ban_subject_type as enum ('customer','agent');
+exception when duplicate_object or duplicate_table then null; end $$;
+
+create table if not exists bans (
+  id uuid primary key default gen_random_uuid(),
+  subject_type ban_subject_type not null,
+  subject_id uuid not null,
+  active boolean not null default true,
+  reason text,
+  actor uuid references profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists bans_subject_uidx on bans(subject_type, subject_id);
+
+alter table bans enable row level security;
+drop policy if exists "bans_all_admin" on bans;
+create policy "bans_all_admin" on bans for all using (is_admin()) with check (is_admin());
+
+drop trigger if exists trg_bans_touch on bans;
+create trigger trg_bans_touch before update on bans
+  for each row execute function touch_updated_at();
+
+-- ---------- enquiries: landing page call-back form ----------
+create table if not exists enquiries (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  mobile text not null,
+  plot_location text,
+  notes text,
+  status text not null default 'new' check (status in ('new','contacted')),
+  created_at timestamptz not null default now()
+);
+
+alter table enquiries enable row level security;
+
+-- Public, unauthenticated visitors submit this form — insert-only, no read
+-- access, matching "anyone can send, only admin can see".
+drop policy if exists "enquiries_insert_public" on enquiries;
+create policy "enquiries_insert_public" on enquiries for insert with check (true);
+drop policy if exists "enquiries_select_admin" on enquiries;
+create policy "enquiries_select_admin" on enquiries for select using (is_admin());
+drop policy if exists "enquiries_update_admin" on enquiries;
+create policy "enquiries_update_admin" on enquiries for update using (is_admin());
+
+-- ---------- subscription_plans: visit_quantity (the redesign's "1 visit" / "4 visits" plans) ----------
+-- validity_months is kept, but is repurposed as "credit validity in months
+-- from purchase" (the redesign's plans both expire 1 year out) rather than
+-- a subscription length — no schema change needed for that, it's a
+-- meaning change the admin Plans page (later phase) will reflect.
+alter table subscription_plans add column if not exists visit_quantity integer not null default 1;
+
+-- One-time backfill only, so existing plan rows have a sane value instead
+-- of NULL/0 — matches today's maxVisitsForPlan() cadence (6mo -> 1 visit,
+-- 12mo -> 2 visits). The redesign's actual two plans (1 visit / 4 visits)
+-- are a pricing decision for an admin to set on the rebuilt Plans page,
+-- not something this migration should invent.
+update subscription_plans set visit_quantity = 2 where visit_quantity = 1 and validity_months >= 12;

@@ -135,3 +135,42 @@ backend layer).
   project instructions once video volume grows.
 - Supabase free tier pauses projects after 7 days of inactivity — fine for a
   ~100 user app in active use, worth knowing if this sits idle during development.
+
+## 7. Redesign 2026-09 — foundation (branch `feat/redesign-2026-09`)
+
+Source material: `design_handoff_plot360_redesign/README.md` (5 surfaces —
+landing, customer app, agent app, admin console, visit report — plus a
+commercial-model change: subscriptions → visit credits). Being built in
+phases; this section covers the **data-model foundation** phase only —
+no UI changed yet. See that README's "Product model" and "Data" sections
+for the full spec this maps onto the existing tables.
+
+Mapping decisions (all additive — nothing existing was dropped or renamed):
+
+| Redesign concept | Where it actually lives |
+|---|---|
+| `visit_credits` | New table. Ledger (quantity_purchased/used, expiry, one-time extension) that replaces counting approved jobs since `payments.valid_from` |
+| `visits` | **`monitoring_jobs`**, extended (`visit_number`, `requested_window_start/end`, `gps_distance_meters`, `flagged`, `visit_credit_id`) — it already had the agent/property/status/the-ten-checks shape the redesign asks for |
+| `visit_answers` | Already `monitoring_jobs`' `q_*` columns — `lib/visitReportQuestions.ts` is the source of truth for the ten keys/labels, per the handoff |
+| `visit_media` | **`monitoring_media`**, extended with `boundary_side` (N/E/S/W) |
+| `agent_upload_links` | **`monitoring_upload_tokens`**, extended with `consumed_at` |
+| `whatsapp_messages` | New table — an outbox **log**, not a send API: the app only ever opens a `wa.me` link for a human to send (`components/admin/whatsapp.ts`), so "sent" is logged on open and "failed" is an admin's manual correction. This is what will power the redesigned dashboard's failed-message list + Resend |
+| `admin_actions` | New table — internal-only timeline, never customer-visible |
+| `bans` | New table — customer bans still work via Supabase Auth `ban_duration` (`components/admin/users.actions.ts`); this table adds agent banning (nothing did that before) and gives both a shared row so the Users list and an agent's own detail page can't disagree |
+| `enquiries` | New table — the landing page's call-back form. Public insert, admin-only read |
+| Plans: visits per plan | `subscription_plans.visit_quantity` (new column; `validity_months` is kept but now means "credit validity," not subscription length) |
+| Property: EC requested | Already `property_ownership.ec_digital_copy_requested` — no change needed |
+
+New TypeScript types for all of the above are in `types/database.types.ts`.
+Pure helpers over the `visit_credits` ledger (remaining count, expiry
+warnings, which credit a new visit should draw from, scheduling
+eligibility) are in `lib/visitCredits.ts` — written now so the customer,
+agent, and admin phases all read/write credits the same way instead of
+each inventing their own math.
+
+Not done yet (later phases, per the redesign's own screen list): the
+landing page, the customer/agent/admin UI and their server actions
+actually reading/writing `visit_credits` instead of the old payment-cycle
+count, wiring `whatsapp_messages`/`admin_actions` writes into the existing
+action files, the four-milestone customer-facing status mapping, and the
+4-page A4 report template.
