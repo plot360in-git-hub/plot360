@@ -12,6 +12,46 @@ function corner(formData: FormData, key: 'ne' | 'se' | 'nw' | 'sw') {
   return { lat: lat ? Number(lat) : undefined, lng: lng ? Number(lng) : undefined };
 }
 
+// Redesign 2026-09 — simplified "Register a property" Step 1 for the
+// customer app (design_handoff_plot360_redesign, "Plot360 Customer.dc.html").
+// Only the property name is mandatory here; the SRO/address details this
+// form used to require, plus the whole ownership-proof and documents
+// wizard below, are collected later by a Plot360 representative after
+// payment — matching the design's own confirmation copy ("Rajesh will
+// contact you within one working day for documents and owner approval").
+// This is a NEW function alongside createProperty, which keeps serving
+// the existing full-detail registration and admin edit flows unchanged —
+// see supabase/schema.sql "Redesign 2026-09 — customer app" for the
+// matching property_type/ec_interest schema change, and
+// ARCHITECTURE.md for the full picture.
+export async function createPropertyQuick(formData: FormData) {
+  const name = String(formData.get('property_name') || '').trim();
+  if (!name) return { error: 'Property name is required.' };
+
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+
+  const location = String(formData.get('location') || '').trim();
+  const plotSizeRaw = String(formData.get('plot_size') || '').trim();
+  const ecInterest = formData.get('ec_interest'); // 'yes' | 'no' | null
+
+  const { data, error } = await supabase
+    .from('properties')
+    .insert({
+      owner_id: userData.user.id,
+      property_name: name,
+      street_address: location || null,
+      plot_size: plotSizeRaw ? Number(plotSizeRaw) : null,
+      ec_interest: ecInterest === 'yes' ? true : ecInterest === 'no' ? false : null,
+    })
+    .select('id')
+    .single();
+  if (error) return { error: error.message };
+
+  redirect(`/properties/${data.id}/plan`);
+}
+
 const REQUIRED_STEP1_FIELDS: Array<[string, string]> = [
   ['property_name', 'Property Name'],
   ['property_type', 'Property Type'],

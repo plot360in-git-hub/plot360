@@ -107,6 +107,24 @@
 .p360 .input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
 .p360 textarea.input { resize: vertical; }
 
+/* — cards —
+   Reuses the plain "card" class name (like the old app's own .card) but
+   scoped under .p360, so it picks up the Modernist zero-radius look
+   instead of the pre-redesign app's 20px-rounded .card — see
+   ARCHITECTURE.md, "Redesign 2026-09 — customer app" for why sharing a
+   class name across the two scopes is safe (CSS specificity keeps them
+   from colliding; only the *custom property values* need the .p360
+   wrapper to avoid leaking, which this rule doesn't reference). */
+.p360 .card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.p360 .card.section-alt {
+  background: var(--color-neutral-300);
+}
+
 /* — tags — */
 .p360 .tag {
   display: inline-flex; align-items: center; font-size: 11px;

@@ -70,6 +70,19 @@ export function canScheduleVisit(
   return { eligible: true, hasCredits };
 }
 
+// Credits left once open/assigned visit_requests are accounted for — the
+// customer app's "Schedule a visit" screen shouldn't let someone request
+// more visits than they actually have room for while earlier requests are
+// still awaiting an agent (quantity_used on the ledger itself only moves
+// once a visit is approved, so it can't reflect this on its own).
+export function remainingAfterReservations(
+  credits: VisitCredit[],
+  reservedCount: number,
+  today: Date = new Date()
+): number {
+  return Math.max(totalRemainingCredits(credits, today) - reservedCount, 0);
+}
+
 // expires_at for a new purchase: purchased_at + 1 year, plus any granted
 // extension in days. Lapsed credits can be extended once by an admin
 // (30/60/90 days, with a reason) — pass the running total of days already

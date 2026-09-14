@@ -41,6 +41,10 @@ export async function upsertPlan(formData: FormData) {
   const renewalDiscountPercent = renewalDiscountRaw === '' ? null : Number(renewalDiscountRaw);
   const validityMonths = Number(formData.get('validity_months'));
   const displayOrder = Number(formData.get('display_order')) || 0;
+  // Redesign 2026-09 — how many site visits this plan grants (the
+  // customer app's "Choose a plan" screen reads this; see
+  // components/payments/visitCredits.actions.ts, getActiveVisitPlans).
+  const visitQuantity = Number(formData.get('visit_quantity')) || 1;
 
   if (!name) return { error: 'Plan name is required.' };
   if (!basePrice || basePrice <= 0) return { error: 'Enter a valid base price.' };
@@ -49,6 +53,7 @@ export async function upsertPlan(formData: FormData) {
     return { error: 'Renewal discount must be between 0 and 100.' };
   }
   if (!validityMonths || validityMonths <= 0) return { error: 'Enter a valid validity period in months.' };
+  if (visitQuantity <= 0) return { error: 'Enter a valid number of visits.' };
 
   const payload = {
     name,
@@ -58,6 +63,7 @@ export async function upsertPlan(formData: FormData) {
     price: computePlanPrice(basePrice, discountPercent), // kept in sync for any code still reading plan.price directly
     validity_months: validityMonths,
     display_order: displayOrder,
+    visit_quantity: visitQuantity,
   };
   const { error } = id
     ? await gate.supabase.from('subscription_plans').update(payload).eq('id', id)

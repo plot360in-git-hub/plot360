@@ -174,3 +174,83 @@ actually reading/writing `visit_credits` instead of the old payment-cycle
 count, wiring `whatsapp_messages`/`admin_actions` writes into the existing
 action files, the four-milestone customer-facing status mapping, and the
 4-page A4 report template.
+
+## 8. Redesign 2026-09 — landing page
+
+Public marketing home page (`components/marketing/LandingPage.tsx`),
+ported 1:1 from `design/Plot360 Landing.dc.html`, wired in at `app/page.tsx`
+(replacing the old embedded-login home page — login moved to its own
+`/login` route, see `app/login/page.tsx`). Contact placeholders
+(WhatsApp/phone/email/representative name) live in `lib/contact.ts` —
+swap before launch.
+
+## 9. Redesign 2026-09 — customer app
+
+Source: `design/Plot360 Customer.dc.html`. Covers registration, plans/
+payment, the Home screen, the property visit-history screen, and
+self-service scheduling. Visit Report viewer and Service Request screens
+were left untouched this phase (already functional; not part of this
+pass) — still reachable from the new screens via their existing routes.
+
+**Registration is now two tracks, both kept:**
+- `createProperty` (existing) — full detail, still used by `/properties/
+  [id]/edit` and the admin edit routes.
+- `createPropertyQuick` (new, same file) — only `property_name` required;
+  wired to the new `/properties/new` page (`RegisterQuick.tsx`). Everything
+  the old flow required up front (SRO, address, ownership proof,
+  documents) is now collected **later**, by a representative, via the
+  existing (unmodified) `/admin/[id]/edit`, `/admin/[id]/ownership` and
+  `/admin/[id]/documents` admin pages — matching the design's own
+  confirmation copy ("Rajesh will contact you… for documents and owner
+  approval"). This was an explicit product decision (asked via
+  clarifying question, "match the design exactly") — `properties.property_type`
+  is now nullable to allow it (see `supabase/schema.sql`).
+
+**Plans/payment** (`ChoosePlanAndPay.tsx`, `components/payments/
+visitCredits.actions.ts`, `purchaseVisitCredits`): reads real, admin-
+configured `subscription_plans` rows (extended `PlansSettingsPage.tsx`
+with a `visit_quantity` field) rather than hardcoding the design mock's
+₹2,499/₹8,999 — **an admin needs to configure at least one active plan
+with `visit_quantity` 1 and one with 4** for the screen to show the
+design's two options. UPI is a simulated instant activation (no live
+gateway); it creates a `payments` row (`status: 'completed'`) and a
+`visit_credits` row immediately. Bank transfer creates a `payments` row
+(`status: 'pending'`) only — an admin confirming it today (`recordPayment`
+in `components/payments/payments.actions.ts`) does **not** yet create the
+matching `visit_credits` row; that wiring is left for the admin console
+phase.
+
+**Self-service scheduling is a new `visit_requests` table, not a direct
+`monitoring_jobs` insert** — `monitoring_jobs.agent_id` is `NOT NULL`
+(every job has always needed an admin-picked agent) and its assignment
+logic (`getEligiblePropertiesForAssignment`, `assignAgentToProperty` in
+`components/admin/monitoring.actions.ts`) is subscription/validity-based
+and untouched. `visit_requests` just records what the customer asked for
+(property + window); turning an open request into a real `monitoring_jobs`
+row (and marking it `assigned`) is admin console follow-up work. Calendar
+math (weekday-only, 3-day lead time, 3/5/7-working-day windows) lives in
+`lib/scheduling.ts`, generalized from the design mock's hardcoded
+September 2026 example to the real current date.
+
+**Home screen / property page**: `app/dashboard/page.tsx` and
+`app/properties/[id]/page.tsx` now render `CustomerHome.tsx` and
+`PropertyVisitHistory.tsx` (new, under `components/customer/`) instead of
+`CustomerDashboard.tsx` and `PropertyView.tsx`/`MonitoringStatus.tsx` —
+the old components are kept, just no longer wired into these routes, per
+the redesign's "don't remove existing code" instruction. `TaskList`
+still renders on the property page, deliberately **outside** the `.p360`
+wrapper (see comment in `app/properties/[id]/page.tsx`) — it uses the old
+global `.card`/`.field-label` classes, which read CSS custom properties
+(`--color-accent` etc.) that `.p360` re-declares with different values;
+nesting it inside `.p360` would leak the new red palette into that
+untouched component.
+
+**Confirmation screens**: one shared `ConfirmationScreen.tsx` with the
+three built variants (`reg-upi`, `reg-bank`, `sched`) using the design's
+exact WhatsApp message templates — a `service` variant for the Service
+Request screen wasn't added since that screen is untouched this phase.
+
+Not done yet: agent app, admin console (including the `visit_requests` →
+`monitoring_jobs` assignment step and bank-transfer → `visit_credits`
+confirmation noted above), the 4-page visit report PDF, and any deeper
+redesign of the Visit Report viewer / Service Request screens.

@@ -4,26 +4,21 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Archivo } from 'next/font/google';
 import { submitEnquiry } from './enquiries.actions';
+import { WA_LINK, TEL_LINK, DISPLAY_PHONE, SUPPORT_EMAIL } from '@/lib/contact';
 
 // Redesign 2026-09 — public landing page (design_handoff_plot360_redesign/
 // design/Plot360 Landing.dc.html). Ported 1:1 for copy, structure and the
 // Modernist design tokens (styles/plot360-redesign.css, scoped under
 // .p360 so it never touches the pre-redesign app's own --color-accent
 // etc.). See ARCHITECTURE.md "Redesign 2026-09" for the mapping notes.
+// Contact placeholders (WhatsApp/phone/email) live in lib/contact.ts —
+// shared with the customer app's confirmation screens.
 const archivo = Archivo({
   subsets: ['latin'],
   weight: ['400', '600', '800'],
   variable: '--p360-font-archivo',
   display: 'swap',
 });
-
-// Placeholders per the handoff README ("Placeholders to replace") — swap
-// before launch.
-const WHATSAPP_DIGITS = '919000036000';
-const WA_LINK = `https://wa.me/${WHATSAPP_DIGITS}`;
-const TEL_LINK = 'tel:+919000036000';
-const DISPLAY_PHONE = '+91 90000 36000';
-const SUPPORT_EMAIL = 'support@plot360.in';
 
 const MENU = [
   { label: 'Home', href: '#home' },

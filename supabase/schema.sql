@@ -1245,3 +1245,68 @@ alter table subscription_plans add column if not exists visit_quantity integer n
 -- are a pricing decision for an admin to set on the rebuilt Plans page,
 -- not something this migration should invent.
 update subscription_plans set visit_quantity = 2 where visit_quantity = 1 and validity_months >= 12;
+
+-- =========================================================
+-- Redesign 2026-09 — customer app
+-- =========================================================
+-- The design's registration screen only requires a property name up
+-- front (location/size/EC-interest are optional, and the whole
+-- ownership-proof + documents wizard is deferred to "a representative
+-- will contact you" after payment — see components/properties/
+-- registration/registration.actions.ts, createPropertyQuick). properties
+-- previously required property_type NOT NULL; the quick flow leaves it
+-- unset until an admin/representative fills in the rest via the
+-- existing /admin/[id]/edit, /admin/[id]/ownership and /admin/[id]/
+-- documents pages (unchanged) before verifying the property.
+alter table properties alter column property_type drop not null;
+
+-- Optional "do you want a Digital Signed Certified EC copy" signal
+-- captured at quick-registration time, so the representative who later
+-- collects documents already knows to prepare it — mirrors
+-- property_ownership.ec_digital_copy_requested (collected today, later)
+-- without requiring that row to exist yet.
+alter table properties add column if not exists ec_interest boolean;
+
+-- ---------- visit_requests: customer self-service "Schedule a visit" ----------
+-- Deliberately NOT inserted directly into monitoring_jobs — that table's
+-- agent_id is NOT NULL (every job has always needed an admin to pick an
+-- agent) and its whole eligibility/cadence engine
+-- (components/admin/monitoring.actions.ts, getEligiblePropertiesForAssignment)
+-- is subscription/validity-based. A visit_request instead just records
+-- what the customer asked for (property + window); an admin turns an
+-- open one into a real monitoring_jobs row when assigning an agent (a
+-- small extension to assignAgentToProperty, left for the admin console
+-- phase) and marks it 'assigned' here, linking monitoring_job_id back.
+do $$ begin
+  create type visit_request_status as enum ('open','assigned','cancelled');
+exception when duplicate_object or duplicate_table then null; end $$;
+
+create table if not exists visit_requests (
+  id uuid primary key default gen_random_uuid(),
+  property_id uuid not null references properties(id) on delete cascade,
+  visit_credit_id uuid references visit_credits(id) on delete set null,
+  requested_window_start date not null,
+  requested_window_end date not null,
+  status visit_request_status not null default 'open',
+  monitoring_job_id uuid references monitoring_jobs(id) on delete set null,
+  requested_by uuid references profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_visit_requests_property on visit_requests(property_id);
+
+alter table visit_requests enable row level security;
+
+drop policy if exists "visit_requests_select_own" on visit_requests;
+create policy "visit_requests_select_own" on visit_requests for select
+  using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "visit_requests_select_admin" on visit_requests;
+create policy "visit_requests_select_admin" on visit_requests for select using (is_admin());
+drop policy if exists "visit_requests_insert_own" on visit_requests;
+create policy "visit_requests_insert_own" on visit_requests for insert
+  with check (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "visit_requests_update_own" on visit_requests;
+create policy "visit_requests_update_own" on visit_requests for update
+  using (exists (select 1 from properties p where p.id = property_id and p.owner_id = auth.uid()));
+drop policy if exists "visit_requests_update_admin" on visit_requests;
+create policy "visit_requests_update_admin" on visit_requests for update using (is_admin());

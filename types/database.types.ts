@@ -68,7 +68,12 @@ export interface Property {
   id: string;
   owner_id: string;
   property_name: string;
-  property_type: PropertyType;
+  // Redesign 2026-09 — nullable now: the customer app's quick-registration
+  // flow (createPropertyQuick) only requires property_name; type is filled
+  // in later by a representative (see supabase/schema.sql, "Redesign
+  // 2026-09 — customer app"). The old full registration flow
+  // (createProperty) still always sets it.
+  property_type: PropertyType | null;
   plot_size: number | null;
   plot_size_unit: string;
   plot_shape: PlotShape | null;
@@ -92,6 +97,9 @@ export interface Property {
   registration_date: string | null;
   expiration_date: string | null;
   next_monitoring_due_date: string | null;
+  // Redesign 2026-09 — captured optionally at quick registration; see
+  // supabase/schema.sql, "Redesign 2026-09 — customer app".
+  ec_interest: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -243,6 +251,23 @@ export interface VisitCredit {
   extension_days: number | null;
   extended_by: string | null;
   extended_at: string | null;
+  created_at: string;
+}
+
+// ---------- Redesign 2026-09 — customer app: self-service scheduling ----------
+// See supabase/schema.sql "Redesign 2026-09 — customer app" for why this is
+// a separate table from monitoring_jobs rather than an extra status value.
+export type VisitRequestStatus = 'open' | 'assigned' | 'cancelled';
+
+export interface VisitRequest {
+  id: string;
+  property_id: string;
+  visit_credit_id: string | null;
+  requested_window_start: string;
+  requested_window_end: string;
+  status: VisitRequestStatus;
+  monitoring_job_id: string | null;
+  requested_by: string | null;
   created_at: string;
 }
 

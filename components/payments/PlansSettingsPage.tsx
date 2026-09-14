@@ -42,6 +42,11 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
     setDiscountInput(plan.discount_percent != null ? String(plan.discount_percent) : '0');
   }
 
+  // Redesign 2026-09 — the customer app's "Choose a plan" screen shows
+  // whichever active plans exist here, so it needs at least one plan with
+  // visit_quantity 1 and one with visit_quantity 4 to match the design
+  // (see components/payments/visitCredits.actions.ts, getActiveVisitPlans).
+
   function handlePlanSubmit(formData: FormData) {
     setPlanError(null);
     startTransition(async () => {
@@ -85,6 +90,7 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
               <th>You pay</th>
               <th>Renewal discount</th>
               <th>Validity</th>
+              <th>Visits</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -100,6 +106,7 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
                 <td><strong>₹{p.price}</strong></td>
                 <td>{p.renewal_discount_percent != null ? `${p.renewal_discount_percent}% off` : 'Same as above'}</td>
                 <td>{p.validity_months} months</td>
+                <td>{p.visit_quantity ?? 1}</td>
                 <td>
                   <span className={`status-pill ${p.is_active ? 'verified' : 'rejected'}`}>
                     {p.is_active ? 'Active' : 'Inactive'}
@@ -178,7 +185,7 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
             </p>
             <PlanPricePreview basePrice={basePriceInput} discountPercent={discountInput} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '16px 0 12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, margin: '16px 0 12px' }}>
               <div>
                 <label className="field-label">Validity (months)</label>
                 <input className="field-input" type="number" name="validity_months" required defaultValue={editingPlan.validity_months ?? 12} />
@@ -186,6 +193,10 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
               <div>
                 <label className="field-label">Display order</label>
                 <input className="field-input" type="number" name="display_order" defaultValue={editingPlan.display_order ?? 0} />
+              </div>
+              <div>
+                <label className="field-label">Site visits included</label>
+                <input className="field-input" type="number" min={1} name="visit_quantity" required defaultValue={editingPlan.visit_quantity ?? 1} />
               </div>
             </div>
             {planError && <p style={{ color: 'var(--color-danger)', marginBottom: 12 }}>{planError}</p>}
