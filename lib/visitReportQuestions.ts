@@ -25,6 +25,28 @@ export const VISIT_QUESTIONS: VisitQuestion[] = [
   { key: 'q_attention_needed', label: "Anything needing the owner's attention?", type: 'text', placeholder: 'e.g. None' },
 ];
 
+// Which answers are the ones worth flagging — shared by the admin
+// Submission review screen (highlighting) and the visit report PDF
+// (verdict count, accent-coloured rows), so the two never classify the
+// same answer differently. A boolean question is concerning either when
+// it's true (encroachment, dumping, etc.) or when it's false (boundary
+// intact/vacant/markers-visible — concerning when NOT met).
+export const CONCERNING_WHEN_FALSE = new Set(['q_boundary_intact', 'q_vacant_as_expected', 'q_boundary_markers_visible']);
+export const CONCERNING_WHEN_TRUE = new Set(['q_encroachment', 'q_illegal_dumping', 'q_unauthorized_construction', 'q_govt_notice_posted', 'q_water_logging']);
+
+export function isConcerningAnswer(key: string, value: string | boolean | null | undefined) {
+  if (typeof value === 'boolean') {
+    return (value && CONCERNING_WHEN_TRUE.has(key)) || (!value && CONCERNING_WHEN_FALSE.has(key));
+  }
+  // The two text questions: only q_attention_needed is ever "concerning",
+  // and only when the agent actually wrote something (not blank/"none").
+  if (key === 'q_attention_needed') {
+    const v = (value ?? '').toString().trim().toLowerCase();
+    return v.length > 0 && v !== 'none' && v !== 'no' && v !== 'n/a' && v !== 'na';
+  }
+  return false;
+}
+
 // Extracts and validates the 10 answers from a submitted FormData. Used by
 // both agent submission actions (authenticated + magic-link) so the same
 // validation rules apply regardless of which path an agent used.

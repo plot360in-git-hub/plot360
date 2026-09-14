@@ -60,6 +60,72 @@ export async function getVisitReportData(jobId: string) {
   return { job, media: mediaWithUrls };
 }
 
+// Redesign 2026-09 — everything the visit report PDF needs in one read
+// (design_handoff_plot360_redesign, "Report-A-Record.dc.html"). Separate
+// from getVisitReportData above (which only feeds the old, still-intact
+// print-HTML page) rather than extending it, so that page's contract
+// doesn't shift under it. RLS (monitoring_jobs_select_owner/_admin)
+// scopes this to the requesting owner's own properties or an admin;
+// only approved/ec_pending jobs return data (enforced here, not just by
+// the caller, since the PDF route has no other gate).
+export async function getVisitReportPdfData(jobId: string) {
+  const supabase = await createClient();
+  const { data: job } = await supabase
+    .from('monitoring_jobs')
+    .select('*, properties(*, profiles(first_name, last_name, phone_country_code, phone_number))')
+    .eq('id', jobId)
+    .single();
+  if (!job || !['approved', 'ec_pending'].includes(job.status)) return null;
+
+  const property: any = job.properties;
+  if (!property) return null;
+
+  const [{ data: ownership }, { data: mediaRows }, ec, { data: verifiedAction }, { data: previousJob }] = await Promise.all([
+    supabase.from('property_ownership').select('ec_digital_copy_requested').eq('property_id', property.id).maybeSingle(),
+    supabase.from('monitoring_media').select('*').eq('job_id', jobId).order('uploaded_at', { ascending: true }),
+    getEcDigitalCopyForProperty(property.id),
+    supabase
+      .from('admin_actions')
+      .select('created_at')
+      .eq('entity_type', 'property')
+      .eq('entity_id', property.id)
+      .eq('action', 'Verified')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    job.visit_number && job.visit_number > 1
+      ? supabase
+          .from('monitoring_jobs')
+          .select('*')
+          .eq('property_id', property.id)
+          .lt('visit_number', job.visit_number)
+          .in('status', ['approved', 'ec_pending'])
+          .order('visit_number', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const media = mediaRows ?? [];
+  const photos = media.filter((m) => m.media_type === 'photo');
+  const photosWithUrls = await Promise.all(
+    photos.map(async (m) => ({ url: await getMonitoringMediaDownloadUrl(m.file_path), boundarySide: m.boundary_side as string | null }))
+  );
+  const videoCount = media.filter((m) => m.media_type === 'video').length;
+
+  return {
+    job,
+    property,
+    owner: property.profiles,
+    ecRequested: !!ownership?.ec_digital_copy_requested,
+    ec,
+    ownerVerifiedAt: verifiedAction?.created_at ?? null,
+    previousJob,
+    photos: photosWithUrls.filter((p) => !!p.url) as { url: string; boundarySide: string | null }[],
+    videoCount,
+  };
+}
+
 export async function getMonitoringMediaDownloadUrl(filePath: string) {
   const supabase = await createClient();
   const { data, error } = await supabase.storage.from('monitoring-media').createSignedUrl(filePath, 60 * 10, { download: true });

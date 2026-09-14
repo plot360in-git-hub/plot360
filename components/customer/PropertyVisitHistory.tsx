@@ -104,9 +104,9 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="tag" style={{ border: '1px solid var(--color-divider)' }}>{VISIT_STATUS_LABEL[j.status] ?? j.status}</span>
                 {['approved', 'ec_pending'].includes(j.status) && (
-                  <Link href={`/properties/${propertyId}/visit-report/${j.id}`} className="nav-link" style={{ fontSize: 12.5 }}>
-                    View report
-                  </Link>
+                  <a href={`/properties/${propertyId}/visit-report/${j.id}/pdf`} target="_blank" rel="noreferrer" className="nav-link" style={{ fontSize: 12.5 }}>
+                    View report (PDF)
+                  </a>
                 )}
               </div>
             </div>

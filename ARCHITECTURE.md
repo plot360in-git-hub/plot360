@@ -472,6 +472,102 @@ the approve/reject decision itself.
 at this business's scale, worth revisiting if any queue grows into the
 thousands of rows.
 
-Not done yet: the 4-page visit report PDF (next phase), the agent
-signup/onboarding/profile visual redesign (still open from §10), and
-real WhatsApp Business API delivery-status integration (noted above).
+Not done yet: the agent signup/onboarding/profile visual redesign (still
+open from §10), and real WhatsApp Business API delivery-status
+integration (noted above). The visit report PDF is done — see §12.
+
+## 12. Redesign 2026-09 — visit report PDF
+
+Source: `design/Report-A-Record.dc.html`. A real, downloadable 4-page A4
+PDF (3 pages when no EC copy was requested), generated on request at
+`GET /properties/[id]/visit-report/[jobId]/pdf` — new route, new data
+fetcher (`getVisitReportPdfData`, `components/properties/monitoring/
+monitoring.actions.ts`), new builder (`lib/pdf/visitReportPdf.ts`). The
+old print-HTML page at the sibling `/visit-report/[jobId]` route
+(`PrintReportButton.tsx`, `getVisitReportData`) is untouched and still
+reachable directly — this sits beside it, not over it, per the "don't
+rewrite without asking" rule. `PropertyVisitHistory.tsx`'s "View report"
+link now points here instead.
+
+**Puppeteer → pdf-lib, a flagged deviation.** The handoff's own
+instruction was "Puppeteer or similar." This uses `pdf-lib` instead, for
+two concrete reasons: this sandbox cannot install *any* new package (the
+npm registry 403s here — the same limitation that has blocked a full
+`next build` all along), so whichever library was picked would only ever
+be installed for real on the user's own machine regardless, and `pdf-lib`
+is the lighter pick (pure JS, no Chromium download, serverless-friendly).
+More importantly, page 4 needs to embed the customer's actual uploaded EC
+file, which the upload form accepts as **either an image or a PDF** — a
+headless-browser/print approach has no way to merge in someone else's PDF
+pages, while `pdf-lib` can load and copy pages from an arbitrary existing
+PDF directly. `pdf-lib` has been added to `package.json`; it needs a real
+`npm install` on a machine with registry access before this route will
+run — untestable end-to-end from this sandbox beyond the syntax checks
+described in this file's own limitations note.
+
+**Typography is Helvetica, not Archivo.** The design bundle has no font
+file to embed and fetching Google Fonts from this sandbox isn't reliable,
+so the PDF uses `pdf-lib`'s built-in Helvetica/Helvetica-Bold. Colours,
+layout, rules, page structure and copy otherwise follow the mock
+page-for-page (hand-laid-out with `pdf-lib`'s low-level draw API — there's
+no CSS/flexbox layer, so text wrapping and row heights are computed
+manually per block).
+
+**Content that's genuinely computed, not fabricated.** The mock's prose
+("Two items to note", "What changed since visit 1…") reads like an
+admin wrote it by hand for that one example. Nothing in the schema
+captures narrative like that, so it's derived instead:
+- **Verdict** (page 1 three-up) — a count of "concerning" answers among
+  the ten checks. The classification (`CONCERNING_WHEN_TRUE`/
+  `CONCERNING_WHEN_FALSE`, now `isConcerningAnswer()`) used to live only
+  in `SubmissionReviewScreen.tsx`; it's been lifted into `lib/
+  visitReportQuestions.ts` so the admin screen's red-highlighting and the
+  PDF's verdict/row-colouring can never drift apart. One side effect:
+  `q_attention_needed` (when non-blank/non-"none") is now also
+  highlighted on the admin screen, which it wasn't before — a small,
+  deliberate consistency fix, not a regression.
+- **Page 1 "Summary"** — auto-composed from the same ten answers (vacancy/
+  boundary status, then a list of whichever checks came back concerning).
+- **Page 2 "Plot360 review comments"** — `monitoring_jobs.admin_remarks`
+  verbatim (the field `MonitoringDecision.tsx` already collects, "shown
+  on the customer's visit report if approving"), falling back to "No
+  additional remarks." This is the one place genuine human prose can
+  appear, same as the design intends.
+- **"What changed since visit N"** — a real diff against the immediately
+  preceding approved/ec_pending job for the same property (compares all
+  ten answers), rendered as a plain list of what changed rather than the
+  mock's flowing paragraph — honest given there's no field for an admin
+  to write that narrative by hand. Omitted entirely on visit 1.
+- **Report code** (`P-XXXX`) and **field agent code** (`FA-XXX`) are
+  deterministic values derived from the property/agent UUIDs, not stored
+  identifiers — matches the mock's display format without adding columns.
+  The agent's real name is deliberately never shown to the owner, same
+  spirit as agents never seeing owner details elsewhere in this app.
+- **"Owner verified" date** — the timestamp of that property's `'Verified'`
+  entry in `admin_actions` (this admin phase's own timeline), omitted
+  when none exists (properties verified before that phase shipped).
+
+**EC annexure (page 4), three real outcomes**, not just the mock's single
+"reproduced as received" placeholder: an uploaded **image** is embedded
+inline in the page's box; an uploaded **PDF** gets a short note plus its
+own pages copied in full immediately after page 4 (unnumbered — they're
+the customer's own document, not renumbered as part of Plot360's 4
+pages); and a **requested-but-not-yet-uploaded** EC (job status
+`ec_pending`, viewable before the document arrives) shows an honest
+"still being processed" notice instead of fabricating content. Page 4 is
+omitted entirely (3-page PDF) when the customer never asked for an EC.
+
+**Photographs are truncated to what fits one page**, exactly like the
+mock's own "Six of eighteen photographs — the full set … in your Plot360
+account" — the note text and shown/hidden counts are computed from the
+same fixed-page-budget math that lays out the photo grid, so they can't
+drift out of sync. Photos are embedded at their original colour (not
+greyscale, per the design tokens' "photographs in greyscale" note) — no
+image-processing dependency was added for a single cosmetic filter.
+
+**Access control**: `getVisitReportPdfData` re-enforces the
+approved/ec_pending gate itself (not just the caller), and relies on the
+same RLS (`monitoring_jobs_select_owner` / `_select_admin`) as everything
+else — a property owner sees their own reports, an admin can reach any
+of them, anyone else gets a 404 rather than a leak of whether the job
+exists.

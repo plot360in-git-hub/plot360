@@ -4,11 +4,8 @@ import { profileDisplayName } from './displayName';
 import { TimelineOutboxPanel } from './TimelineOutboxPanel';
 import { SubmissionReviewActions } from './SubmissionReviewActions';
 import { EcUploadFormP360 } from './EcUploadFormP360';
-import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
+import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions';
 import { hoursSince, formatWait } from '@/lib/adminQueue';
-
-const CONCERNING_WHEN_FALSE = new Set(['q_boundary_intact', 'q_vacant_as_expected', 'q_boundary_markers_visible']);
-const CONCERNING_WHEN_TRUE = new Set(['q_encroachment', 'q_illegal_dumping', 'q_unauthorized_construction', 'q_govt_notice_posted', 'q_water_logging']);
 
 // Redesign 2026-09 — admin console, Submission review screen
 // (design_handoff_plot360_redesign, "Plot360 Admin.dc.html"). Replaces
@@ -84,7 +81,7 @@ export async function SubmissionReviewScreen({ jobId }: { jobId: string }) {
           {VISIT_QUESTIONS.map((q) => {
             const value = (job as any)[q.key];
             const display = q.type === 'boolean' ? (value ? 'Yes' : 'No') : value || '—';
-            const concerning = q.type === 'boolean' && ((value && CONCERNING_WHEN_TRUE.has(q.key)) || (!value && CONCERNING_WHEN_FALSE.has(q.key)));
+            const concerning = isConcerningAnswer(q.key, value);
             return (
               <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--color-divider)' }}>
                 <span style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.35 }}>{q.label}</span>
