@@ -254,3 +254,74 @@ Not done yet: agent app, admin console (including the `visit_requests` →
 `monitoring_jobs` assignment step and bank-transfer → `visit_credits`
 confirmation noted above), the 4-page visit report PDF, and any deeper
 redesign of the Visit Report viewer / Service Request screens.
+
+## 10. Redesign 2026-09 — agent app
+
+Source: `design/Plot360 Agent.dc.html`. Covers the jobs list and the
+on-site capture screen (both the authenticated route and the no-login
+magic-link route) — the core, highest-value part of this surface.
+Signup, onboarding (full legal details + ID documents) and profile
+editing were deliberately **not** redesigned this phase — see below.
+
+**Capture is one shared component, two thin wrappers**: `AgentCaptureScreen.tsx`
+renders the whole screen (GPS check, photo grid + progress, boundary-side
+tagging, video, the ten checks, "before you submit" gates, submit,
+and the inline "submitted" confirmation) and is used by both
+`AgentCapture.tsx` (authenticated, `/agent/jobs/[id]`) and
+`PublicCapture.tsx` (magic link, `/m/[token]`) — each just fetches its
+job/media and binds the right server actions (`agent-jobs.actions.ts` vs
+`magic-link.actions.ts`) before handing off. `AgentJobDetail.tsx` and
+`PublicUploadForm.tsx` (the old, nearly-identical twins these replace)
+are kept intact but no longer wired into either route.
+
+**GPS: warn, never block** (`lib/geo.ts`) — the browser's geolocation is
+compared to the property's recorded pin (Haversine distance); the result
+is only ever recorded on submit (`monitoring_jobs.gps_distance_meters`,
+`flagged` — both already existed from the foundation phase, unused until
+now) and never prevents submitting, matching the design exactly. No
+reference pin, or geolocation denied, shows a neutral message instead of
+an error.
+
+**Boundary sides are derived, not manual** — the design's own mock keeps
+the "N/E/S/W covered" checklist as an independent set of checkboxes,
+separate from the photo pool. This build ties it to real evidence
+instead: uploading photos, an agent can optionally tag the batch with a
+side (a select next to the file input), stored on
+`monitoring_media.boundary_side` (also unused since the foundation
+phase); the checklist shows a side as covered once at least one photo is
+tagged for it. This was a deliberate deviation from the literal mock,
+made to finally use that schema column and because a checklist backed by
+actual tagged photos is more trustworthy for the eventual PDF report
+(page 3, "photographs 2-up with captions") than an honor-system checkbox.
+
+**Submit gates are client-side only** — the design wants the submit
+button disabled until ≥8 photos, all four sides tagged, ≥1 video, and
+all ten questions answered. That's implemented exactly as a UX gate in
+`AgentCaptureScreen.tsx`. Server-side (`submitJobWork`, `submitByToken`)
+still only requires at least one media item + all ten answers, unchanged
+from before — hard-enforcing the full gate server-side was deliberately
+left out to avoid silently bricking any legacy/edge-case job that
+predates these rules; happy to add it if wanted.
+
+**Jobs list** (`AgentJobsHome.tsx`, replacing `AgentJobList.tsx` at
+`/agent/dashboard`): the Open/Rework/Completed count strip, then cards
+for rework + open + submitted jobs (completed jobs are counted but not
+shown as cards, matching the design). SRO and pin come from the
+*property's* own `sro_name`/`sro_code`/`plot_gps_coordinate` (set at full
+registration or added later by a representative — see the customer app
+phase) rather than the agent's home SRO.
+
+**Deliberately not redesigned this phase**: `AgentSignupForm.tsx`,
+`AgentOnboardingForm.tsx` and `AgentProfileEditForm.tsx` keep their
+current visual style and, more importantly, their current required
+fields (full name, home address, SRO, agent photo, driving licence,
+second government ID — all mandatory before an agent's account leaves
+`pending`). The design's own signup mock is lighter (docs optional at
+signup, added later), but given an agent visits and photographs private
+property unsupervised, loosening that up is a product/compliance call
+this pass didn't make unilaterally — flag it if the lighter flow is
+actually wanted, the same way the customer registration flow's
+simplification was an explicit decision earlier in this redesign.
+
+Not done yet: admin console, the 4-page visit report PDF, and the agent
+signup/onboarding/profile visual redesign noted above.

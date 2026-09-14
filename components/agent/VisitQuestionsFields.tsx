@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
 
 // Renders the fixed 10-question set as fast-to-answer mobile inputs:
@@ -8,16 +8,35 @@ import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
 // for the two open-ended ones. Used identically by the authenticated
 // agent job page and the public magic-link page, so both submission
 // paths produce the same structured data for the customer's visit report.
-export function VisitQuestionsFields({ defaultValues }: { defaultValues?: Record<string, any> }) {
+//
+// Redesign 2026-09 — optional onChange reports every keystroke/tap so a
+// parent can drive the capture screen's "N of 10 answered" gate
+// (design_handoff_plot360_redesign, "Plot360 Agent.dc.html"); omitting it
+// leaves this component working exactly as before.
+export function VisitQuestionsFields({
+  defaultValues,
+  onChange,
+}: {
+  defaultValues?: Record<string, any>;
+  onChange?: (answers: Record<string, string>) => void;
+}) {
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const q of VISIT_QUESTIONS) {
       if (q.type === 'boolean' && defaultValues?.[q.key] !== null && defaultValues?.[q.key] !== undefined) {
         initial[q.key] = defaultValues[q.key] ? 'yes' : 'no';
       }
+      if (q.type === 'text' && defaultValues?.[q.key]) {
+        initial[q.key] = String(defaultValues[q.key]);
+      }
     }
     return initial;
   });
+
+  useEffect(() => {
+    onChange?.(answers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers]);
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -58,7 +77,8 @@ export function VisitQuestionsFields({ defaultValues }: { defaultValues?: Record
               name={q.key}
               required
               placeholder={q.placeholder}
-              defaultValue={defaultValues?.[q.key] ?? ''}
+              value={answers[q.key] ?? ''}
+              onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))}
             />
           )}
         </div>

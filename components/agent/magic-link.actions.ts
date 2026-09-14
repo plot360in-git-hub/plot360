@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { extractVisitAnswers } from '@/lib/visitReportQuestions';
+import { GPS_FLAG_THRESHOLD_METERS } from '@/lib/geo';
 
 const TOKEN_VALIDITY_DAYS = 7;
 
@@ -93,7 +94,7 @@ export async function getJobByToken(token: string) {
 
   const { data: property } = await check.admin
     .from('properties')
-    .select('id, property_name, plot_size, plot_size_unit, street_address, village_town, district, state, plot_gps_coordinate, google_map_lat, google_map_lng, near_by_landmark')
+    .select('id, property_name, plot_size, plot_size_unit, street_address, village_town, district, state, plot_gps_coordinate, google_map_lat, google_map_lng, near_by_landmark, sro_name, sro_code')
     .eq('id', check.job.property_id)
     .single();
 
@@ -121,6 +122,9 @@ export async function uploadMediaByToken(token: string, formData: FormData) {
   const files = formData.getAll('media') as File[];
   if (files.length === 0) return { error: 'No files selected.' };
 
+  const boundarySideRaw = String(formData.get('boundary_side') || '');
+  const boundarySide = (['N', 'E', 'S', 'W'] as const).includes(boundarySideRaw as any) ? boundarySideRaw : null;
+
   for (const file of files) {
     if (file.size === 0) continue;
     const path = `${check.job.id}/${Date.now()}-${file.name}`;
@@ -129,7 +133,7 @@ export async function uploadMediaByToken(token: string, formData: FormData) {
     const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'photo' : 'document';
     const { error: insertError } = await check.admin
       .from('monitoring_media')
-      .insert({ job_id: check.job.id, media_type: mediaType, file_path: path });
+      .insert({ job_id: check.job.id, media_type: mediaType, file_path: path, boundary_side: mediaType === 'photo' ? boundarySide : null });
     if (insertError) return { error: insertError.message };
   }
 
@@ -173,6 +177,9 @@ export async function submitByToken(token: string, formData: FormData) {
     .eq('job_id', check.job.id);
   if (!count || count === 0) return { error: 'Please upload at least one photo or video before submitting.' };
 
+  const gpsDistanceRaw = formData.get('gps_distance_meters');
+  const gpsDistanceMeters = gpsDistanceRaw !== null && gpsDistanceRaw !== '' ? Number(gpsDistanceRaw) : null;
+
   const { error } = await check.admin
     .from('monitoring_jobs')
     .update({
@@ -180,6 +187,8 @@ export async function submitByToken(token: string, formData: FormData) {
       observations,
       submitted_at: new Date().toISOString(),
       admin_feedback: null,
+      gps_distance_meters: gpsDistanceMeters,
+      flagged: gpsDistanceMeters !== null && gpsDistanceMeters > GPS_FLAG_THRESHOLD_METERS,
       ...answersResult.values,
     })
     .eq('id', check.job.id);
