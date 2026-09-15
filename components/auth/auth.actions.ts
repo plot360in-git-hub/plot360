@@ -8,10 +8,19 @@ import { sendNotificationEmail } from '@/lib/email';
 // Matches the Signup wireframe: username(email), password, re-enter password, captcha.
 // Supabase Auth owns the users table — we just create the row and let the
 // verification-email screen ("A verification email has been sent to...") do the rest.
+//
+// Redesign 2026-09 (follow-up) — also used by the new AuthScreen.tsx, whose
+// design mock has no "re-enter password" field and adds an optional phone
+// number instead. Both are handled here rather than forking a second
+// signUp: confirmPassword falls back to password when absent (so this
+// check is a no-op for the new screen, unchanged for the old SignupForm),
+// and phone is a new, optional, purely-additive parameter.
 export async function signUp(formData: FormData) {
   const email = String(formData.get('email'));
   const password = String(formData.get('password'));
-  const confirmPassword = String(formData.get('confirmPassword'));
+  const confirmPasswordRaw = formData.get('confirmPassword');
+  const confirmPassword = confirmPasswordRaw !== null ? String(confirmPasswordRaw) : password;
+  const phone = formData.get('phone');
   const captchaToken = formData.get('cf-turnstile-response') as string | null;
 
   const captchaCheck = await verifyTurnstileToken(captchaToken);
@@ -42,7 +51,38 @@ export async function signUp(formData: FormData) {
     return { error: 'An account with this email already exists.', alreadyExists: true };
   }
 
+  // Best-effort: the on_auth_user_created trigger already created a stub
+  // profiles row (supabase/schema.sql, handle_new_user) — this just fills
+  // in one column on it. Email/password signup with confirmation required
+  // has no active session yet, so a normal (RLS-scoped) client can't
+  // necessarily write this; the admin client is used since data.user.id
+  // came straight back from the signUp call above, not from client input.
+  // A failure here never blocks the signup that already succeeded.
+  if (phone && data.user) {
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      await createAdminClient().from('profiles').update({ phone_number: String(phone) }).eq('id', data.user.id);
+    } catch {
+      // SUPABASE_SERVICE_ROLE_KEY not set, or the update failed — the
+      // phone number can still be added later via onboarding/profile edit.
+    }
+  }
+
   return { success: true, email };
+}
+
+// New — the redesigned Confirm-email screen's "resend" action (the mock's
+// own "I've confirmed — continue" button can't be made real, see
+// ConfirmEmailScreen.tsx; this is its honest replacement).
+export async function resendConfirmationEmail(email: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+  });
+  if (error) return { error: error.message };
+  return { success: true };
 }
 
 // Matches the Home wireframe's login box: username, password, Login / Signup / forgot links.

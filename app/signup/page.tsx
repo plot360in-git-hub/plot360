@@ -1,5 +1,9 @@
-import { SignupForm } from '@/components/auth/SignupForm';
+import { AuthScreen } from '@/components/auth/AuthScreen';
 
+// Redesign 2026-09 (follow-up) — see app/login/page.tsx for context. Same
+// AuthScreen, opened on the Sign up tab; SignupForm.tsx is untouched and
+// still exists, just no longer wired to a route.
+//
 // Raises this route's serverless function timeout past Vercel Hobby's
 // 10-second default — signup now involves two sequential network calls
 // (Turnstile verification + Supabase signUp, which itself waits on the
@@ -8,9 +12,5 @@ import { SignupForm } from '@/components/auth/SignupForm';
 export const maxDuration = 30;
 
 export default function SignupPage() {
-  return (
-    <main className="container-narrow" style={{ paddingTop: 60 }}>
-      <SignupForm />
-    </main>
-  );
+  return <AuthScreen initialTab="signup" />;
 }

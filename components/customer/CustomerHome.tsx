@@ -33,6 +33,15 @@ function milestoneStage(property: PropertyRow, jobs: JobRow[], hasOpenRequest: b
 
 const MILESTONES = ['Registered', 'Verified', 'Visit set', 'Report'];
 
+// Redesign 2026-09 (follow-up) — design_handoff_plot360_redesign,
+// "Plot360 Customer.dc.html", "New user — empty" screen.
+const HOW_IT_WORKS = [
+  { n: '01', title: 'Name your property', body: 'One field. Location and size are optional.' },
+  { n: '02', title: 'Choose visits and pay', body: 'One visit, or four usable within a year.' },
+  { n: '03', title: 'A representative takes over', body: 'Documents and owner approval, over WhatsApp.' },
+  { n: '04', title: 'Report lands here', body: 'Photos, video and a downloadable PDF.' },
+];
+
 function visitChips(totalPurchased: number, jobs: JobRow[]): Array<'Done' | 'Set' | 'Unused'> {
   const count = Math.min(Math.max(totalPurchased, 0), 8);
   const chips: Array<'Done' | 'Set' | 'Unused'> = [];
@@ -132,7 +141,27 @@ export function CustomerHome({
         </div>
 
         {properties.length === 0 && (
-          <p style={{ fontSize: 14, color: 'var(--p-ink-soft)' }}>No properties yet — register your first one above.</p>
+          // Redesign 2026-09 (follow-up) — the design's own zero-properties
+          // screen ("New user — empty") is this "How it works" list, not
+          // just a one-line message; this was missed in the original
+          // customer app phase along with the auth screens (see
+          // components/auth/AuthScreen.tsx). Content matches the mock.
+          <div>
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)', marginBottom: 4 }}>
+              How it works
+            </p>
+            {HOW_IT_WORKS.map((h) => (
+              <div key={h.n} style={{ display: 'flex', gap: 14, padding: '14px 0', borderBottom: '1px solid var(--color-divider)' }}>
+                <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, color: 'var(--color-accent-700)', flex: 'none', paddingTop: 2 }}>
+                  {h.n}
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 14.5 }}>{h.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--p-ink-soft)', lineHeight: 1.45, marginTop: 3 }}>{h.body}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

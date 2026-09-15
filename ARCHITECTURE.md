@@ -571,3 +571,77 @@ same RLS (`monitoring_jobs_select_owner` / `_select_admin`) as everything
 else — a property owner sees their own reports, an admin can reach any
 of them, anyone else gets a 404 rather than a leak of whether the job
 exists.
+
+## 13. Redesign 2026-09 — customer auth screens (follow-up fix)
+
+**This was a real gap, not a new phase.** Section 9 above ("customer app
+phase") only ever covered registration, plans/payment, Home, visit
+history and scheduling — `/login` and `/signup` were quietly left
+rendering the old pre-redesign `LoginForm`/`SignupForm`, and that
+omission was never actually surfaced in this document's "not done yet"
+list the way every other deferred piece was. Plot caught this by
+screenshot (old grey login card vs. the design canvas) — this section
+covers the fix.
+
+Source: `design/Plot360 Customer.dc.html`, screens "Log in / sign up" and
+"Confirm email" (the "New user — empty" screen is covered separately
+below). New `components/auth/AuthScreen.tsx` renders both `/login` and
+`/signup` now (a `initialTab` prop just picks which tab starts active —
+the mock draws them as one screen with tabs, not two routes, so both
+routes now show the same component). `LoginForm.tsx`, `SignupForm.tsx`
+and `ForgotPasswordForm.tsx` are all kept completely untouched and still
+exist, just no longer wired to a route — same pattern as everywhere else
+in this redesign.
+
+**Deviations from the literal mock — all functionally forced, not style
+choices:**
+- **Google / Facebook / WhatsApp OTP buttons are drawn exactly as in the
+  mock but are inert** — no OAuth provider or WhatsApp OTP is configured
+  in this project (would need real client IDs/secrets from Plot). Clicking
+  one shows an inline "isn't connected yet" note rather than doing
+  nothing silently.
+- **The signup tab keeps the site's Cloudflare Turnstile captcha**,
+  which isn't in the mock at all — dropping it would remove the app's
+  only bot-signup protection (`turnstile.server.ts` fails closed if it's
+  missing). It sits right above the submit button.
+- **The Confirm-email screen's primary button is a real "Resend" action**,
+  not the mock's "I've confirmed — continue." That mock button just jumps
+  to the next mock screen on click with nothing behind it; faking that
+  for real would let someone into the app without ever actually
+  confirming their email. New `resendConfirmationEmail` action
+  (`components/auth/auth.actions.ts`) calls Supabase's real resend API.
+- **A "Forgot email / password?" link is added on the login tab** (to the
+  existing `/forgot-password` route) — not in the mock, but the app
+  already has this flow and dropping the entry point would strand it.
+- Signup's phone number field is new (the old `SignupForm` never asked
+  for one) — stored on the `profiles` stub row that
+  `handle_new_user`/`on_auth_user_created` already creates on signup,
+  via `createAdminClient()` (email/password signup has no active session
+  yet to write through normal RLS). Best-effort only: if
+  `SUPABASE_SERVICE_ROLE_KEY` isn't set, the phone number is silently
+  skipped rather than failing the signup — it can still be filled in
+  later via onboarding/profile edit.
+- `signUp()` (`auth.actions.ts`) now treats `confirmPassword` as optional
+  (defaults to mirroring `password`) rather than required — the new
+  screen has no separate "re-enter password" field, matching the mock.
+  The old `SignupForm`, which still sends `confirmPassword`, is
+  unaffected.
+- One copy change: the mock's login-tab note text ("Social sign-in needs
+  no confirmation link — we read your email and ask for a phone number
+  once") reads like leftover signup copy in a real login context, so it
+  was swapped for a plain "switch to Sign up" nudge instead. Flagging
+  this since it's the one place text was changed rather than just
+  behavior.
+
+**"New user — empty" screen**: rather than a whole separate route, its
+content (the "How it works" 4-step list) was added directly into
+`CustomerHome.tsx`'s existing zero-properties branch, replacing the
+one-line "No properties yet" placeholder text from the customer-app
+phase — same screen, same data, just reached by state (no properties)
+instead of a fixed route, since that's how the rest of `CustomerHome`
+already works.
+
+Not re-verified end-to-end against a live Supabase project (no working
+`next build`/`npm run dev` in this sandbox — see the standing
+build-verification note); please run through both tabs, a real signup,
+and the resend button locally before trusting this in production.
