@@ -768,3 +768,66 @@ Two deviations from the literal mock:
   `/service-requests/[id]` URL (e.g. from its reply-notification email),
   just not listed on this screen anymore — flagging this narrowing in
   case Plot wants closed requests visible somewhere on this screen too.
+
+## 16. Redesign 2026-09 (round 2) — dashboard header removed, "Schedule a
+##     visit" toggle bug fixed
+
+Plot's report: *"after login the page stillshow top cutsomer header and
+theer is no schdule visit option"*. Two separate real bugs, both in code
+introduced by the round-1 fix batch (section 14).
+
+**"Schedule a visit" could disappear entirely.** `CustomerHome.tsx`'s
+poster CTA used to be a single conditional slot: `schedulableProperty ?
+"Schedule a visit" : "Register a property"` — it could only ever show
+one, never both. An account with properties but none currently
+schedulable (all still pending verification, rejected, or with visit
+credits already used up) fell into neither branch's happy path — it got
+"Register a property" instead of any way to schedule, book, or even see
+its existing property. The mock (`design/Plot360 Customer.dc.html`,
+"home" screen) never had a toggle here at all: it always draws a
+full-width "Register a property →" button inside the red poster, and,
+as a *separate* element below the poster, an always-visible three-way
+"Schedule a visit | WhatsApp us | Call" toolbar row. Rebuilt
+`CustomerHome.tsx`'s poster/CTA section to match that structure exactly
+— both are now unconditional. "Schedule a visit" resolves to a real
+target in every case: the ready-to-book property's `/schedule` page when
+`schedulableProperty` exists, otherwise the customer's first property's
+own page (to see status or buy more credits) if they have any property
+at all, otherwise `/properties/new`. While rebuilding this section the
+rest of the poster (wordmark/identity row, 56px credit number, divider,
+description copy) was also brought in line with the mock's literal
+markup, which round 1 had only loosely approximated.
+
+**Persistent header still showing on `/dashboard`.** Round 1
+(`CustomerHeader.tsx`, section 14) reskinned the old header rather than
+removing it, reasoning the mock is phone-only and specifies no
+desktop-web navigation to literally match. Plot's screenshot made clear
+that reasoning doesn't hold — the mock's home screen has *zero*
+persistent chrome above the red poster, full stop, reskinned or not.
+`app/dashboard/layout.tsx` no longer renders `CustomerHeader`; the
+poster's own top row (PLOT360 wordmark + identity) is now the first
+thing on the page, matching the mock.
+
+This is scoped to `/dashboard` only — the other 5 layouts
+(`app/properties`, `app/onboarding`, `app/profile`, `app/tasks`,
+`app/service-requests`) still render `CustomerHeader`. `/properties`
+covers several sub-routes (`[id]/edit`, `/plan`, `/schedule`, `/renew`,
+`/subscribe`, `/documents`, `/ownership`, `/visit-report/[jobId]`) that
+predate this redesign and have no back button or navigation of their
+own yet — pulling the header out from under them would stand up a new,
+worse bug (nowhere to go at all) while fixing this one. `/onboarding`,
+`/profile` and `/tasks` are in the same boat. `/service-requests`'s two
+routes already have their own back-to-dashboard button
+(`ServiceRequestScreen.tsx`) and could safely lose the header too, but
+were left alone to keep this change to exactly what Plot reported;
+flagging it as a good candidate for the next pass.
+
+**Log out had no home once the header was gone.** The mock draws no
+account actions anywhere on this screen — Plot360 as a phone app
+presumably handles that at the OS/app-chrome level, which a browser tab
+doesn't have. Added a small "Log out" text control next to the identity
+text in the poster's top row (same small-caps styling), plus made the
+identity text itself a link to `/profile/edit`. Both are deviations from
+the literal mock, flagged as such — the alternative was leaving the
+customer with no way to sign out of the app at all once
+`CustomerHeader.tsx` stopped covering `/dashboard`.
