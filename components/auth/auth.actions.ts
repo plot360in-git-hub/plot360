@@ -98,6 +98,46 @@ export async function logIn(formData: FormData) {
   redirect('/dashboard');
 }
 
+// Redesign 2026-09 (follow-up) — WhatsApp OTP for real, backing
+// AuthScreen.tsx's "Continue with WhatsApp OTP" button. Two steps because
+// Supabase's phone auth is two calls: send, then verify.
+//
+// REQUIRES SETUP Plot has to do outside this code before either of these
+// will work: Auth → Providers → Phone in the Supabase dashboard, with
+// Twilio (or Twilio Verify) as the SMS provider and its "Message Channel"
+// set to WhatsApp — WhatsApp delivery is only supported through those two
+// providers. See the reply in chat for the exact steps and a note on the
+// free Twilio WhatsApp sandbox for testing before going live.
+export async function sendPhoneOtp(phone: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    phone,
+    options: { channel: 'whatsapp' },
+  });
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function verifyPhoneOtp(phone: string, token: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
+  if (error) return { error: error.message };
+  if (!data.user) return { error: 'Verification failed — please try again.' };
+
+  await redirectAfterAuth(supabase, data.user.id);
+}
+
+// Google/Facebook (AuthScreen.tsx) and now WhatsApp OTP can all be either
+// a first-ever sign-in (needs KYC onboarding) or a returning user's login
+// (already onboarded) — unlike email/password, where /auth/callback only
+// ever sees a brand-new, just-confirmed signup. This is the shared
+// decision: has the stub profiles row (handle_new_user) actually been
+// filled in yet?
+async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data: profile } = await supabase.from('profiles').select('first_name').eq('id', userId).maybeSingle();
+  redirect(profile?.first_name ? '/dashboard' : '/onboarding');
+}
+
 export async function forgotPassword(formData: FormData) {
   const email = String(formData.get('email'));
   const supabase = await createClient();

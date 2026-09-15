@@ -595,11 +595,19 @@ in this redesign.
 
 **Deviations from the literal mock — all functionally forced, not style
 choices:**
-- **Google / Facebook / WhatsApp OTP buttons are drawn exactly as in the
-  mock but are inert** — no OAuth provider or WhatsApp OTP is configured
-  in this project (would need real client IDs/secrets from Plot). Clicking
-  one shows an inline "isn't connected yet" note rather than doing
-  nothing silently.
+- **Google / Facebook / WhatsApp OTP are now wired to real Supabase auth**
+  (follow-up to the follow-up — see below): `signInWithOAuth` for Google/
+  Facebook, and a small phone → code sub-flow calling new
+  `sendPhoneOtp`/`verifyPhoneOtp` actions for WhatsApp. None of the three
+  will actually succeed until Plot finishes the corresponding provider
+  setup in the Supabase dashboard (a Google Cloud OAuth app, a Facebook
+  OAuth app, and a Twilio account with WhatsApp enabled for phone auth) —
+  until then they surface Supabase's real "provider not enabled"/
+  equivalent error rather than pretending to work. `/auth/callback`
+  (`app/auth/callback/page.tsx`) now checks whether the user's `profiles`
+  row is already filled in before deciding `/dashboard` vs `/onboarding`,
+  since OAuth/OTP logins (unlike email/password) route every login
+  through that same page, not just the first one.
 - **The signup tab keeps the site's Cloudflare Turnstile captcha**,
   which isn't in the mock at all — dropping it would remove the app's
   only bot-signup protection (`turnstile.server.ts` fails closed if it's

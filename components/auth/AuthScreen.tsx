@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { logIn, signUp } from './auth.actions';
+import { logIn, signUp, sendPhoneOtp, verifyPhoneOtp } from './auth.actions';
+import { createClient } from '@/lib/supabase/client';
 import { TurnstileWidget } from './TurnstileWidget';
 import { ConfirmEmailScreen } from './ConfirmEmailScreen';
 
@@ -20,9 +21,15 @@ type Tab = 'login' | 'signup';
 //
 // Deviations from the literal mock, all functionally necessary rather than
 // cosmetic choices:
-//  - Google / Facebook / WhatsApp OTP are drawn exactly as in the mock but
-//    are NOT wired to a real provider (none is configured in this project)
-//    — clicking one shows an inline note instead of silently doing nothing.
+//  - Google / Facebook call real Supabase OAuth (signInWithOAuth); WhatsApp
+//    OTP calls real Supabase phone auth (sendPhoneOtp/verifyPhoneOtp in
+//    auth.actions.ts) via a small inline phone → code sub-flow the mock
+//    doesn't show (the mock draws WhatsApp OTP as a single button with no
+//    room for a code-entry step). All three only actually work once Plot
+//    finishes the provider setup in the Supabase dashboard (Google/
+//    Facebook OAuth apps, Twilio WhatsApp for phone auth) — until then
+//    they'll surface Supabase's real "provider not enabled" error, which
+//    is more honest than pretending to work.
 //  - The signup tab includes the site's Cloudflare Turnstile captcha,
 //    which isn't in the mock at all. Removing it would remove the app's
 //    only bot-signup protection, so it stays, just visually squeezed in.
@@ -35,9 +42,51 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null);
-  const [inertNote, setInertNote] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  const [waStep, setWaStep] = useState<'closed' | 'phone' | 'code'>('closed');
+  const [waPhone, setWaPhone] = useState('');
+  const [waCode, setWaCode] = useState('');
+  const [waSentTo, setWaSentTo] = useState<string | null>(null);
+  const [waError, setWaError] = useState<string | null>(null);
+  const [waPending, startWaTransition] = useTransition();
 
   const isSignup = tab === 'signup';
+
+  async function handleOAuth(provider: 'google' | 'facebook') {
+    setOauthError(null);
+    const supabase = createClient();
+    const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    // On success this navigates the browser away to the provider's consent
+    // screen, so there's nothing else to do here — only the failure case
+    // (e.g. provider not yet enabled in Supabase) returns to this code.
+    if (oauthErr) setOauthError(oauthErr.message);
+  }
+
+  function sendWaCode() {
+    setWaError(null);
+    startWaTransition(async () => {
+      const result = await sendPhoneOtp(waPhone.trim());
+      if (result?.error) setWaError(result.error);
+      else {
+        setWaSentTo(waPhone.trim());
+        setWaStep('code');
+      }
+    });
+  }
+
+  function verifyWaCode() {
+    setWaError(null);
+    startWaTransition(async () => {
+      const result = await verifyPhoneOtp(waSentTo ?? waPhone.trim(), waCode.trim());
+      // On success verifyPhoneOtp redirects server-side — only the failure
+      // case returns a value here.
+      if (result?.error) setWaError(result.error);
+    });
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -131,7 +180,7 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
               type="button"
               className="btn btn-secondary"
               style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
-              onClick={() => setInertNote("Google sign-in isn't connected yet — use email and password below.")}
+              onClick={() => handleOAuth('google')}
             >
               Continue with Google
             </button>
@@ -139,7 +188,7 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
               type="button"
               className="btn btn-secondary"
               style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
-              onClick={() => setInertNote("Facebook sign-in isn't connected yet — use email and password below.")}
+              onClick={() => handleOAuth('facebook')}
             >
               Continue with Facebook
             </button>
@@ -147,12 +196,73 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
               type="button"
               className="btn btn-secondary"
               style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
-              onClick={() => setInertNote("WhatsApp OTP sign-in isn't connected yet — use email and password below.")}
+              onClick={() => {
+                setWaError(null);
+                setWaStep(waStep === 'closed' ? 'phone' : 'closed');
+              }}
             >
               Continue with WhatsApp OTP
             </button>
           </div>
-          {inertNote && <p style={{ fontSize: 12, color: 'var(--p-alert)', marginTop: 10 }}>{inertNote}</p>}
+          {oauthError && <p style={{ fontSize: 12, color: 'var(--p-alert)', marginTop: 10 }}>{oauthError}</p>}
+
+          {waStep !== 'closed' && (
+            <div style={{ border: '1px solid var(--color-divider)', padding: 14, marginTop: 10 }}>
+              {waStep === 'phone' && (
+                <>
+                  <div className="field" style={{ marginBottom: 10 }}>
+                    <label htmlFor="waPhone">WhatsApp number</label>
+                    <input
+                      className="input"
+                      id="waPhone"
+                      type="tel"
+                      placeholder="+91 98480 00000"
+                      value={waPhone}
+                      onChange={(e) => setWaPhone(e.target.value)}
+                    />
+                  </div>
+                  {waError && <p style={{ color: 'var(--p-alert)', fontSize: 12.5, marginBottom: 8 }}>{waError}</p>}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ minHeight: 40, fontSize: 13 }}
+                    disabled={waPending || !waPhone.trim()}
+                    onClick={sendWaCode}
+                  >
+                    {waPending ? 'Sending…' : 'Send code on WhatsApp'}
+                  </button>
+                </>
+              )}
+              {waStep === 'code' && (
+                <>
+                  <p style={{ fontSize: 12.5, marginBottom: 10 }}>
+                    Code sent to <strong>{waSentTo}</strong> on WhatsApp.
+                  </p>
+                  <div className="field" style={{ marginBottom: 10 }}>
+                    <label htmlFor="waCode">6-digit code</label>
+                    <input
+                      className="input"
+                      id="waCode"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={waCode}
+                      onChange={(e) => setWaCode(e.target.value)}
+                    />
+                  </div>
+                  {waError && <p style={{ color: 'var(--p-alert)', fontSize: 12.5, marginBottom: 8 }}>{waError}</p>}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ minHeight: 40, fontSize: 13 }}
+                    disabled={waPending || waCode.trim().length < 6}
+                    onClick={verifyWaCode}
+                  >
+                    {waPending ? 'Verifying…' : 'Verify and continue'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--color-divider)' }} />
