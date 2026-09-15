@@ -883,3 +883,53 @@ building the confirmation state) and the UPI variant picked up
 `visitQuantity` and `expiresAt` (needed for its "Visit credits" row) —
 both were already being returned by `purchaseVisitCredits`, just not
 carried through into the confirmation screen's props before.
+
+## 18. Redesign 2026-09 (round 4) — header removed from every /properties
+##     route; Schedule a visit and Choose a plan get their own back buttons
+
+Plot's screenshots showed the old `PLOT360 | Dashboard | Add Property |
+Service Requests ...` header still on top of `/properties/[id]/schedule`
+— round 2 (section 16) only removed `CustomerHeader` from `/dashboard`,
+deliberately leaving it on the other five layouts because several
+`/properties` sub-routes had no back button of their own and would have
+been stranded. `ScheduleVisit.tsx` was actually one of the *redesigned*
+screens, just one that had never been given its own back button — an
+oversight, not a case that needed the legacy header kept around.
+
+Fixed properly this time: `app/properties/layout.tsx` no longer renders
+`CustomerHeader` at all (same as `/dashboard`). The screens that were
+missing their own navigation picked up what they needed instead of
+losing it:
+- `ScheduleVisit.tsx` and `ChoosePlanAndPay.tsx` — both `.p360`-styled,
+  both already following this redesign's "back arrow + title" header
+  pattern everywhere else (`RegisterQuick.tsx`, `PropertyVisitHistory.tsx`,
+  `ServiceRequestScreen.tsx`) except here — now have that same header
+  (`design/Plot360 Customer.dc.html`, "sched" and "reg2" screens: "←
+  Schedule a site visit" / "← Choose a plan"), rather than falling back
+  to the legacy `CustomerHeader`.
+- The seven still-pre-redesign sub-pages that genuinely have no
+  navigation of their own — `[id]/edit`, `/plan`'s payment settings
+  lookup doesn't count (that one's `ChoosePlanAndPay`, now fixed above),
+  `/renew`, `/subscribe`, `/documents`, `/ownership`,
+  `/visit-report/[jobId]` — now import and render `CustomerHeader`
+  directly themselves instead of inheriting it from the layout. Same
+  header, same behavior, just declared at the page level so it doesn't
+  leak onto the redesigned screens sharing that layout.
+
+`/properties/new` (`RegisterQuick.tsx`) and `/properties/[id]`
+(`PropertyVisitHistory.tsx`) already had their own back buttons and
+needed no change — they simply stopped getting a second, redundant
+header from the layout.
+
+Net effect: no `/properties/*` route shows a persistent header anymore
+unless the page itself asks for one, matching how `/dashboard` already
+works and how the mock is built (every screen owns its own navigation,
+nothing is layout-level chrome). `/onboarding`, `/profile` and `/tasks`
+are still untouched (still pre-redesign, still get `CustomerHeader` from
+their own layouts) — not part of what Plot reported this round.
+
+The "done" screen after confirming a scheduled visit already goes to
+`/dashboard` via its "Back to my properties" button — see section 17.
+That was fixed in the previous round; Plot's screenshot describing a
+"Back to home" button with a separate "Open WhatsApp" button was from
+testing before that fix landed.

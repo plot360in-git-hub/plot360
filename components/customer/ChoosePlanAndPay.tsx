@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { purchaseVisitCredits } from '@/components/payments/visitCredits.actions';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
 
@@ -89,18 +90,39 @@ export function ChoosePlanAndPay({
 
   if (confirmation) return <ConfirmationScreen variant={confirmation} maskedPhone={maskedPhone} />;
 
+  // Redesign 2026-09 (follow-up, round 4) — same fix as ScheduleVisit.tsx:
+  // this screen had no back button of its own either, so it was quietly
+  // relying on the now-removed app/properties/layout.tsx header. Mock's
+  // "reg2" screen (Choose visits / pay) has this same back-button row.
+  const backHeader = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '2px solid var(--color-divider)' }}>
+      <Link
+        href="/dashboard"
+        className="btn btn-secondary"
+        style={{ minWidth: 36, minHeight: 36, fontSize: 16, padding: 0, justifyContent: 'center' }}
+        aria-label="Back to dashboard"
+      >
+        ←
+      </Link>
+      <h1 style={{ fontSize: 17 }}>Choose a plan</h1>
+    </div>
+  );
+
   if (plans.length === 0) {
     return (
-      <div className="p360" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <p style={{ maxWidth: 380, textAlign: 'center', fontSize: 14.5 }}>
-          No visit plans are available to purchase right now — please check back shortly, or contact support.
-        </p>
+      <div className="p360" style={{ minHeight: '80vh' }}>
+        {backHeader}
+        <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <p style={{ maxWidth: 380, textAlign: 'center', fontSize: 14.5 }}>
+            No visit plans are available to purchase right now — please check back shortly, or contact support.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p360" style={{ minHeight: '70vh', padding: '32px 20px 60px', position: 'relative' }}>
+    <div className="p360" style={{ minHeight: '100vh', position: 'relative' }}>
       {opening && (
         <div
           style={{
@@ -119,8 +141,9 @@ export function ChoosePlanAndPay({
         </div>
       )}
 
-      <div style={{ maxWidth: 480, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 26, marginBottom: 6 }}>Choose a plan</h1>
+      {backHeader}
+
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 20px 60px' }}>
         <p style={{ fontSize: 14, color: 'var(--p-ink-soft)', marginBottom: 24 }}>
           For <strong>{propertyName}</strong> — visit credits are usable within 1 year of purchase.
         </p>

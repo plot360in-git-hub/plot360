@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { requestVisit } from '@/components/payments/visitCredits.actions';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
 import { isSelectable, endDate, toDateOnly, formatWindow } from '@/lib/scheduling';
@@ -78,12 +79,38 @@ export function ScheduleVisit({
   // ConfirmationScreen's own '/dashboard' default, matching that.
   if (confirmation) return <ConfirmationScreen variant={confirmation} maskedPhone={maskedPhone} />;
 
+  // Redesign 2026-09 (follow-up, round 4) — Plot flagged the old
+  // CustomerHeader still showing on this screen. It never had a back
+  // button of its own, unlike RegisterQuick.tsx/PropertyVisitHistory.tsx/
+  // ServiceRequestScreen.tsx, so it was quietly relying on
+  // app/properties/layout.tsx's header for navigation. Added the same
+  // back-button row those already use (design_handoff_plot360_redesign,
+  // "Plot360 Customer.dc.html", "sched" screen: "← Schedule a site
+  // visit"), and app/properties/layout.tsx no longer renders a header at
+  // all — see that file.
+  const backHeader = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '2px solid var(--color-divider)' }}>
+      <Link
+        href="/dashboard"
+        className="btn btn-secondary"
+        style={{ minWidth: 36, minHeight: 36, fontSize: 16, padding: 0, justifyContent: 'center' }}
+        aria-label="Back to dashboard"
+      >
+        ←
+      </Link>
+      <h1 style={{ fontSize: 17 }}>Schedule a site visit</h1>
+    </div>
+  );
+
   if (!eligible) {
     return (
-      <div className="p360" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 380, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 22, marginBottom: 10 }}>Not ready to schedule yet</h1>
-          <p style={{ fontSize: 14, color: 'var(--p-ink-soft)' }}>{reason ?? 'This property is not eligible for scheduling yet.'}</p>
+      <div className="p360" style={{ minHeight: '80vh' }}>
+        {backHeader}
+        <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ maxWidth: 380, textAlign: 'center' }}>
+            <h2 style={{ fontSize: 22, marginBottom: 10 }}>Not ready to schedule yet</h2>
+            <p style={{ fontSize: 14, color: 'var(--p-ink-soft)' }}>{reason ?? 'This property is not eligible for scheduling yet.'}</p>
+          </div>
         </div>
       </div>
     );
@@ -91,24 +118,27 @@ export function ScheduleVisit({
 
   if (!hasCredits) {
     return (
-      <div className="p360" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 380, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 22, marginBottom: 10 }}>No visit credits left</h1>
-          <p style={{ fontSize: 14, color: 'var(--p-ink-soft)', marginBottom: 20 }}>
-            Buy more visit credits on {propertyName} to schedule your next visit.
-          </p>
-          <a href={`/properties/${propertyId}/plan`} className="btn btn-primary">
-            Buy visit credits
-          </a>
+      <div className="p360" style={{ minHeight: '80vh' }}>
+        {backHeader}
+        <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ maxWidth: 380, textAlign: 'center' }}>
+            <h2 style={{ fontSize: 22, marginBottom: 10 }}>No visit credits left</h2>
+            <p style={{ fontSize: 14, color: 'var(--p-ink-soft)', marginBottom: 20 }}>
+              Buy more visit credits on {propertyName} to schedule your next visit.
+            </p>
+            <a href={`/properties/${propertyId}/plan`} className="btn btn-primary">
+              Buy visit credits
+            </a>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p360" style={{ minHeight: '70vh', padding: '32px 20px 60px' }}>
-      <div style={{ maxWidth: 520, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 26, marginBottom: 6 }}>Schedule a visit</h1>
+    <div className="p360" style={{ minHeight: '100vh' }}>
+      {backHeader}
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '24px 20px 60px' }}>
         <p style={{ fontSize: 14, color: 'var(--p-ink-soft)', marginBottom: 24 }}>
           For <strong>{propertyName}</strong> — {creditsRemaining} visit credit{creditsRemaining === 1 ? '' : 's'} available.
         </p>

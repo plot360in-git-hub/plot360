@@ -1,20 +1,31 @@
 import { getVisitReportData } from '@/components/properties/monitoring/monitoring.actions';
 import { PrintReportButton } from '@/components/properties/monitoring/PrintReportButton';
 import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
+import { CustomerHeader } from '@/components/layout/CustomerHeader';
 
 const MEDIA_VISIBLE_STATUSES = ['approved', 'ec_pending'];
 
+// Redesign 2026-09 (follow-up, round 4) — see properties/[id]/edit/
+// page.tsx: this pre-redesign, print-formatted report page has no back
+// button of its own (its own masthead is a printable letterhead, not
+// site navigation), so it renders CustomerHeader directly now that
+// app/properties/layout.tsx doesn't. Already excluded from the printed
+// version by the existing `nav, header { display: none }` print rule
+// below.
 export default async function VisitReportPage({ params }: { params: Promise<{ id: string; jobId: string }> }) {
   const { jobId } = await params;
   const data = await getVisitReportData(jobId);
 
   if (!data || !MEDIA_VISIBLE_STATUSES.includes(data.job.status)) {
     return (
-      <main className="container-narrow" style={{ paddingTop: 60 }}>
-        <div className="card" style={{ maxWidth: 420, margin: '0 auto', textAlign: 'center' }}>
-          <p>This visit report isn't available yet.</p>
-        </div>
-      </main>
+      <>
+        <CustomerHeader />
+        <main className="container-narrow" style={{ paddingTop: 60 }}>
+          <div className="card" style={{ maxWidth: 420, margin: '0 auto', textAlign: 'center' }}>
+            <p>This visit report isn't available yet.</p>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -28,7 +39,9 @@ export default async function VisitReportPage({ params }: { params: Promise<{ id
   const generatedDate = new Date().toISOString().slice(0, 10);
 
   return (
-    <main style={{ background: 'var(--color-bg-alt)', paddingTop: 40, paddingBottom: 60 }}>
+    <>
+      <CustomerHeader />
+      <main style={{ background: 'var(--color-bg-alt)', paddingTop: 40, paddingBottom: 60 }}>
       <style>{`
         @media print {
           nav, header, .no-print { display: none !important; }
@@ -138,6 +151,7 @@ export default async function VisitReportPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

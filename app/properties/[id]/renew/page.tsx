@@ -2,7 +2,12 @@ import { createClient } from '@/lib/supabase/server';
 import { RequestRenewalForm } from '@/components/properties/renewal/RequestRenewalForm';
 import { getPendingRenewalForProperty } from '@/components/properties/renewal/renewal.actions';
 import { maxVisitsForPlan } from '@/lib/subscription';
+import { CustomerHeader } from '@/components/layout/CustomerHeader';
 
+// Redesign 2026-09 (follow-up, round 4) — see properties/[id]/edit/
+// page.tsx: this pre-redesign renewal form has no back button of its
+// own, so it renders CustomerHeader directly now that app/properties/
+// layout.tsx doesn't.
 export default async function RenewPropertyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -11,25 +16,38 @@ export default async function RenewPropertyPage({ params }: { params: Promise<{ 
     getPendingRenewalForProperty(id),
   ]);
 
-  if (!property) return <p className="container-narrow">Property not found.</p>;
+  if (!property) {
+    return (
+      <>
+        <CustomerHeader />
+        <p className="container-narrow">Property not found.</p>
+      </>
+    );
+  }
 
   if (property.status !== 'verified') {
     return (
-      <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-        <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-          <p>Only verified properties can be renewed. This one is currently {property.status}.</p>
-        </div>
-      </main>
+      <>
+        <CustomerHeader />
+        <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
+          <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+            <p>Only verified properties can be renewed. This one is currently {property.status}.</p>
+          </div>
+        </main>
+      </>
     );
   }
 
   if (!property.expiration_date) {
     return (
-      <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-        <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-          <p>This property doesn't have an active payment period yet — check the Payment section on the property page.</p>
-        </div>
-      </main>
+      <>
+        <CustomerHeader />
+        <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
+          <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+            <p>This property doesn't have an active payment period yet — check the Payment section on the property page.</p>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -59,27 +77,33 @@ export default async function RenewPropertyPage({ params }: { params: Promise<{ 
 
   if (visitsCompleted < requiredVisits || daysUntilExpiry > 15) {
     return (
-      <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-        <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-          <p>
-            Renewal isn't available yet. It unlocks once your plan's required site verification
-            {requiredVisits > 1 ? 's are' : ' is'} complete ({visitsCompleted}/{requiredVisits} done) and your
-            listing is within 15 days of expiring
-            {daysUntilExpiry > 15 ? ` (currently ${daysUntilExpiry} days away)` : ''}.
-          </p>
-        </div>
-      </main>
+      <>
+        <CustomerHeader />
+        <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
+          <div className="card" style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+            <p>
+              Renewal isn't available yet. It unlocks once your plan's required site verification
+              {requiredVisits > 1 ? 's are' : ' is'} complete ({visitsCompleted}/{requiredVisits} done) and your
+              listing is within 15 days of expiring
+              {daysUntilExpiry > 15 ? ` (currently ${daysUntilExpiry} days away)` : ''}.
+            </p>
+          </div>
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-      <RequestRenewalForm
-        propertyId={id}
-        propertyName={property.property_name}
-        currentExpiration={property.expiration_date}
-        alreadyPending={!!pending}
-      />
-    </main>
+    <>
+      <CustomerHeader />
+      <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
+        <RequestRenewalForm
+          propertyId={id}
+          propertyName={property.property_name}
+          currentExpiration={property.expiration_date}
+          alreadyPending={!!pending}
+        />
+      </main>
+    </>
   );
 }
