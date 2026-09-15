@@ -431,8 +431,10 @@ export async function decideMonitoringJob(
     await supabase.from('monitoring_upload_tokens').delete().eq('job_id', jobId);
   }
 
-  revalidatePath('/admin/monitoring');
-  revalidatePath(`/properties/${propertyId}`);
+  // Deliberately NOT calling revalidatePath here — that would immediately
+  // refresh the page and yank away the WhatsApp confirmation panel before
+  // the admin can click it. The monitoring list refreshes naturally once
+  // they navigate there via the "Back to monitoring" button instead.
   return { success: true, ecPending: effectiveDecision === 'ec_pending' };
 }
 

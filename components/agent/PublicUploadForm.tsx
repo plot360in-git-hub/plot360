@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { uploadMediaByToken, deleteMediaByToken, submitByToken } from './magic-link.actions';
 import { VisitQuestionsFields } from './VisitQuestionsFields';
+import { findOversizedImages, formatFileSize } from '@/lib/fileValidation';
 
 export function PublicUploadForm({
   token,
@@ -33,6 +34,16 @@ export function PublicUploadForm({
 
   function handleUpload(formData: FormData) {
     setUploadError(null);
+    const files = formData.getAll('media') as File[];
+    const oversized = findOversizedImages(files);
+    if (oversized.length > 0) {
+      setUploadError(
+        `${oversized.length > 1 ? 'These photos are' : 'This photo is'} too large (max 50MB each): ${oversized
+          .map((f) => `${f.name} (${formatFileSize(f.size)})`)
+          .join(', ')}`
+      );
+      return;
+    }
     startUpload(async () => {
       const result = await uploadMediaByToken(token, formData);
       if (result?.error) setUploadError(result.error);
