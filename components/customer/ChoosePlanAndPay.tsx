@@ -36,12 +36,14 @@ export function ChoosePlanAndPay({
   plans,
   paymentSettings,
   qrUrl,
+  maskedPhone,
 }: {
   propertyId: string;
   propertyName: string;
   plans: Plan[];
   paymentSettings: PaymentSettings;
   qrUrl: string | null;
+  maskedPhone?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(plans[0]?.id ?? null);
@@ -63,7 +65,16 @@ export function ChoosePlanAndPay({
         startTransition(async () => {
           const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi');
           if ('error' in result) setError(result.error);
-          else setConfirmation({ kind: 'reg-upi', propertyName: result.propertyName, amount: result.amount, planName: result.planName });
+          else
+            setConfirmation({
+              kind: 'reg-upi',
+              propertyName: result.propertyName,
+              amount: result.amount,
+              planName: result.planName,
+              visitQuantity: result.visitQuantity,
+              reference: result.reference,
+              expiresAt: result.expiresAt,
+            });
         });
       }, 1400);
       return;
@@ -72,11 +83,11 @@ export function ChoosePlanAndPay({
     startTransition(async () => {
       const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank');
       if ('error' in result) setError(result.error);
-      else setConfirmation({ kind: 'reg-bank', propertyName: result.propertyName, amount: result.amount });
+      else setConfirmation({ kind: 'reg-bank', propertyName: result.propertyName, amount: result.amount, planName: result.planName });
     });
   }
 
-  if (confirmation) return <ConfirmationScreen variant={confirmation} />;
+  if (confirmation) return <ConfirmationScreen variant={confirmation} maskedPhone={maskedPhone} />;
 
   if (plans.length === 0) {
     return (

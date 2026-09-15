@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getVisitCreditsForProperty, getOpenVisitRequestCounts } from '@/components/payments/visitCredits.actions';
 import { remainingAfterReservations, nearestExpiry, canScheduleVisit } from '@/lib/visitCredits';
+import { maskPhone } from '@/components/customer/home.data';
 import { ScheduleVisit } from '@/components/customer/ScheduleVisit';
 
 export default async function SchedulePage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +19,11 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
     .single();
   if (!property || property.owner_id !== userData.user.id) redirect('/dashboard');
 
-  const [credits, reservedCounts] = await Promise.all([getVisitCreditsForProperty(id), getOpenVisitRequestCounts([id])]);
+  const [credits, reservedCounts, { data: profile }] = await Promise.all([
+    getVisitCreditsForProperty(id),
+    getOpenVisitRequestCounts([id]),
+    supabase.from('profiles').select('phone_number').eq('id', userData.user.id).maybeSingle(),
+  ]);
   const reserved = reservedCounts[id] ?? 0;
   const gate = canScheduleVisit(property.status, credits);
   const remaining = remainingAfterReservations(credits, reserved);
@@ -34,6 +39,7 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
         reason={gate.reason}
         creditsRemaining={remaining}
         expiresAt={expiry ? expiry.toISOString().slice(0, 10) : null}
+        maskedPhone={maskPhone(profile?.phone_number)}
       />
     </main>
   );

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveVisitPlans } from '@/components/payments/visitCredits.actions';
 import { getPaymentSettings, getPaymentQrUrl } from '@/components/payments/plans.actions';
+import { maskPhone } from '@/components/customer/home.data';
 import { ChoosePlanAndPay } from '@/components/customer/ChoosePlanAndPay';
 
 // Redesign 2026-09 — Register Step 2 (design_handoff_plot360_redesign,
@@ -22,7 +23,11 @@ export default async function ChoosePlanPage({ params }: { params: Promise<{ id:
     .single();
   if (!property || property.owner_id !== userData.user.id) redirect('/dashboard');
 
-  const [plans, paymentSettings] = await Promise.all([getActiveVisitPlans(), getPaymentSettings()]);
+  const [plans, paymentSettings, { data: profile }] = await Promise.all([
+    getActiveVisitPlans(),
+    getPaymentSettings(),
+    supabase.from('profiles').select('phone_number').eq('id', userData.user.id).maybeSingle(),
+  ]);
   const qrUrl = paymentSettings?.qr_code_image_path ? await getPaymentQrUrl(paymentSettings.qr_code_image_path) : null;
 
   return (
@@ -33,6 +38,7 @@ export default async function ChoosePlanPage({ params }: { params: Promise<{ id:
         plans={plans as any}
         paymentSettings={paymentSettings as any}
         qrUrl={qrUrl}
+        maskedPhone={maskPhone(profile?.phone_number)}
       />
     </main>
   );

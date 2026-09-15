@@ -21,6 +21,7 @@ export function ScheduleVisit({
   reason,
   creditsRemaining,
   expiresAt,
+  maskedPhone,
 }: {
   propertyId: string;
   propertyName: string;
@@ -29,6 +30,7 @@ export function ScheduleVisit({
   reason?: string;
   creditsRemaining: number;
   expiresAt: string | null;
+  maskedPhone?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -67,7 +69,14 @@ export function ScheduleVisit({
     });
   }
 
-  if (confirmation) return <ConfirmationScreen variant={confirmation} homeHref={`/properties/${propertyId}`} />;
+  // Redesign 2026-09 (follow-up, round 2) — this used to send "Back to my
+  // properties" to this property's own page rather than the properties
+  // list. The mock's "done" screen always uses the same `goHome` handler
+  // regardless of which flow led here (registration, scheduling, ...) —
+  // it always returns to the Home/"my properties" screen, never to a
+  // single property's detail page. Dropped the override so it uses
+  // ConfirmationScreen's own '/dashboard' default, matching that.
+  if (confirmation) return <ConfirmationScreen variant={confirmation} maskedPhone={maskedPhone} />;
 
   if (!eligible) {
     return (

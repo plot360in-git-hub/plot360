@@ -126,6 +126,8 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       return { error: 'UPI activation is not configured on the server yet (missing SUPABASE_SERVICE_ROLE_KEY).' };
     }
 
+    const transactionReference = `UPI-${Date.now()}`;
+
     const { data: payment, error: paymentError } = await admin
       .from('payments')
       .insert({
@@ -135,7 +137,7 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
         status: 'completed',
         amount: plan.price,
         payment_method: 'UPI',
-        transaction_reference: `UPI-${Date.now()}`,
+        transaction_reference: transactionReference,
         paid_at: todayStr,
         valid_from: todayStr,
         valid_until: expiresAt,
@@ -162,6 +164,10 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       planName: plan.name as string,
       visitQuantity,
       amount: plan.price as number,
+      // Redesign 2026-09 (follow-up, round 2) — the "done" screen's rows
+      // table (ConfirmationScreen.tsx) shows this as "Reference"; it used
+      // to be written to the payments row and then dropped on the floor.
+      reference: transactionReference,
       expiresAt,
       propertyName: property.property_name as string,
     };

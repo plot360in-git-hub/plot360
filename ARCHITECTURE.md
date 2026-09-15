@@ -831,3 +831,55 @@ identity text itself a link to `/profile/edit`. Both are deviations from
 the literal mock, flagged as such — the alternative was leaving the
 customer with no way to sign out of the app at all once
 `CustomerHeader.tsx` stopped covering `/dashboard`.
+
+## 17. Redesign 2026-09 (round 3) — "done" screen rebuilt to match the mock
+
+Plot sent the mock's own "Transfer noted. We will confirm it." screenshot
+(bank-transfer registration confirmation) and pointed out it ends with a
+"Back to my properties" button going to the properties page — i.e. the
+generic centered-checkmark card `ConfirmationScreen.tsx` had been showing
+instead of this doesn't match. It never did: that component was an
+original invention from the customer-app phase, not built from the
+mock's own `s.done` screen (`design/Plot360 Customer.dc.html`,
+`doneContent()`), which every registration/payment/scheduling flow in
+the mock actually ends on.
+
+Rebuilt `ConfirmationScreen.tsx` to match `doneContent()`'s structure
+exactly: a full-bleed colored header (accent red for a completed UPI
+payment or a scheduled visit, near-black "ink" for a pending bank
+transfer — same red/black split the mock uses to mean "done" vs.
+"waiting"), a kicker/title/body, a label-value rows table, a "WhatsApp
+sent to `<number>`" preview box, a closing note, and one
+`Back to my properties` button — no second "Open WhatsApp" button, which
+the old version had but the mock doesn't: in the mock the WhatsApp
+message is sent automatically by Plot360, not something the customer
+opens themselves.
+
+Three real fixes fell out of matching the mock this closely:
+- **The WhatsApp line was showing the wrong phone number.** It's the
+  *customer's own* masked number (`maskPhone()`, `components/customer/
+  home.data.ts` — the same "9848 ••• 21" format as the Home poster), not
+  Plot360's support line, which is what the old "Open WhatsApp"
+  button/text used. `ChoosePlanAndPay` and `ScheduleVisit` (and the
+  `/properties/[id]/plan` and `/properties/[id]/schedule` pages that
+  render them) now fetch and pass the signed-in customer's own
+  `maskedPhone` down to `ConfirmationScreen`.
+- **The "Back to my properties" target was inconsistent.** The mock's
+  `goHome` handler behind that button always returns to the Home screen
+  regardless of which flow led there; `ScheduleVisit.tsx` used to
+  override it to that one property's own page instead. Dropped the
+  override — it now uses `ConfirmationScreen`'s own `/dashboard` default,
+  same as the registration/payment flow always did.
+- **The UPI transaction reference was computed and stored, then
+  discarded.** `purchaseVisitCredits`'s UPI branch generated
+  `transaction_reference` for the `payments` insert but never returned
+  it, so the "Reference" row the mock's UPI success screen shows had
+  nothing to display. Now returned as `reference` and threaded through
+  to the rows table.
+
+`ChoosePlanAndPay`'s bank-transfer variant also picked up `planName`
+(needed for the rows table's "Plan" row, previously dropped when
+building the confirmation state) and the UPI variant picked up
+`visitQuantity` and `expiresAt` (needed for its "Visit credits" row) —
+both were already being returned by `purchaseVisitCredits`, just not
+carried through into the confirmation screen's props before.

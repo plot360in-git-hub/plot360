@@ -1,18 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { WA_LINK, DISPLAY_PHONE, REPRESENTATIVE_NAME } from '@/lib/contact';
+import { DISPLAY_PHONE, REPRESENTATIVE_NAME } from '@/lib/contact';
 
-// Redesign 2026-09 — the customer app's shared "done" screen (design_handoff_
-// plot360_redesign, "Plot360 Customer.dc.html"): one component, four
-// copy variants, each with the exact WhatsApp confirmation text from the
-// design so what a customer reads in-app matches what they'd get on
-// WhatsApp. Rendered inline (as local state) at the end of whichever flow
-// finished, rather than as its own route, mirroring the design's
-// single-screen "done" overlay.
+// Redesign 2026-09 (follow-up, round 2) — Plot sent the mock's own "done"
+// screen screenshot ("Transfer noted. We will confirm it.") and pointed
+// out it goes back to a "properties page", i.e. this needs to match the
+// mock's literal "done" screen, not the generic centered-checkmark card
+// this component used to be. Rebuilt from design_handoff_plot360_redesign,
+// "Plot360 Customer.dc.html", doneContent() / the `s.done` screen: a
+// full-bleed colored header (kicker/title/body), a label-value rows
+// table, a "WhatsApp sent to <customer's own number>" preview box, a
+// closing note, and a single "Back to my properties" button — no second
+// "Open WhatsApp" button (the mock doesn't have one; the message is sent
+// automatically by Plot360, not something the customer opens themselves).
 export type ConfirmationVariant =
-  | { kind: 'reg-upi'; propertyName: string; amount: number; planName: string }
-  | { kind: 'reg-bank'; propertyName: string; amount: number }
+  | { kind: 'reg-upi'; propertyName: string; planName: string; visitQuantity: number; amount: number; reference: string; expiresAt: string }
+  | { kind: 'reg-bank'; propertyName: string; planName: string; amount: number }
   | { kind: 'sched'; propertyName: string; windowText: string; creditsRemaining: number; expiresAt: string };
 
 function formatRupees(amount: number): string {
@@ -23,100 +27,152 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function whatsappMessage(v: ConfirmationVariant): string {
+type DoneContent = {
+  bg: 'accent' | 'ink';
+  kicker: string;
+  title: string;
+  body: string;
+  rows: { k: string; v: string }[];
+  whatsapp: string;
+  next: string;
+};
+
+function content(v: ConfirmationVariant): DoneContent {
   switch (v.kind) {
     case 'reg-upi':
-      return `Plot360: Thank you. We have registered ${v.propertyName} and received ${formatRupees(v.amount)} by UPI. Your ${v.planName} plan is active. ${REPRESENTATIVE_NAME} will contact you within one working day for documents and owner approval.`;
+      return {
+        bg: 'accent',
+        kicker: 'Payment received',
+        title: 'Registered. We take it from here.',
+        body: `${REPRESENTATIVE_NAME} from Plot360 will WhatsApp you within a working day to collect documents and arrange owner approval. You do not need to fill anything else in.`,
+        rows: [
+          { k: 'Property', v: v.propertyName },
+          { k: 'Plan', v: v.planName },
+          { k: 'Paid', v: `${formatRupees(v.amount)} · UPI` },
+          { k: 'Reference', v: v.reference },
+          { k: 'Visit credits', v: `${v.visitQuantity} · until ${formatDate(v.expiresAt)}` },
+        ],
+        whatsapp: `Plot360: Thank you. We have registered ${v.propertyName} and received ${formatRupees(v.amount)} by UPI (ref ${v.reference}). Your ${v.planName} plan is active. ${REPRESENTATIVE_NAME} will contact you within one working day for documents and owner approval.`,
+        next: `Nothing is expected from you right now. Watch for a WhatsApp from ${DISPLAY_PHONE}.`,
+      };
     case 'reg-bank':
-      return `Plot360: We have registered ${v.propertyName}. Your bank transfer of ${formatRupees(v.amount)} is awaiting confirmation — we will message you as soon as it is credited, usually within one working day.`;
+      return {
+        bg: 'ink',
+        kicker: 'Awaiting confirmation',
+        title: 'Transfer noted. We will confirm it.',
+        body: 'Bank transfers take up to a working day to appear. Your property is registered and held; we confirm on WhatsApp the moment the amount lands.',
+        rows: [
+          { k: 'Property', v: v.propertyName },
+          { k: 'Plan', v: v.planName },
+          { k: 'Amount', v: `${formatRupees(v.amount)} · bank transfer` },
+          { k: 'Status', v: 'Awaiting confirmation' },
+          { k: 'Visit credits', v: 'Activate on confirmation' },
+        ],
+        whatsapp: `Plot360: We have registered ${v.propertyName}. Your bank transfer of ${formatRupees(v.amount)} is awaiting confirmation — we will message you as soon as it is credited, usually within one working day.`,
+        next: 'You can close the app. Credits and scheduling unlock once the transfer is confirmed.',
+      };
     case 'sched':
-      return `Plot360: Your site visit for ${v.propertyName} is scheduled between ${v.windowText}. ${v.creditsRemaining} visit credit${v.creditsRemaining === 1 ? '' : 's'} remain on this property, usable until ${formatDate(v.expiresAt)}.`;
+      return {
+        bg: 'accent',
+        kicker: 'Visit scheduled',
+        title: 'An agent will be there in that window.',
+        body: 'A representative confirms the exact day a morning ahead. Your report, photos and video arrive here when the visit is approved.',
+        rows: [
+          { k: 'Property', v: v.propertyName },
+          { k: 'Window', v: v.windowText },
+          { k: 'Used', v: '1 visit credit' },
+          {
+            k: 'Remaining',
+            v: `${v.creditsRemaining} visit credit${v.creditsRemaining === 1 ? '' : 's'} · until ${formatDate(v.expiresAt)}`,
+          },
+        ],
+        whatsapp: `Plot360: Your site visit for ${v.propertyName} is scheduled between ${v.windowText}. ${v.creditsRemaining} visit credit${v.creditsRemaining === 1 ? '' : 's'} remain on this property, usable until ${formatDate(v.expiresAt)}.`,
+        next: 'Nothing needed from you. We will message you when the report is ready.',
+      };
   }
 }
 
-function heading(v: ConfirmationVariant): string {
-  switch (v.kind) {
-    case 'reg-upi':
-      return 'You’re all set';
-    case 'reg-bank':
-      return 'Registered — payment pending';
-    case 'sched':
-      return 'Visit scheduled';
-  }
-}
+export function ConfirmationScreen({
+  variant,
+  maskedPhone,
+  homeHref = '/dashboard',
+}: {
+  variant: ConfirmationVariant;
+  // Redesign 2026-09 (follow-up, round 2) — the mock's "WhatsApp sent to
+  // 9848 ••• 21" line is the *customer's own* masked number (same format
+  // as the poster header on Home), not Plot360's support line. Optional
+  // because a couple of call sites don't have the profile loaded yet;
+  // falls back to generic text rather than showing nothing.
+  maskedPhone?: string | null;
+  homeHref?: string;
+}) {
+  const c = content(variant);
+  const isAccent = c.bg === 'accent';
 
-function body(v: ConfirmationVariant): React.ReactNode {
-  switch (v.kind) {
-    case 'reg-upi':
-      return (
-        <>
-          <strong>{v.propertyName}</strong> is registered and your {v.planName} plan is active.{' '}
-          {REPRESENTATIVE_NAME} will contact you within one working day for documents and owner approval.
-        </>
-      );
-    case 'reg-bank':
-      return (
-        <>
-          <strong>{v.propertyName}</strong> is registered. Your bank transfer of {formatRupees(v.amount)} is
-          awaiting confirmation — we’ll message you on WhatsApp as soon as it’s credited, usually within one
-          working day.
-        </>
-      );
-    case 'sched':
-      return (
-        <>
-          Your site visit for <strong>{v.propertyName}</strong> is scheduled between {v.windowText}.{' '}
-          {v.creditsRemaining} visit credit{v.creditsRemaining === 1 ? '' : 's'} remain on this property, usable
-          until {formatDate(v.expiresAt)}.
-        </>
-      );
-  }
-}
-
-export function ConfirmationScreen({ variant, homeHref = '/dashboard' }: { variant: ConfirmationVariant; homeHref?: string }) {
-  const message = whatsappMessage(variant);
   return (
-    <div className="p360" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            margin: '0 auto 20px',
-            background: 'var(--color-accent)',
-            color: 'var(--color-bg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 26,
-            fontWeight: 800,
-          }}
-        >
-          ✓
-        </div>
-        <h1 style={{ fontSize: 24, marginBottom: 12 }}>{heading(variant)}</h1>
-        <p style={{ fontSize: 14.5, color: 'var(--p-ink-soft)', marginBottom: 24, lineHeight: 1.5 }}>{body(variant)}</p>
-
-        <div style={{ borderTop: '2px solid var(--color-divider)', paddingTop: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--p-ink-muted)', marginBottom: 8 }}>
-            We’ll also send this to your WhatsApp
-          </p>
-          <p style={{ fontSize: 13, background: 'var(--color-surface)', padding: 12, textAlign: 'left' }}>{message}</p>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <a
-            href={`${WA_LINK}?text=${encodeURIComponent(message)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary btn-block"
+    <div className="p360" style={{ minHeight: '100vh' }}>
+      <div
+        style={{
+          background: isAccent ? 'var(--color-accent)' : 'var(--color-text)',
+          color: 'var(--color-bg)',
+          padding: '26px 22px 24px',
+        }}
+      >
+        <div style={{ maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', opacity: 0.8 }}>{c.kicker}</div>
+          <div
+            style={{
+              fontFamily: 'var(--font-heading)',
+              fontWeight: 800,
+              fontSize: 30,
+              lineHeight: 1.06,
+              letterSpacing: '-.03em',
+              marginTop: 12,
+            }}
           >
-            Open WhatsApp ({DISPLAY_PHONE})
-          </a>
-          <Link href={homeHref} className="btn btn-secondary btn-block" style={{ textDecoration: 'none' }}>
-            Back to home
-          </Link>
+            {c.title}
+          </div>
+          <p style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 12, maxWidth: '24em' }}>{c.body}</p>
         </div>
+      </div>
+
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 0' }}>
+        {c.rows.map((r) => (
+          <div
+            key={r.k}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 0',
+              borderTop: '1px solid var(--color-divider)',
+              fontSize: 12.5,
+            }}
+          >
+            <div style={{ color: 'var(--p-ink-soft)' }}>{r.k}</div>
+            <div style={{ fontWeight: 600, textAlign: 'right' }}>{r.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 0' }}>
+        <div style={{ background: 'var(--color-surface)', padding: 14, borderLeft: '3px solid var(--color-accent)' }}>
+          <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--p-ink-soft)' }}>
+            WhatsApp sent to {maskedPhone ?? 'your number'}
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 7 }}>{c.whatsapp}</div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 40px' }}>
+        <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.5 }}>{c.next}</p>
+        <Link
+          href={homeHref}
+          className="btn btn-primary btn-block"
+          style={{ minHeight: 48, fontSize: 14, marginTop: 14, textDecoration: 'none' }}
+        >
+          Back to my properties
+        </Link>
       </div>
     </div>
   );
