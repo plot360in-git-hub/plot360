@@ -93,3 +93,27 @@ export function computeExpiryDate(purchasedAt: Date, extensionDays = 0): Date {
   d.setDate(d.getDate() + extensionDays);
   return d;
 }
+
+// Redesign 2026-09 (follow-up) — moved here from CustomerHome.tsx so
+// PropertyVisitHistory.tsx (a server component) can share it too, instead
+// of importing from a 'use client' file or duplicating the logic — the
+// mock's REGISTERED/VERIFIED/VISIT SET/REPORT track appears on both the
+// Home screen's property cards and the property detail screen.
+export const MILESTONES = ['Registered', 'Verified', 'Visit set', 'Report'];
+
+type MilestoneProperty = { status: 'pending' | 'verified' | 'rejected' };
+type MilestoneJob = { status: string };
+
+// Milestone track: Registered (row exists) -> Verified (admin approved) ->
+// Visit set (a visit has been requested/assigned) -> Report (at least one
+// visit approved, so a report exists). Returns how many of the 4 are done.
+export function milestoneStage(property: MilestoneProperty, jobs: MilestoneJob[], hasOpenRequest: boolean): number {
+  if (property.status === 'rejected') return 1;
+  let stage = 1; // registered
+  if (property.status === 'verified') stage = 2;
+  const hasActiveVisit = hasOpenRequest || jobs.some((j) => ['assigned', 'accepted', 'submitted'].includes(j.status));
+  const hasReport = jobs.some((j) => ['approved', 'ec_pending'].includes(j.status));
+  if (stage === 2 && (hasActiveVisit || hasReport)) stage = 3;
+  if (stage === 3 && hasReport) stage = 4;
+  return stage;
+}

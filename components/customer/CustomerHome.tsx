@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { WA_LINK, TEL_LINK, DISPLAY_PHONE } from '@/lib/contact';
-import { totalRemainingCredits, isExpiringSoon, nearestExpiry, daysUntil } from '@/lib/visitCredits';
+import { totalRemainingCredits, isExpiringSoon, nearestExpiry, daysUntil, milestoneStage, MILESTONES } from '@/lib/visitCredits';
 import type { VisitCredit } from '@/types/database.types';
 
 type PropertyRow = {
@@ -16,22 +16,6 @@ type PropertyRow = {
 };
 
 type JobRow = { id: string; status: string; visit_number: number | null };
-
-// Milestone track: Registered (row exists) -> Verified (admin approved) ->
-// Visit set (a visit has been requested/assigned) -> Report (at least one
-// visit approved, so a report exists). Returns how many of the 4 are done.
-function milestoneStage(property: PropertyRow, jobs: JobRow[], hasOpenRequest: boolean): number {
-  if (property.status === 'rejected') return 1;
-  let stage = 1; // registered
-  if (property.status === 'verified') stage = 2;
-  const hasActiveVisit = hasOpenRequest || jobs.some((j) => ['assigned', 'accepted', 'submitted'].includes(j.status));
-  const hasReport = jobs.some((j) => ['approved', 'ec_pending'].includes(j.status));
-  if (stage === 2 && (hasActiveVisit || hasReport)) stage = 3;
-  if (stage === 3 && hasReport) stage = 4;
-  return stage;
-}
-
-const MILESTONES = ['Registered', 'Verified', 'Visit set', 'Report'];
 
 // Redesign 2026-09 (follow-up) — design_handoff_plot360_redesign,
 // "Plot360 Customer.dc.html", "New user — empty" screen.
@@ -133,11 +117,16 @@ export function CustomerHome({
 
       {/* Properties under watch */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 60px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        {/* Redesign 2026-09 (follow-up) — the mock's "Properties under
+            watch" header just shows a count next to the heading (no "+ Add
+            property" link — that's what the poster header's "Register a
+            property" button above is for); the extra link here didn't
+            match and was removed. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
           <h2 style={{ fontSize: 18 }}>Properties under watch</h2>
-          <Link href="/properties/new" className="btn-ghost btn" style={{ fontSize: 13 }}>
-            + Add property
-          </Link>
+          <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 10, color: 'var(--p-ink-soft)' }}>
+            {String(properties.length).padStart(2, '0')}
+          </span>
         </div>
 
         {properties.length === 0 && (

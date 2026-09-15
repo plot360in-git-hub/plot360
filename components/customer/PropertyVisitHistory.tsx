@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getVisitCreditsForProperty, getOpenVisitRequestCounts } from '@/components/payments/visitCredits.actions';
-import { totalRemainingCredits, nearestExpiry, canScheduleVisit } from '@/lib/visitCredits';
+import { totalRemainingCredits, nearestExpiry, canScheduleVisit, milestoneStage, MILESTONES } from '@/lib/visitCredits';
 
 const VISIT_STATUS_LABEL: Record<string, string> = {
   assigned: 'Agent assigned',
@@ -12,15 +12,30 @@ const VISIT_STATUS_LABEL: Record<string, string> = {
   rejected: 'Sent back for changes',
 };
 
-// Redesign 2026-09 — "Property visit history" screen (design_handoff_
-// plot360_redesign, "Plot360 Customer.dc.html"), replacing the old
-// PropertyView as the main /properties/[id] page. Deliberately does NOT
-// re-render the old PropertyView/MonitoringStatus components — this is a
-// new, self-contained read of the same data with the new visual design;
-// PropertyView.tsx is kept (unused-but-intact) rather than deleted, per
-// the redesign's "don't remove existing code" instruction. TaskList still
-// renders below this on the page (app/properties/[id]/page.tsx) since
-// it's an unrelated feature this redesign doesn't touch.
+// Redesign 2026-09 (follow-up) — this screen was originally built as a
+// simpler, plainer adaptation of design_handoff_plot360_redesign's "Plot360
+// Customer.dc.html" "Property visit history" mock (no image header, no
+// milestone track, no dotted timeline) and that simplification was never
+// actually flagged to Plot as a deviation the way it should have been.
+// Plot caught it by screenshot next to the phone mockup — this rebuilds it
+// to match: back-button header, a site-photo placeholder block (the mock
+// itself is a plain grey rectangle here — there's no real property photo
+// field in the schema to fill it with), the location/size line, the
+// REGISTERED/VERIFIED/VISIT SET/REPORT track (shared with CustomerHome.tsx
+// via lib/visitCredits.ts, milestoneStage/MILESTONES), the visit-credits
+// row, and a dotted visit-history timeline. Still deliberately does NOT
+// re-render the old PropertyView/MonitoringStatus components — those stay
+// kept but unused, per the redesign's "don't remove existing code" rule.
+//
+// Two honest substitutions for data the schema doesn't have:
+//  - The mock's "P-1042" property code is cosmetic flavor text in the mock
+//    itself, not a real field anywhere in this schema — shown here as
+//    P-<first 4 of the property's id>, clearly a display-only shorthand,
+//    not an actual registration number.
+//  - The mock's per-visit note ("Boundary intact. Grass overgrown...") is
+//    real content coming from the agent's own submitted
+//    monitoring_jobs.observations for a completed visit, or
+//    admin_feedback for one sent back — not invented.
 export async function PropertyVisitHistory({ propertyId }: { propertyId: string }) {
   const supabase = await createClient();
   const [{ data: property }, credits, { data: jobs }, reservedCounts] = await Promise.all([
@@ -28,7 +43,7 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
     getVisitCreditsForProperty(propertyId),
     supabase
       .from('monitoring_jobs')
-      .select('id, status, visit_number, assigned_at, decided_at')
+      .select('id, status, visit_number, assigned_at, decided_at, observations, admin_feedback')
       .eq('property_id', propertyId)
       .order('assigned_at', { ascending: false }),
     getOpenVisitRequestCounts([propertyId]),
@@ -38,79 +53,134 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
 
   const reserved = reservedCounts[propertyId] ?? 0;
   const remaining = Math.max(totalRemainingCredits(credits) - reserved, 0);
+  const totalPurchased = credits.reduce((sum, c) => sum + c.quantity_purchased, 0);
   const expiry = nearestExpiry(credits);
   const gate = canScheduleVisit(property.status, credits);
+  const allJobs = jobs ?? [];
+  const stage = milestoneStage(property, allJobs, reserved > 0);
+  const completedCount = allJobs.filter((j) => ['approved', 'ec_pending'].includes(j.status)).length;
+  const latestVisitNumber = allJobs[0]?.visit_number ?? null;
+  const shortCode = `P-${propertyId.slice(0, 4).toUpperCase()}`;
+
+  const locationParts = [property.village_town || property.district, property.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null, shortCode].filter(
+    Boolean
+  );
 
   return (
-    <div className="p360" style={{ minHeight: '60vh', padding: '28px 20px 20px' }}>
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <p style={{ fontSize: 12, color: 'var(--p-ink-muted)', marginBottom: 4 }}>
-          <Link href="/dashboard" className="nav-link">← Home</Link>
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <h1 style={{ fontSize: 24 }}>{property.property_name}</h1>
-          <span className={`tag ${property.status === 'verified' ? 'tag-accent' : ''}`} style={{ border: '1px solid var(--color-divider)' }}>
-            {property.status === 'verified' ? 'Verified' : property.status === 'rejected' ? 'Rejected' : 'Not verified yet'}
-          </span>
-        </div>
-        {property.street_address && <p style={{ fontSize: 13.5, color: 'var(--p-ink-soft)', marginBottom: 24 }}>{property.street_address}</p>}
+    <div className="p360" style={{ minHeight: '80vh' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '2px solid var(--color-divider)' }}>
+        <Link href="/dashboard" className="btn btn-secondary" style={{ minWidth: 36, minHeight: 36, fontSize: 16, padding: 0, justifyContent: 'center' }} aria-label="Back to dashboard">
+          ←
+        </Link>
+        <h1 style={{ fontSize: 17 }}>{property.property_name}</h1>
+      </div>
+
+      {/* Site photo placeholder — no real photo field on properties yet */}
+      <div style={{ height: 160, background: 'var(--color-neutral-300)', display: 'flex', alignItems: 'flex-end', padding: 12 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--color-text)' }}>
+          Site photo{latestVisitNumber ? ` · Visit ${latestVisitNumber}` : ''}
+        </span>
+      </div>
+
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '18px 20px 0' }}>
+        {locationParts.length > 0 && <p style={{ fontSize: 13, color: 'var(--p-ink-soft)' }}>{locationParts.join(' · ')}</p>}
 
         {property.status === 'rejected' && property.rejection_reason && (
-          <div className="card" style={{ borderColor: 'var(--color-accent)', marginBottom: 20 }}>
+          <div className="card" style={{ borderColor: 'var(--color-accent)', marginTop: 16 }}>
             <p style={{ fontSize: 13.5 }}>{property.rejection_reason}</p>
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 13, color: 'var(--p-ink-soft)', marginBottom: 6 }}>Visit credits</p>
-          <p style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>
-            {remaining} of {credits.reduce((s, c) => s + c.quantity_purchased, 0)} left
-          </p>
-          {expiry && (
-            <p style={{ fontSize: 12.5, color: 'var(--p-ink-muted)', marginBottom: 16 }}>
-              Usable until {expiry.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </p>
-          )}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {gate.eligible && gate.hasCredits && remaining > 0 ? (
-              <Link href={`/properties/${propertyId}/schedule`} className="btn btn-primary" style={{ textDecoration: 'none' }}>
-                Schedule the next visit
-              </Link>
-            ) : (
-              <Link href={`/properties/${propertyId}/plan`} className="btn btn-primary" style={{ textDecoration: 'none' }}>
-                Buy visit credits
-              </Link>
-            )}
-            <Link href="/service-requests/new" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-              Raise a service request
-            </Link>
-          </div>
-          {!gate.eligible && gate.reason && (
-            <p style={{ fontSize: 12.5, color: 'var(--p-ink-muted)', marginTop: 10 }}>{gate.reason}</p>
-          )}
-        </div>
-
-        <h3 style={{ fontSize: 16, marginBottom: 12 }}>Visit history</h3>
-        {(jobs ?? []).length === 0 && <p style={{ fontSize: 13.5, color: 'var(--p-ink-soft)' }}>No visits yet.</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {(jobs ?? []).map((j) => (
-            <div key={j.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--color-divider)' }}>
-              <div>
-                <p style={{ fontSize: 14 }}>Visit {j.visit_number ?? '—'}</p>
-                <p style={{ fontSize: 12, color: 'var(--p-ink-muted)' }}>
-                  {(j.decided_at ?? j.assigned_at)?.slice(0, 10)}
-                </p>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="tag" style={{ border: '1px solid var(--color-divider)' }}>{VISIT_STATUS_LABEL[j.status] ?? j.status}</span>
-                {['approved', 'ec_pending'].includes(j.status) && (
-                  <a href={`/properties/${propertyId}/visit-report/${j.id}/pdf`} target="_blank" rel="noreferrer" className="nav-link" style={{ fontSize: 12.5 }}>
-                    View report (PDF)
-                  </a>
-                )}
+        {/* Milestone track */}
+        <div style={{ display: 'flex', gap: 4, marginTop: 16 }}>
+          {MILESTONES.map((m, i) => (
+            <div key={m} style={{ flex: 1 }}>
+              <div style={{ height: 5, background: i < stage ? 'var(--color-accent)' : 'var(--color-divider)' }} />
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 5, color: i < stage ? 'var(--color-text)' : 'var(--p-ink-muted)', lineHeight: 1.2 }}>
+                {m}
               </div>
             </div>
           ))}
+        </div>
+
+        <div style={{ height: 2, background: 'var(--color-divider)', margin: '20px 0' }} />
+
+        {/* Visit credits */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--p-ink-soft)' }}>Visit credits</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 24, marginTop: 2 }}>
+              {remaining} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--p-ink-soft)' }}>of {totalPurchased} left</span>
+            </div>
+          </div>
+          {expiry && (
+            <div style={{ textAlign: 'right', fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.45 }}>
+              Usable until
+              <br />
+              {expiry.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+          )}
+        </div>
+
+        {gate.eligible && gate.hasCredits && remaining > 0 ? (
+          <Link href={`/properties/${propertyId}/schedule`} className="btn btn-primary btn-block" style={{ minHeight: 46, fontSize: 13.5, marginTop: 14, textDecoration: 'none' }}>
+            Schedule the next visit
+          </Link>
+        ) : (
+          <Link href={`/properties/${propertyId}/plan`} className="btn btn-primary btn-block" style={{ minHeight: 46, fontSize: 13.5, marginTop: 14, textDecoration: 'none' }}>
+            Buy visit credits
+          </Link>
+        )}
+        {!gate.eligible && gate.reason && <p style={{ fontSize: 12.5, color: 'var(--p-ink-muted)', marginTop: 10 }}>{gate.reason}</p>}
+        <Link href="/service-requests/new" className="nav-link" style={{ display: 'inline-block', fontSize: 12.5, marginTop: 10 }}>
+          Raise a service request
+        </Link>
+      </div>
+
+      {/* Visit history */}
+      <div style={{ marginTop: 22, borderTop: '2px solid var(--color-divider)', padding: '16px 20px 0' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <h2 style={{ fontSize: 17 }}>Visit history</h2>
+            {totalPurchased > 0 && (
+              <span className="tag" style={{ fontSize: 10, border: '1px solid var(--color-divider)' }}>
+                {completedCount} of {totalPurchased} visits used
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', lineHeight: 1.5, marginTop: 6 }}>
+            Every completed visit on this property, newest first. Each one used a visit credit.
+          </p>
+
+          {allJobs.length === 0 && <p style={{ fontSize: 13.5, color: 'var(--p-ink-soft)', marginTop: 14 }}>No visits yet.</p>}
+
+          <div style={{ marginTop: 14 }}>
+            {allJobs.map((j) => {
+              const isReport = ['approved', 'ec_pending'].includes(j.status);
+              const note = isReport ? j.observations : j.status === 'rejected' ? j.admin_feedback : null;
+              return (
+                <div key={j.id} style={{ display: 'flex', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-divider)' }}>
+                  <div style={{ width: 72, flex: 'none', fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace', color: 'var(--p-ink-soft)', paddingTop: 2 }}>
+                    {(j.decided_at ?? j.assigned_at)?.slice(0, 10)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      Visit {j.visit_number ?? '—'} — {VISIT_STATUS_LABEL[j.status] ?? j.status}
+                    </div>
+                    {note && <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.45, marginTop: 2 }}>{note}</div>}
+                    {isReport && (
+                      <a href={`/properties/${propertyId}/visit-report/${j.id}/pdf`} target="_blank" rel="noreferrer" className="nav-link" style={{ fontSize: 12, display: 'inline-block', marginTop: 4 }}>
+                        Open visit {j.visit_number ?? ''} report
+                      </a>
+                    )}
+                  </div>
+                  <div style={{ width: 8, height: 8, background: isReport ? 'var(--color-accent)' : 'var(--color-text)', flex: 'none', marginTop: 6 }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ height: 34 }} />
         </div>
       </div>
     </div>

@@ -79,6 +79,17 @@ export async function getActiveVisitPlans() {
 // flow already used (components/payments/payments.actions.ts,
 // recordPayment) — confirming one here should additionally create a
 // visit_credits row, which is follow-up work for the admin console phase.
+//
+// Redesign 2026-09 (follow-up) — real bug Plot hit while testing: RLS on
+// both `payments` (payments_insert_own requires status='pending' — only
+// payments_insert_admin allows 'completed') and `visit_credits`
+// (insert is admin-only, period) rejected this function's own UPI writes,
+// since it ran them through the normal user-scoped client. The ownership/
+// plan checks above already do the authorization a human admin would —
+// this now does those two specific inserts (only those two) through the
+// service-role admin client, the same pattern already used elsewhere in
+// this codebase (lib/supabase/admin.ts) for a legitimately privileged
+// write after manual authorization, not a way around RLS in general.
 export async function purchaseVisitCredits(propertyId: string, planId: string, method: 'upi' | 'bank') {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -107,7 +118,15 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
   if (method === 'upi') {
     const expiresAt = computeExpiryDate(today).toISOString().slice(0, 10);
 
-    const { data: payment, error: paymentError } = await supabase
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch {
+      return { error: 'UPI activation is not configured on the server yet (missing SUPABASE_SERVICE_ROLE_KEY).' };
+    }
+
+    const { data: payment, error: paymentError } = await admin
       .from('payments')
       .insert({
         property_id: propertyId,
@@ -126,7 +145,7 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       .single();
     if (paymentError) return { error: paymentError.message };
 
-    const { error: creditError } = await supabase.from('visit_credits').insert({
+    const { error: creditError } = await admin.from('visit_credits').insert({
       property_id: propertyId,
       payment_id: payment.id,
       quantity_purchased: visitQuantity,

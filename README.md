@@ -12,6 +12,20 @@ the DB schema, and the file-per-concern pattern every module follows.
 4. `npm install next react react-dom @supabase/ssr @supabase/supabase-js`
 5. `npm run dev`
 
+**Re-running after a pull**: `schema.sql` keeps growing (new `alter table`
+statements get appended as features are added — see its own comments,
+e.g. the `ec_interest`/`plot_gps_coordinate` columns from the 2026-09
+redesign) rather than being rewritten, and every statement in it is
+idempotent (`if not exists`, `create or replace`, `drop policy if exists`).
+So "run it once" really means "re-run the whole file any time you pull
+code that touches the schema" — it's always safe to run again, and it's
+the fix if the app ever errors with something like `Could not find the
+'<column>' column of '<table>' in the schema cache` (that error means
+the code expects a column your database doesn't have yet, not a bug in
+the code itself). Supabase's PostgREST layer picks up the change within
+about a minute of running it; if an error persists past that, it should
+resolve after a project restart from the Supabase dashboard.
+
 ## Where things live
 
 ```

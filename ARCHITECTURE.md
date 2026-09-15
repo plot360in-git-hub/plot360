@@ -653,3 +653,90 @@ Not re-verified end-to-end against a live Supabase project (no working
 `next build`/`npm run dev` in this sandbox — see the standing
 build-verification note); please run through both tabs, a real signup,
 and the resend button locally before trusting this in production.
+
+## 14. Redesign 2026-09 — first real end-to-end test pass (follow-up fixes)
+
+Plot ran `npm run dev` against a real Supabase project for the first time
+and found several real gaps at once, by screenshot. All are fixed here;
+none were caught by this sandbox's syntax-only `tsc --noResolve` check
+(a live app + live database is the only thing that finds these).
+
+**Old header on every customer page.** `app/dashboard/layout.tsx`,
+`app/properties/layout.tsx`, `app/onboarding/layout.tsx`,
+`app/profile/layout.tsx`, `app/tasks/layout.tsx` and
+`app/service-requests/layout.tsx` each rendered the pre-redesign
+`AppHeader.tsx` above their content — that's why even the correctly-
+redesigned pages still showed the old white "Plot360 | Dashboard | Add
+Property | Service Requests | ... | Log out" bar on top. New
+`components/layout/CustomerHeader.tsx` is a `.p360`-styled replacement
+with the same links/behavior, now wired into all six layouts.
+`AppHeader.tsx` is untouched and still exists, just unwired. Note: the
+design mock is phone-only and has no persistent top nav at all, so this
+isn't "matching the mock" so much as reskinning a real desktop-app
+necessity the mock never had to solve.
+
+**Stray "+ Add property" link.** `CustomerHome.tsx`'s "Properties under
+watch" header had a "+ Add property" link the mock doesn't have (the
+mock just shows a property count next to the heading — the poster
+header's own "Register a property" button already covers this). Removed,
+replaced with the count.
+
+**Property visit-history screen was a simplified stand-in, undisclosed.**
+`PropertyVisitHistory.tsx` was originally a plainer adaptation of the
+mock (no image header, no milestone track, no dotted timeline) and that
+simplification was never flagged the way it should have been — same
+class of gap as the auth screens in section 13. Rebuilt to match: back-
+button header, a site-photo placeholder block (the mock itself is a flat
+grey rectangle here — there's no real photo field on `properties` to
+fill it with), the location/size line, the REGISTERED/VERIFIED/VISIT
+SET/REPORT track (factored out to `lib/visitCredits.ts` —
+`milestoneStage`/`MILESTONES` — so `CustomerHome.tsx` and this component
+share one implementation instead of duplicating it), the visit-credits
+row, and a dotted visit-history timeline whose per-visit note text comes
+from the real `monitoring_jobs.observations` (completed visits) or
+`admin_feedback` (sent-back visits) — not invented copy. The mock's
+"P-1042" property code is cosmetic flavor text in the mock itself, not a
+real field anywhere in this schema — shown here as `P-<first 4 chars of
+the property's id>`, clearly a display shorthand, not an actual
+registration number.
+
+**Task list removed from the property page.** It used to render below
+`PropertyVisitHistory`, kept because it was "an unrelated feature this
+redesign doesn't touch" — Plot flagged directly that the design has no
+task list on this screen at all and it read as leftover old design.
+Removed from `app/properties/[id]/page.tsx` only; `TaskList.tsx` and the
+`/tasks` route are both still fully intact.
+
+**Registration step 1 didn't match the mock, and errored.** Two issues:
+1. `RegisterQuick.tsx` didn't have the mock's back-button/step-counter
+   header, progress bar, "Google map pin" field, or a real hyperlink on
+   "terms and conditions" (previously plain unlinked text). Rebuilt to
+   match; the map-pin field reuses the existing `plot_gps_coordinate`
+   free-text column (already on `properties`, used by the full
+   registration wizard) as a paste-a-coordinate/link fallback — flagged
+   deviation, since there's no Maps API key configured for a real picker.
+2. `Could not find the 'ec_interest' column of 'properties' in the schema
+   cache` is **not a code bug** — `ec_interest` is declared correctly in
+   both `supabase/schema.sql` and `registration.actions.ts`. This error
+   means the redesign's `alter table` statements were never actually run
+   against Plot's live Supabase project — `schema.sql` keeps growing
+   rather than being rewritten, and the README's old "run it once"
+   phrasing was misleading now that it's been added to multiple times
+   since. README's setup section now says explicitly: re-run the whole
+   file (it's idempotent) any time this error shows up.
+
+**Real RLS bug in the UPI "instant activation" purchase flow.**
+`purchaseVisitCredits`'s UPI branch (`components/payments/
+visitCredits.actions.ts`) inserted a `payments` row with `status:
+'completed'` and a `visit_credits` row, both through the normal user-
+scoped client — but `payments_insert_own` only allows `status='pending'`
+(only `payments_insert_admin` allows `'completed'`), and `visit_credits`
+inserts are admin-only, full stop. Every real UPI purchase attempt hit
+`new row violates row-level security policy`. Fixed by routing only
+those two specific inserts through `createAdminClient()` (service role) —
+the ownership and plan-validity checks earlier in the same function
+already do the authorization a human admin would, so this is a
+legitimately privileged write after manual authorization, the same
+pattern already used elsewhere in this codebase (`lib/supabase/admin.ts`),
+not a general RLS bypass. Bank transfer (`status: 'pending'`) was already
+correct and untouched.

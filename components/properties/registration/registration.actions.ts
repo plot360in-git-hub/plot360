@@ -35,6 +35,13 @@ export async function createPropertyQuick(formData: FormData) {
   const location = String(formData.get('location') || '').trim();
   const plotSizeRaw = String(formData.get('plot_size') || '').trim();
   const ecInterest = formData.get('ec_interest'); // 'yes' | 'no' | null
+  // Redesign 2026-09 (follow-up) — the design's step 1 mock has a "Google
+  // map pin" row (drop a pin or send it later); there's no Maps API keyed
+  // in this project to back a real picker, so this reuses the existing
+  // plot_gps_coordinate free-text column (already on properties, used by
+  // the full registration wizard) as a paste-a-coordinate/link fallback —
+  // flagged as a deviation from an actual interactive map.
+  const gpsCoordinate = String(formData.get('plot_gps_coordinate') || '').trim();
 
   const { data, error } = await supabase
     .from('properties')
@@ -43,6 +50,7 @@ export async function createPropertyQuick(formData: FormData) {
       property_name: name,
       street_address: location || null,
       plot_size: plotSizeRaw ? Number(plotSizeRaw) : null,
+      plot_gps_coordinate: gpsCoordinate || null,
       ec_interest: ecInterest === 'yes' ? true : ecInterest === 'no' ? false : null,
     })
     .select('id')
