@@ -740,3 +740,31 @@ legitimately privileged write after manual authorization, the same
 pattern already used elsewhere in this codebase (`lib/supabase/admin.ts`),
 not a general RLS bypass. Bank transfer (`status: 'pending'`) was already
 correct and untouched.
+
+## 15. Redesign 2026-09 — Service Request screen
+
+Source: `design/Plot360 Customer.dc.html`, "Service request" screen. This
+was the one deferred piece that *was* disclosed at the time ("Visit
+Report viewer and Service Request screens were left untouched this
+phase" — section 9) rather than a silent gap — Plot has now asked for it
+with the mock attached.
+
+New `components/service-requests/ServiceRequestScreen.tsx` is one
+combined screen (compose form + "Open requests" list) matching the mock,
+which has no separate list-vs-new-request screens the way the old app
+did. Both `app/service-requests/page.tsx` and `app/service-requests/
+new/page.tsx` now render it — every existing internal link to either
+route keeps working. `NewServiceRequestForm.tsx` and the old list markup
+are untouched/unused, same pattern as the rest of this redesign.
+
+Two deviations from the literal mock:
+- **"Related property" is a real `<select>`** of the customer's own
+  properties, not the mock's free-text input (its "Tukkuguda North" is
+  just example placeholder text) — `property_id` has to reference an
+  actual property row.
+- **The list is filtered to non-closed requests**, matching the mock's
+  "Open requests" heading exactly. The old page listed every request
+  regardless of status; a closed request is still reachable at its own
+  `/service-requests/[id]` URL (e.g. from its reply-notification email),
+  just not listed on this screen anymore — flagging this narrowing in
+  case Plot wants closed requests visible somewhere on this screen too.

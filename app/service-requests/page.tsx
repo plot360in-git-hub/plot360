@@ -1,40 +1,11 @@
-import Link from 'next/link';
-import { getMyServiceRequests } from '@/components/service-requests/service-requests.actions';
+import { ServiceRequestScreen } from '@/components/service-requests/ServiceRequestScreen';
 
-export default async function ServiceRequestsPage() {
-  const requests = await getMyServiceRequests();
-
-  return (
-    <div className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-        <h1>Service Requests</h1>
-        <Link href="/service-requests/new" className="btn-primary" style={{ textDecoration: 'none' }}>
-          New Request
-        </Link>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {requests.map((r: any) => (
-          <Link
-            key={r.id}
-            href={`/service-requests/${r.id}`}
-            className="card"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
-          >
-            <div>
-              <h4 style={{ marginBottom: 4 }}>{r.subject}</h4>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>
-                {r.properties?.property_name ? `${r.properties.property_name} · ` : ''}
-                Updated {r.updated_at?.slice(0, 10)}
-              </p>
-            </div>
-            <span className={`status-pill ${r.status === 'closed' ? 'rejected' : 'pending'}`}>
-              {r.status === 'closed' ? 'Closed' : 'Open'}
-            </span>
-          </Link>
-        ))}
-        {requests.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No service requests yet.</p>}
-      </div>
-    </div>
-  );
+// Redesign 2026-09 (follow-up) — see ServiceRequestScreen.tsx. Both this
+// route and app/service-requests/new/page.tsx render the same combined
+// compose+list screen now, matching the design mock (which has no
+// separate "list" vs "new" screens, just one). The old list markup that
+// used to live directly in this file is gone; nothing else linked to it
+// besides its own "New Request" button.
+export default function ServiceRequestsPage() {
+  return <ServiceRequestScreen />;
 }

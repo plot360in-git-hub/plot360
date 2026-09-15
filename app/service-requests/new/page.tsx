@@ -1,9 +1,8 @@
-import { NewServiceRequestForm } from '@/components/service-requests/NewServiceRequestForm';
+import { ServiceRequestScreen } from '@/components/service-requests/ServiceRequestScreen';
 
+// Redesign 2026-09 (follow-up) — see ServiceRequestScreen.tsx and
+// app/service-requests/page.tsx. NewServiceRequestForm.tsx (the old form
+// this route used to render) is untouched and still exists, just unwired.
 export default function NewServiceRequestPage() {
-  return (
-    <main className="container-narrow" style={{ paddingTop: 40, paddingBottom: 60 }}>
-      <NewServiceRequestForm />
-    </main>
-  );
+  return <ServiceRequestScreen />;
 }
