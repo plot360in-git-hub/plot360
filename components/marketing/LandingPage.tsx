@@ -82,16 +82,16 @@ const STEPS = [
 const PLANS = [
   {
     name: '1 site visit',
-    price: '₹2,499',
-    was: '₹2,999',
+    price: '₹1,999',
+    was: '₹2,499',
     tag: '',
     border: '1px solid var(--color-divider)',
     body: 'One agent visit with photographs, video and a written report. Best for a one-off check before a decision.',
   },
   {
     name: '4 site visits',
-    price: '₹8,999',
-    was: '₹11,996',
+    price: '₹7,497',
+    was: '₹9,996',
     tag: 'Most taken',
     border: '2px solid var(--color-accent)',
     body: 'Four visits, usable any time within one year against the same property. Best for land you want watched through the year.',
@@ -380,7 +380,7 @@ export function LandingPage() {
               <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--p-ink-soft)', margin: '7px 0 0' }}>{s.body}</p>
               <div style={{ marginTop: 13, paddingTop: 11, borderTop: '1px solid var(--color-divider)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 12, color: s.priced ? 'var(--color-accent-700)' : 'var(--p-ink-soft)', fontWeight: 600 }}>
-                  {s.priced ? 'From ₹2,499' : 'Price on request'}
+                  {s.priced ? 'From ₹1,999' : 'Price on request'}
                 </div>
                 <a href={s.priced ? '#how' : '#contact'} className="btn btn-ghost" style={{ minHeight: 44, fontSize: 12.5, padding: '0 10px' }}>
                   {s.priced ? 'See plans →' : 'Contact support →'}

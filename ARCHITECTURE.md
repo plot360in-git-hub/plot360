@@ -1162,3 +1162,20 @@ the plans grid: "Prices shown are indicative. Encumbrance certificate
 available on request at registration. *Price may change based on plot
 size and other factors." — the asterisk and the footnote sentence are
 new; the original two sentences are unchanged.
+
+## 23. Redesign 2026-09 (round 9) — landing page plan prices updated
+
+Plot asked for the landing page's hardcoded plan prices to change: 1
+site visit is now ₹1,999 (struck-through ₹2,499, was ₹2,499/₹2,999),
+and 4 site visits is now ₹7,497 (struck-through ₹9,996, was ₹8,999/
+₹11,996). Updated the `PLANS` array in `components/marketing/
+LandingPage.tsx`, and also updated the Services section's "From
+₹2,499" teaser (which pointed at the old 1-visit price) to "From
+₹1,999" so the two stay consistent.
+
+Note: this only changes the marketing landing page's own hardcoded
+copy. The actual in-app purchase flow (`ChoosePlanAndPay.tsx`) reads
+real prices from the admin-configured `subscription_plans` table, so
+if these new prices should also apply to what a logged-in customer is
+charged, that needs an update in the admin plans screen (or database),
+not a code change.
