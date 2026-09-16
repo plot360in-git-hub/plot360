@@ -9,6 +9,24 @@ Customer Dashboard, Plot Registration x3, Property View, Task View) mapped again
 > build is based on the wireframes + project instructions. Re-upload the docx if it has
 > requirements not visible on paper, and I'll fold in any gaps.
 
+## 0. Design constraint — customer-facing screens are mobile-first
+
+Everything under the customer app (`/dashboard`, `/properties/*`,
+`/service-requests/*`, `/auth/*`) is used mostly on mobile browsers by
+real customers, not desktop. This matters for two different reasons at
+once: the design mock itself (`design_handoff_plot360_redesign/design/
+Plot360 Customer.dc.html`) is drawn as a phone-width canvas, so its
+markup often has no desktop layout considerations built in at all (see
+section 19 — a row that's "full width" on a 375px canvas is not the
+same as "full width" on a 1400px browser window); and any new layout
+work should be checked at phone width first, with desktop as the
+secondary case, not the other way around. When adapting a mock element
+that assumes phone width (edge-to-edge rows, single-column stacks, no
+hover states) for real desktop-browser use, prefer constraining it to
+match the page's existing centered column rather than letting it run
+full-bleed — see section 19 for a concrete example of getting this
+wrong and fixing it.
+
 ## 1. Design principle: independent components, shared contracts
 
 Each screen in the wireframes becomes a **self-contained feature module**:
