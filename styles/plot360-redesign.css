@@ -20,18 +20,42 @@
   --color-bg: #f3f2f2;
   --color-surface: #eae9e9;
   --color-text: #201e1d;
-  --color-accent: #ec3013;
+
+  /* Redesign 2026-09 (follow-up, round 7) — Plot asked to move off the
+     red/orange accent entirely, pointing at the soft pastel-gradient
+     card on facebook.com/developers as the look to go for, and picked a
+     teal/mint solid color wherever a flat accent color is still needed
+     (buttons, links, tags, focus rings — everything that reads this
+     token). Old values, for reference: accent #ec3013, -100 #fff2ef,
+     -600 #dd2b0f, -700 #ae1800, -800 #7c1405 (all shades of red). New
+     values are Tailwind's teal-500/100/600/700/800 — chosen so the same
+     "base / pale tint / hover / active-text / darkest" relationships
+     this file already relied on carry over unchanged (see .btn-primary,
+     .tag-accent, HOW_IT_WORKS numerals, etc. below — none of those rules
+     needed to change, only what the token points at). */
+  --color-accent: #14b8a6;
   --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
 
-  --color-accent-100: #fff2ef;
-  --color-accent-600: #dd2b0f;
-  --color-accent-700: #ae1800;
-  --color-accent-800: #7c1405;
+  --color-accent-100: #ccfbf1;
+  --color-accent-600: #0d9488;
+  --color-accent-700: #0f766e;
+  --color-accent-800: #115e59;
 
   --color-neutral-300: #d7d3d3;
   --color-neutral-400: #bab6b6;
   --color-neutral-800: #444141;
   --color-neutral-900: #2d2b2b;
+
+  /* Redesign 2026-09 (follow-up, round 7) — the soft pastel-gradient
+     card Plot referenced. Kept teal-forward (mint → pale aqua → the
+     faintest lavender-mint) rather than copying the reference's literal
+     pink, so it reads as this app's own palette rather than someone
+     else's. Used on the app's few "hero card" surfaces (the customer
+     Home poster, the post-payment/scheduling confirmation screen, the
+     marketing site's hero) — see those files for how the card's *text*
+     switches from white-on-solid-color to dark-on-pale-gradient to stay
+     readable, which a plain color-token swap can't do by itself. */
+  --gradient-hero: linear-gradient(135deg, #e6fbf8 0%, #ccfbf1 45%, #a7f3d0 75%, #99e6e0 100%);
 
   --font-heading: var(--p360-font-archivo, "Archivo"), system-ui, sans-serif;
   --font-heading-weight: 800;
@@ -42,14 +66,30 @@
   --space-3: 12px;
   --space-4: 16px;
 
-  --radius-md: 0px;
+  /* Redesign 2026-09 (follow-up, round 7) — "rounded corners app-wide"
+     was the other half of Plot's ask alongside the color change (the
+     mock's own "Modernist" system specifically called for zero radius
+     everywhere — see this file's header comment — so this is a
+     deliberate, flagged reversal of that earlier fidelity decision, not
+     an oversight). --radius-md now covers buttons/inputs/cards/small
+     surfaces; --radius-lg is new, for the few big hero-card surfaces
+     using --gradient-hero above, which read better with a more generous
+     radius than a button does. */
+  --radius-md: 14px;
+  --radius-lg: 24px;
 
   /* --- Plot360 theme layer (design/plot360-theme.css) --- */
   --p-ink-soft: rgba(32, 30, 29, .72);
   --p-ink-muted: rgba(32, 30, 29, .45);
   --p-on-dark-rule: rgba(243, 242, 242, .35);
-  --p-alert: var(--color-accent-700);
-  --p-tint: rgba(236, 48, 19, .06);
+  /* Redesign 2026-09 (follow-up, round 7) — this was `var(--color-accent-
+     700)` before, which quietly meant "error text is whatever color the
+     brand accent is" — harmless while the accent was red, but wrong now
+     that accent is teal (error/validation messages turning teal would
+     read as fine, not wrong). Given its own fixed value, independent of
+     the accent color, matching what --p-alert actually means. */
+  --p-alert: #dc2626;
+  --p-tint: rgba(20, 184, 166, .08);
 
   font-family: var(--font-body);
   color: var(--color-text);
@@ -65,7 +105,14 @@
 }
 
 .p360 a { color: var(--color-accent); text-underline-offset: 3px; }
-.p360 a:hover { color: var(--p-alert); }
+/* Redesign 2026-09 (follow-up, round 7) — was `var(--p-alert)`, which
+   happened to equal --color-accent-700 back when the accent was red (so
+   "hover = darker accent" and "error text" were coincidentally the same
+   value) — now that --p-alert is its own fixed red (see the token
+   comment above), reusing it here would turn every hovered link red.
+   Points at --color-accent-700 directly, which is what this always
+   actually meant. */
+.p360 a:hover { color: var(--color-accent-700); }
 .p360 img { display: block; max-width: 100%; }
 .p360 .text-muted { color: var(--p-ink-soft); }
 .p360 :focus { outline: none; }
@@ -128,7 +175,11 @@
 /* — tags — */
 .p360 .tag {
   display: inline-flex; align-items: center; font-size: 11px;
-  letter-spacing: 0.02em; padding: 3px 10px; border-radius: 0;
+  letter-spacing: 0.02em; padding: 3px 10px;
+  /* Redesign 2026-09 (follow-up, round 7) — was a hardcoded 0 (this
+     predates --radius-md existing at all as a nonzero value); pill-
+     shaped now, consistent with the rest of the rounded-corners pass. */
+  border-radius: 999px;
 }
 .p360 .tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
 

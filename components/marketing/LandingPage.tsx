@@ -196,81 +196,104 @@ export function LandingPage() {
       </header>
 
       {/* ---------- Hero ---------- */}
-      <section id="home" style={{ background: 'var(--color-accent)', color: 'var(--color-bg)' }}>
+      {/* Redesign 2026-09 (follow-up, round 7) — was a full-bleed solid
+          accent-colored band (white text throughout). Plot pointed at the
+          soft pastel-gradient card on facebook.com/developers as the look
+          to go for, so this is now an inset var(--gradient-hero) card with
+          dark text, matching the same treatment given to the customer
+          Home poster and the "done" confirmation screens. Every child that
+          assumed "light text on a solid dark background" is flipped here:
+          the primary CTA (was inverse light-bg/accent-text → now solid
+          btn-primary), the two outline CTAs (were light border/light text
+          for a dark bg → now var(--color-divider)/var(--color-text)), the
+          "Open your account" link (was nav-link-inverse → now plain
+          nav-link, since nav-link-inverse assumes a dark surface), and the
+          stats divider + placeholder image border (were the translucent
+          on-dark rule var(--p-on-dark-rule) → now var(--color-divider)). */}
+      <section id="home" style={{ padding: '20px 22px 0' }}>
         <div
           style={{
             maxWidth: 1180,
             margin: '0 auto',
-            padding: '40px 22px 0',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
-            gap: 30,
-            alignItems: 'start',
+            background: 'var(--gradient-hero)',
+            color: 'var(--color-text)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '40px 22px 44px',
           }}
         >
-          <div>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em' }}>Site visits across Ranga Reddy &amp; Hyderabad</div>
-            <h1
-              style={{
-                fontSize: 'clamp(38px, 6vw, 62px)',
-                lineHeight: 0.98,
-                letterSpacing: '-.04em',
-                margin: '20px 0 0',
-                color: 'var(--color-bg)',
-              }}
-            >
-              Someone stands on your land, so you don&rsquo;t have to.
-            </h1>
-            <p style={{ fontSize: 16, lineHeight: 1.55, margin: '18px 0 0', maxWidth: '34em' }}>
-              A verified Plot360 agent visits your plot, photographs every boundary, records a video and answers ten fixed checks. You get a written report — and a
-              representative who handles the paperwork on WhatsApp.
-            </p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 24 }}>
-              <Link href="/signup" className="btn" style={{ background: 'var(--color-bg)', color: 'var(--color-accent)', minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
-                Sign up and register a plot →
-              </Link>
-              <Link href="/login" className="btn" style={{ border: '1px solid var(--p-on-dark-rule)', color: 'var(--color-bg)', minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
-                Log in
-              </Link>
-              <a href="#how" className="btn" style={{ border: '1px solid var(--p-on-dark-rule)', color: 'var(--color-bg)', minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
-                How it works
-              </a>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+              gap: 30,
+              alignItems: 'start',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', color: 'var(--color-accent-700)' }}>
+                Site visits across Ranga Reddy &amp; Hyderabad
+              </div>
+              <h1
+                style={{
+                  fontSize: 'clamp(38px, 6vw, 62px)',
+                  lineHeight: 0.98,
+                  letterSpacing: '-.04em',
+                  margin: '20px 0 0',
+                  color: 'var(--color-text)',
+                }}
+              >
+                Someone stands on your land, so you don&rsquo;t have to.
+              </h1>
+              <p style={{ fontSize: 16, lineHeight: 1.55, margin: '18px 0 0', maxWidth: '34em', color: 'var(--p-ink-soft)' }}>
+                A verified Plot360 agent visits your plot, photographs every boundary, records a video and answers ten fixed checks. You get a written report — and a
+                representative who handles the paperwork on WhatsApp.
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 24 }}>
+                <Link href="/signup" className="btn btn-primary" style={{ minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
+                  Sign up and register a plot →
+                </Link>
+                <Link href="/login" className="btn" style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text)', minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
+                  Log in
+                </Link>
+                <a href="#how" className="btn" style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text)', minHeight: 50, fontSize: 14.5, padding: '0 20px' }}>
+                  How it works
+                </a>
+              </div>
+              <div style={{ fontSize: 12.5, marginTop: 12, color: 'var(--p-ink-soft)' }}>
+                Already paid?{' '}
+                <Link href="/login" className="nav-link" style={{ textDecoration: 'underline' }}>
+                  Open your account
+                </Link>{' '}
+                to see reports and schedule the next visit.
+              </div>
             </div>
-            <div style={{ fontSize: 12.5, marginTop: 12, opacity: 0.9 }}>
-              Already paid?{' '}
-              <Link href="/login" className="nav-link-inverse" style={{ textDecoration: 'underline' }}>
-                Open your account
-              </Link>{' '}
-              to see reports and schedule the next visit.
+            <div style={{ minHeight: 240, position: 'relative', width: '100%' }}>
+              {/* No photography is included in the handoff — every image is a
+                  placeholder for the owner to supply (see README "Assets"). */}
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  minHeight: 240,
+                  background: 'rgba(255,255,255,.55)',
+                  border: '1px solid var(--color-divider)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  padding: 20,
+                }}
+              >
+                <span style={{ fontSize: 12.5, color: 'var(--color-neutral-800)' }}>Photograph of a plot or an agent on site</span>
+              </div>
             </div>
           </div>
-          <div style={{ minHeight: 240, position: 'relative', width: '100%' }}>
-            {/* No photography is included in the handoff — every image is a
-                placeholder for the owner to supply (see README "Assets"). */}
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                minHeight: 240,
-                background: 'var(--color-neutral-300)',
-                border: '1px solid var(--p-on-dark-rule)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                padding: 20,
-              }}
-            >
-              <span style={{ fontSize: 12.5, color: 'var(--color-neutral-800)' }}>Photograph of a plot or an agent on site</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 22px 52px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(50%, 160px), 1fr))', gap: 0, marginTop: 44, borderTop: '2px solid var(--p-on-dark-rule)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(50%, 160px), 1fr))', gap: 0, marginTop: 44, borderTop: '2px solid var(--color-divider)' }}>
             {STATS.map((s) => (
               <div key={s.label} style={{ padding: '18px 18px 0 0' }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 30, letterSpacing: '-.02em' }}>{s.n}</div>
-                <div style={{ fontSize: 12, lineHeight: 1.45, marginTop: 4 }}>{s.label}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.45, marginTop: 4, color: 'var(--p-ink-soft)' }}>{s.label}</div>
               </div>
             ))}
           </div>

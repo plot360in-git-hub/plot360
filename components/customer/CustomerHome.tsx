@@ -121,138 +121,146 @@ export function CustomerHome({
 
   return (
     <div className="p360" style={{ minHeight: '100vh' }}>
-      {/* Poster header — design_handoff_plot360_redesign, "Plot360
-          Customer.dc.html", "home" screen. The top row (PLOT360 wordmark +
-          identity) is the only nav-like element the mock has on this
-          screen at all — there's no separate header bar. The identity
-          text now links to /profile/edit, and a small "Log out" sits next
-          to it: neither is in the literal mock (which draws no account
-          actions anywhere), but with the persistent CustomerHeader removed
-          from /dashboard (app/dashboard/layout.tsx), logging out needs
-          *some* home — this is the least intrusive one, kept in the same
-          small-caps style as the identity text it sits beside. */}
-      <div style={{ background: 'var(--color-accent)', color: 'var(--color-bg)', padding: '14px 20px 22px' }}>
+      {/* Hero card — design_handoff_plot360_redesign, "Plot360
+          Customer.dc.html", "home" screen, reworked into a rounded
+          pastel-gradient card (Redesign 2026-09, follow-up round 7 —
+          Plot asked to move off the flat red/orange "Modernist" look
+          toward the soft gradient card style on facebook.com/developers).
+          This is a deliberate, flagged departure from the literal mock
+          in two ways: (1) the mock's edge-to-edge solid-red band is now
+          an inset, rounded card on the plain page background, and (2)
+          the Schedule/WhatsApp/Call row — a separate full-bleed element
+          below the poster in the mock — is folded into the bottom of
+          this same card as three soft pill buttons, since a hard-
+          divided, edge-to-edge row doesn't sit inside a rounded card the
+          way it sat between two flat bands. Everything inside switches
+          from white-on-solid-color text to dark-on-pale-gradient (see
+          each element below) to stay readable against the new
+          background. The top row (PLOT360 wordmark + identity) is still
+          the only nav-like element here — see the note on Log out
+          further down for why it's still there. */}
+      <div style={{ padding: '16px 16px 0' }}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 17, letterSpacing: '-.02em' }}>
-              PLOT<span>360</span>
+          <div
+            style={{
+              background: 'var(--gradient-hero)',
+              color: 'var(--color-text)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px 22px 22px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 17, letterSpacing: '-.02em' }}>
+                PLOT<span style={{ color: 'var(--color-accent-700)' }}>360</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                <Link href="/profile/edit" style={{ color: 'var(--color-text)', textDecoration: 'none' }}>
+                  {firstName || 'there'}
+                  {maskedPhone ? ` · ${maskedPhone}` : ''}
+                </Link>
+                {/* Redesign 2026-09 (follow-up, round 2) — the mock draws
+                    no account actions anywhere on this screen; this and
+                    the identity link above exist only because
+                    CustomerHeader (which used to carry Log out) no
+                    longer wraps /dashboard — see app/dashboard/layout.tsx. */}
+                <form action={logOut}>
+                  <button
+                    type="submit"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--p-ink-soft)',
+                      fontSize: 10,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Log out
+                  </button>
+                </form>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              <Link href="/profile/edit" style={{ color: 'var(--color-bg)', textDecoration: 'none' }}>
-                {firstName || 'there'}
-                {maskedPhone ? ` · ${maskedPhone}` : ''}
-              </Link>
-              <form action={logOut}>
-                <button
-                  type="submit"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    color: 'var(--color-bg)',
-                    opacity: 0.75,
-                    fontSize: 10,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Log out
-                </button>
-              </form>
-            </div>
-          </div>
 
-          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 56, lineHeight: 0.92, letterSpacing: '-.04em', marginTop: 24 }}>
-            {totalCredits}
-          </div>
-          <div style={{ fontSize: 12.5, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4 }}>Site visits in credit</div>
-          {expiringSoon && expiry && (
-            <p style={{ fontSize: 12.5, background: 'rgba(0,0,0,0.15)', display: 'inline-block', padding: '3px 10px', marginTop: 10 }}>
-              Expiring in {daysUntil(expiry)} days
+            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 56, lineHeight: 0.92, letterSpacing: '-.04em', marginTop: 24 }}>
+              {totalCredits}
+            </div>
+            <div style={{ fontSize: 12.5, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4, color: 'var(--p-ink-soft)' }}>
+              Site visits in credit
+            </div>
+            {expiringSoon && expiry && (
+              <p
+                style={{
+                  fontSize: 12.5,
+                  background: 'rgba(255,255,255,.6)',
+                  color: 'var(--color-accent-700)',
+                  fontWeight: 600,
+                  display: 'inline-block',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  marginTop: 10,
+                }}
+              >
+                Expiring in {daysUntil(expiry)} days
+              </p>
+            )}
+
+            <div style={{ height: 1, background: 'rgba(32,30,29,.14)', margin: '16px 0 14px' }} />
+            <p style={{ fontSize: 13, lineHeight: 1.5, maxWidth: '23em', color: 'var(--p-ink-soft)' }}>
+              Your land is checked on the ground by a Plot360 agent. You send a name and a payment; a representative
+              does the rest on WhatsApp.
             </p>
-          )}
 
-          <div style={{ height: 2, background: 'var(--color-bg)', opacity: 0.5, margin: '16px 0 14px' }} />
-          <p style={{ fontSize: 13, lineHeight: 1.5, maxWidth: '23em' }}>
-            Your land is checked on the ground by a Plot360 agent. You send a name and a payment; a representative
-            does the rest on WhatsApp.
-          </p>
+            <Link
+              href="/properties/new"
+              className="btn btn-primary btn-block"
+              style={{ minHeight: 48, fontSize: 14, marginTop: 16, textDecoration: 'none', justifyContent: 'center' }}
+            >
+              Register a property →
+            </Link>
 
-          <Link
-            href="/properties/new"
-            className="btn btn-block"
-            style={{ background: 'var(--color-bg)', color: 'var(--color-accent-700)', minHeight: 48, fontSize: 14, marginTop: 16, textDecoration: 'none' }}
-          >
-            Register a property →
-          </Link>
-        </div>
-      </div>
-
-      {/* Schedule / WhatsApp / Call toolbar — always visible, separate
-          from "Register a property" above (see comment on scheduleHref).
-          Redesign 2026-09 (follow-up, round 5) — on a wide (desktop)
-          viewport this row used to run flush to the browser's edges while
-          everything above and below it (the poster's own content, the
-          "Register a property" button, "Properties under watch") sits in
-          a centered 640px column — so it looked stretched and out of line
-          with the button directly above it. Wrapped in the same
-          maxWidth:640/margin:auto box as the rest of the page so its
-          edges land exactly under "Register a property →"; on a phone-
-          width screen this is a no-op (640px is wider than the viewport,
-          same full-bleed look the mock draws). */}
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <div style={{ display: 'flex' }}>
-          <Link
-            href={scheduleHref}
-            className="btn"
-            style={{
-              flex: 1,
-              justifyContent: 'flex-start',
-              minHeight: 48,
-              fontSize: 12.5,
-              borderBottom: '2px solid var(--color-divider)',
-              borderRight: '2px solid var(--color-divider)',
-              textDecoration: 'none',
-              color: 'var(--color-text)',
-            }}
-          >
-            Schedule a visit
-          </Link>
-          <a
-            href={WA_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn"
-            style={{
-              flex: 1,
-              justifyContent: 'flex-start',
-              minHeight: 48,
-              fontSize: 12.5,
-              borderBottom: '2px solid var(--color-divider)',
-              borderRight: '1px solid var(--color-divider)',
-              gap: 8,
-              color: 'var(--color-text)',
-              textDecoration: 'none',
-            }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
-            </svg>
-            WhatsApp us
-          </a>
-          <a
-            href={TEL_LINK}
-            className="btn btn-icon"
-            style={{ flex: 'none', width: 58, minHeight: 48, borderBottom: '2px solid var(--color-divider)', color: 'var(--color-accent)' }}
-            aria-label="Call Plot360"
-            title={DISPLAY_PHONE}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
-            </svg>
-          </a>
+            {/* Redesign 2026-09 (follow-up, round 7) — folded in from the
+                mock's separate full-bleed "Schedule a visit | WhatsApp us
+                | Call" row (see round-5 comment history for why that used
+                to be its own maxWidth:640 block below the poster) — now
+                three soft pill buttons inside the card instead, since the
+                card is rounded and no longer edge-to-edge. Destinations
+                unchanged (see scheduleHref above). */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <Link
+                href={scheduleHref}
+                className="btn"
+                style={{ flex: '1 1 140px', background: 'rgba(255,255,255,.55)', color: 'var(--color-text)', textDecoration: 'none' }}
+              >
+                Schedule a visit
+              </Link>
+              <a
+                href={WA_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn"
+                style={{ flex: '1 1 140px', background: 'rgba(255,255,255,.55)', color: 'var(--color-text)', gap: 8, textDecoration: 'none' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+                </svg>
+                WhatsApp us
+              </a>
+              <a
+                href={TEL_LINK}
+                className="btn btn-icon"
+                style={{ flex: 'none', width: 48, background: 'rgba(255,255,255,.55)', color: 'var(--color-accent-700)' }}
+                aria-label="Call Plot360"
+                title={DISPLAY_PHONE}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 

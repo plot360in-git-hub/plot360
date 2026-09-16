@@ -109,30 +109,61 @@ export function ConfirmationScreen({
   const c = content(variant);
   const isAccent = c.bg === 'accent';
 
+  // Redesign 2026-09 (follow-up, round 7) — was a full-bleed solid-color
+  // band (accent for "done"/celebratory screens, dark ink for the
+  // bank-transfer "awaiting confirmation" one). Accent branch now uses the
+  // same inset var(--gradient-hero) card + dark text treatment as the Home
+  // poster, per Plot's facebook.com/developers reference. The ink branch's
+  // colors are unchanged (still solid dark, still white text — nothing
+  // there was coupled to the accent color) but it's inset and rounded too,
+  // so both "done" variants read as the same kind of card, just two moods.
   return (
     <div className="p360" style={{ minHeight: '100vh' }}>
-      <div
-        style={{
-          background: isAccent ? 'var(--color-accent)' : 'var(--color-text)',
-          color: 'var(--color-bg)',
-          padding: '26px 22px 24px',
-        }}
-      >
+      <div style={{ padding: '16px 16px 0' }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', opacity: 0.8 }}>{c.kicker}</div>
           <div
             style={{
-              fontFamily: 'var(--font-heading)',
-              fontWeight: 800,
-              fontSize: 30,
-              lineHeight: 1.06,
-              letterSpacing: '-.03em',
-              marginTop: 12,
+              background: isAccent ? 'var(--gradient-hero)' : 'var(--color-text)',
+              color: isAccent ? 'var(--color-text)' : 'var(--color-bg)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '26px 22px 24px',
             }}
           >
-            {c.title}
+            <div
+              style={{
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: isAccent ? 'var(--color-accent-700)' : 'var(--color-bg)',
+                opacity: isAccent ? 1 : 0.8,
+              }}
+            >
+              {c.kicker}
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontWeight: 800,
+                fontSize: 30,
+                lineHeight: 1.06,
+                letterSpacing: '-.03em',
+                marginTop: 12,
+              }}
+            >
+              {c.title}
+            </div>
+            <p
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                marginTop: 12,
+                maxWidth: '24em',
+                color: isAccent ? 'var(--p-ink-soft)' : undefined,
+              }}
+            >
+              {c.body}
+            </p>
           </div>
-          <p style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 12, maxWidth: '24em' }}>{c.body}</p>
         </div>
       </div>
 
@@ -156,7 +187,14 @@ export function ConfirmationScreen({
       </div>
 
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 0' }}>
-        <div style={{ background: 'var(--color-surface)', padding: 14, borderLeft: '3px solid var(--color-accent)' }}>
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            padding: 14,
+            borderLeft: '3px solid var(--color-accent)',
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
           <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--p-ink-soft)' }}>
             WhatsApp sent to {maskedPhone ?? 'your number'}
           </div>

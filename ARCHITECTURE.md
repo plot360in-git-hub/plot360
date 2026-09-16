@@ -1032,3 +1032,93 @@ set / Report", lines ~157–163) directly under their own bar segment;
 this codebase had one caption below the whole bar naming only the
 current stage. Restyled to label each segment individually, matching
 the mock and Plot's own screenshot of this row.
+
+## 21. Redesign 2026-09 (round 7) — off the red/orange accent: teal, rounded
+##     corners, gradient hero cards
+
+Plot sent a screenshot of the hero banner on facebook.com/developers (a
+soft pastel gradient — pink → lavender → mint — with dark navy text and
+rounded corners) and asked to move the app off its orange/red accent
+color toward that look. Asked to scope it via two questions: how far
+this should go, and which color should replace red/orange. Plot chose
+the largest-effort option — a full redesign to match the aesthetic
+(rounded corners app-wide, gradients on key surfaces, a lighter/darker
+text balance instead of white-on-solid-color) — and a teal/mint solid
+color for everywhere a flat accent is still needed.
+
+**Token changes (`styles/plot360-redesign.css`).** `--color-accent` and
+its `-100/-600/-700/-800` shades moved from a set of reds
+(`#ec3013`/`#fff2ef`/`#dd2b0f`/`#ae1800`/`#7c1405`) to Tailwind's
+teal-500/100/600/700/800, chosen so every existing rule that reads one
+of these tokens — `.btn-primary`, `.tag-accent`, focus rings, link
+color, the HOW_IT_WORKS numerals, every small badge/dot/square across
+admin, agent and customer screens — repaints automatically with no
+code changes. Added `--gradient-hero`, a teal-forward pastel gradient
+for the app's few "hero card" surfaces (kept teal rather than copying
+the reference's literal pink, so it reads as this app's own palette).
+`--radius-md` went from `0` to `14px` and a new `--radius-lg: 24px` was
+added for the big hero cards — a deliberate, flagged reversal of the
+original "Modernist" mock's own zero-radius fidelity notes (see this
+file's header comment in the CSS), since Plot's ask was specifically
+for the rounded, soft aesthetic in the reference screenshot.
+
+**Real bug found and fixed along the way: `--p-alert`.** `--p-alert`
+(error/warning/destructive text — banned/flagged/late indicators in
+admin, every form's validation message) was defined as
+`var(--color-accent-700)`. That was harmless while the accent was red
+(error text and "darkest accent" happened to be the same red), but
+would have silently turned every error message teal the moment the
+accent changed — a real correctness bug, not a styling one. Gave
+`--p-alert` its own fixed value (`#dc2626`) independent of the accent,
+verified safe against all ~35 usages across the app (`UsersTable.tsx`,
+`PaymentDetail.tsx`, every `{error && <p style={{color:'var(--p-alert)'}}>}`
+pattern in auth/customer/admin/agent forms). The same coupling existed
+in `.p360 a:hover`, which read `--p-alert` for "hover = darker accent"
+— now points at `--color-accent-700` directly, since leaving it on the
+newly-independent `--p-alert` would have made every hovered link turn
+red instead of a darker teal.
+
+**Hero-card surfaces converted to the gradient treatment.** Three
+surfaces that were solid-accent-colored bands got rebuilt as inset,
+rounded `var(--gradient-hero)` cards with dark text, each requiring
+manually flipping every child element's color assumptions (white-on-
+dark → dark-on-pale):
+- `components/customer/CustomerHome.tsx` — the Home dashboard poster.
+  Folded the previously-separate Schedule/WhatsApp/Call toolbar row
+  into the card itself as translucent-white pill buttons, rather than
+  leaving it as a full-bleed row below — a flagged departure from the
+  mock's literal layout, in service of the new aesthetic direction Plot
+  explicitly asked for.
+- `components/customer/ConfirmationScreen.tsx` — the "done" screens.
+  The celebratory/complete variant (payment received, visit scheduled)
+  now uses the gradient card; the bank-transfer "awaiting confirmation"
+  variant keeps its original solid dark-ink background and white text
+  (nothing there was coupled to the accent color) but is now inset and
+  rounded too, so both variants read as the same family of card.
+- `components/marketing/LandingPage.tsx` — the public landing page
+  hero. Converted the primary CTA from an inverse button (light bg,
+  accent text) to a solid `btn-primary`; the two outline CTAs from
+  light-border/light-text to `var(--color-divider)`/`var(--color-text)`;
+  the "Open your account" link from `nav-link-inverse` to plain
+  `nav-link`; and the stats-row divider / placeholder-image border from
+  the translucent on-dark rule to `var(--color-divider)`. The page's
+  separate dark Contact section (`background: var(--color-text)`) was
+  left untouched — it was never accent-colored, so it's outside this
+  round's scope.
+
+**Deliberately out of scope this round: `components/agent/
+AgentCaptureScreen.tsx`.** Its own poster header is visually similar to
+the customer Home poster but serves field agents, not customers, and
+was left as a solid-teal band — it picks up the new accent color
+automatically via the token change, but was not converted to the
+gradient/rounded-card treatment. Flagging this explicitly rather than
+silently skipping it; extending the same treatment there is a
+reasonable follow-up if wanted.
+
+**Not touched, verified safe to leave:** small decorative badges/dots/
+squares that use `var(--color-accent)` as a flat background (admin
+dashboard indicators, submission/verification detail screens, the
+landing page's "sent" confirmation square, header notification-count
+badges) — these are bullet-style markers, not surfaces, and repaint
+teal automatically via the token change with no structural work
+needed.
