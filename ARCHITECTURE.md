@@ -1122,3 +1122,43 @@ landing page's "sent" confirmation square, header notification-count
 badges) — these are bullet-style markers, not surfaces, and repaint
 teal automatically via the token change with no structural work
 needed.
+
+## 22. Redesign 2026-09 (round 8) — landing page header/nav polish, section
+##     order, service cards, plan price footnote
+
+Plot tested the redesigned marketing landing page directly and reported
+five small issues:
+
+**"Log in" was rendering as a plain text link next to two real
+buttons.** The header had `Log in` as a `nav-link` (plain underlined
+text) beside `Sign up` and `WhatsApp`, both real `.btn`s — it read as
+missing a button rather than being one. Gave it the same outline-button
+treatment as the hero's own secondary CTAs (`border: var(--color-
+divider)`, `color: var(--color-text)`) so it reads as a third button,
+not an afterthought.
+
+**A rule between the PLOT360 logo row and the menu row.** The `<nav>`
+had a `borderTop: 1px solid var(--color-divider)` Plot didn't want —
+removed.
+
+**"How it works" should come before "Services".** Swapped both the
+page section order (`#how` now precedes `#services`) and the `MENU`
+array that drives the top nav links, so the two stay in sync. Anchor
+links (`href="#how"` from a service card's "See plans →") still resolve
+correctly regardless of section order.
+
+**Services should be individual cards with gaps, not a bordered
+table.** The old grid shared borders between cells (`borderLeft` on the
+container, `borderRight`/`borderBottom` on each cell, `gap: 0`) — this
+was the "Modernist" mock's literal look, but read as one bordered table
+rather than seven cards. Switched to the same `.card` class the rest of
+the app now uses (bordered, rounded via `--radius-md`, `--color-
+surface` background) with a real `gap: 18` between cards — consistent
+with the rounded-corners direction from round 7.
+
+**Plan prices needed a conditions asterisk.** Added a small `*` after
+each plan's price (₹2,499*, ₹8,999*) and extended the footnote below
+the plans grid: "Prices shown are indicative. Encumbrance certificate
+available on request at registration. *Price may change based on plot
+size and other factors." — the asterisk and the footnote sentence are
+new; the original two sentences are unchanged.

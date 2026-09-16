@@ -20,10 +20,12 @@ const archivo = Archivo({
   display: 'swap',
 });
 
+// Plot asked for "How it works" to come before "Services", both in the
+// page order and in this top menu, so the two stay in sync.
 const MENU = [
   { label: 'Home', href: '#home' },
-  { label: 'Services', href: '#services' },
   { label: 'How it works', href: '#how' },
+  { label: 'Services', href: '#services' },
   { label: 'FAQs', href: '#faqs' },
   { label: 'Contact', href: '#contact' },
 ];
@@ -175,7 +177,15 @@ export function LandingPage() {
           </a>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <Link href="/login" className="nav-link" style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 10px', fontSize: 13, whiteSpace: 'nowrap' }}>
+            {/* Plot pointed out Log in was rendering as a plain text link
+                next to two real buttons — given its own button treatment
+                (outline, matching the hero's secondary CTAs) so it reads
+                as a third action, not an afterthought. */}
+            <Link
+              href="/login"
+              className="btn"
+              style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text)', minHeight: 44, fontSize: 12.5, padding: '0 14px', whiteSpace: 'nowrap' }}
+            >
               Log in
             </Link>
             <Link href="/signup" className="btn btn-secondary" style={{ minHeight: 44, fontSize: 12.5, padding: '0 14px', whiteSpace: 'nowrap' }}>
@@ -186,7 +196,9 @@ export function LandingPage() {
             </a>
           </div>
         </div>
-        <nav style={{ borderTop: '1px solid var(--color-divider)', maxWidth: 1180, margin: '0 auto', padding: '0 12px', display: 'flex', overflowX: 'auto' }}>
+        {/* Plot asked for the rule between the PLOT360 logo row and this
+            menu row to go — removed the borderTop that used to sit here. */}
+        <nav style={{ maxWidth: 1180, margin: '0 auto', padding: '0 12px', display: 'flex', overflowX: 'auto' }}>
           {MENU.map((m) => (
             <a key={m.href} href={m.href} className="nav-link" style={{ padding: '12px 12px', fontSize: 13, whiteSpace: 'nowrap' }}>
               {m.label}
@@ -300,33 +312,12 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ---------- Services ---------- */}
-      <section id="services" style={{ maxWidth: 1180, margin: '0 auto', padding: '58px 22px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', borderBottom: '2px solid var(--color-divider)', paddingBottom: 12 }}>
-          <h2 style={{ fontSize: 'clamp(26px, 3.6vw, 36px)', letterSpacing: '-.03em' }}>Services</h2>
-          <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)' }}>Seven services for owners who live away from their plot</div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 0, borderLeft: '1px solid var(--color-divider)' }}>
-          {SERVICES.map((s) => (
-            <div key={s.n} style={{ borderRight: '1px solid var(--color-divider)', borderBottom: '1px solid var(--color-divider)', padding: '22px 22px 26px' }}>
-              <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, color: 'var(--color-accent-700)' }}>{s.n}</div>
-              <h3 style={{ fontSize: 19, letterSpacing: '-.01em', margin: '9px 0 0' }}>{s.title}</h3>
-              <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--p-ink-soft)', margin: '7px 0 0' }}>{s.body}</p>
-              <div style={{ marginTop: 13, paddingTop: 11, borderTop: '1px solid var(--color-divider)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 12, color: s.priced ? 'var(--color-accent-700)' : 'var(--p-ink-soft)', fontWeight: 600 }}>
-                  {s.priced ? 'From ₹2,499' : 'Price on request'}
-                </div>
-                <a href={s.priced ? '#how' : '#contact'} className="btn btn-ghost" style={{ minHeight: 44, fontSize: 12.5, padding: '0 10px' }}>
-                  {s.priced ? 'See plans →' : 'Contact support →'}
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ---------- How it works ---------- */}
-      <section id="how" style={{ maxWidth: 1180, margin: '0 auto', padding: '52px 22px 0' }}>
+      {/* ---------- How it works ----------
+          Redesign 2026-09 (follow-up, round 8) — Plot asked for this to
+          come before Services, both here and in the top menu (see MENU
+          above), so people see how the service works before what it
+          costs. */}
+      <section id="how" style={{ maxWidth: 1180, margin: '0 auto', padding: '58px 22px 0' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', borderBottom: '2px solid var(--color-divider)', paddingBottom: 12 }}>
           <h2 style={{ fontSize: 'clamp(26px, 3.6vw, 36px)', letterSpacing: '-.03em' }}>How it works</h2>
           <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)' }}>You fill in one field. We do the rest.</div>
@@ -343,13 +334,19 @@ export function LandingPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 18, marginTop: 30 }}>
           {PLANS.map((p) => (
-            <div key={p.name} style={{ border: p.border, padding: 22 }}>
+            <div key={p.name} style={{ border: p.border, borderRadius: 'var(--radius-md)', padding: 22 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 19 }}>{p.name}</div>
                 {p.tag && <span className="tag tag-accent">{p.tag}</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 12 }}>
-                <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 32, letterSpacing: '-.02em', color: 'var(--color-accent-700)' }}>{p.price}</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 32, letterSpacing: '-.02em', color: 'var(--color-accent-700)' }}>
+                  {p.price}
+                  {/* Redesign 2026-09 (follow-up, round 8) — Plot asked for a
+                      small asterisk marking the price as conditional; see
+                      the footnote below the plans grid for what it points to. */}
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>*</span>
+                </div>
                 <div style={{ fontSize: 13, color: 'var(--p-ink-soft)', textDecoration: 'line-through' }}>{p.was}</div>
               </div>
               <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--p-ink-soft)', margin: '9px 0 0' }}>{p.body}</p>
@@ -360,7 +357,37 @@ export function LandingPage() {
           ))}
         </div>
         <div style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginTop: 12 }}>
-          Prices shown are indicative. Encumbrance certificate available on request at registration.
+          Prices shown are indicative. Encumbrance certificate available on request at registration. *Price may change based on plot size and other factors.
+        </div>
+      </section>
+
+      {/* ---------- Services ----------
+          Redesign 2026-09 (follow-up, round 8) — Plot asked to drop the
+          shared-border "table" look (one bordered grid with dividers
+          between cells) in favor of individual cards with real gaps
+          between them, using the same .card class (bordered, rounded,
+          var(--color-surface) background) the rest of the app now uses. */}
+      <section id="services" style={{ maxWidth: 1180, margin: '0 auto', padding: '52px 22px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', borderBottom: '2px solid var(--color-divider)', paddingBottom: 12 }}>
+          <h2 style={{ fontSize: 'clamp(26px, 3.6vw, 36px)', letterSpacing: '-.03em' }}>Services</h2>
+          <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)' }}>Seven services for owners who live away from their plot</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 18, marginTop: 20 }}>
+          {SERVICES.map((s) => (
+            <div key={s.n} className="card" style={{ padding: '22px 22px 26px' }}>
+              <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, color: 'var(--color-accent-700)' }}>{s.n}</div>
+              <h3 style={{ fontSize: 19, letterSpacing: '-.01em', margin: '9px 0 0' }}>{s.title}</h3>
+              <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--p-ink-soft)', margin: '7px 0 0' }}>{s.body}</p>
+              <div style={{ marginTop: 13, paddingTop: 11, borderTop: '1px solid var(--color-divider)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, color: s.priced ? 'var(--color-accent-700)' : 'var(--p-ink-soft)', fontWeight: 600 }}>
+                  {s.priced ? 'From ₹2,499' : 'Price on request'}
+                </div>
+                <a href={s.priced ? '#how' : '#contact'} className="btn btn-ghost" style={{ minHeight: 44, fontSize: 12.5, padding: '0 10px' }}>
+                  {s.priced ? 'See plans →' : 'Contact support →'}
+                </a>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
