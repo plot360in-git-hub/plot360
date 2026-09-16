@@ -933,3 +933,34 @@ The "done" screen after confirming a scheduled visit already goes to
 That was fixed in the previous round; Plot's screenshot describing a
 "Back to home" button with a separate "Open WhatsApp" button was from
 testing before that fix landed.
+
+## 19. Redesign 2026-09 (round 5) — Home screen layout/typography fixes
+
+Plot tested `/dashboard` on an actual desktop browser (not a phone-width
+viewport) and caught two real layout bugs the mock, drawn phone-only,
+never would have surfaced:
+
+**The Schedule/WhatsApp/Call toolbar ran flush to the browser's edges
+while everything else on the page sits in a centered 640px column.**
+Both the poster above it and "Properties under watch" below it wrap
+their content in `maxWidth: 640, margin: '0 auto'`; this row was copied
+straight from the mock's markup, which has no such wrapper because the
+mock's canvas *is* phone-width — full-bleed there just means "edge of
+the screen," which is also "640px, centered" once the screen is wider
+than 640px. On an actual desktop window the row stretched across the
+whole viewport, visibly wider than and misaligned with the "Register a
+property →" button directly above it. Wrapped it in the same
+`maxWidth: 640, margin: '0 auto'` box — on a phone-width screen this is
+a no-op (640px exceeds the viewport, so it still renders edge-to-edge),
+on desktop it now lines up exactly under the button above it.
+
+**"Properties under watch" was rendering as a large bold heading next
+to a small unrelated number.** It was marked up as an `<h2>`, which
+this codebase's global styles render large and bold by default — but
+the mock (`design/Plot360 Customer.dc.html`, lines 141–144) draws it as
+a 10px uppercase label, the exact same size, weight and color as the
+property count sitting next to it; the two are a matched pair of small
+eyebrow-style labels sharing a row, not a heading with a stray number.
+Restyled to match — also dropped the count's `padStart(2, '0')`
+zero-padding (e.g. showing "3" instead of "03"), which the mock doesn't
+do either.

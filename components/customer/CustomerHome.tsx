@@ -158,57 +158,69 @@ export function CustomerHome({
       </div>
 
       {/* Schedule / WhatsApp / Call toolbar — always visible, separate
-          from "Register a property" above (see comment on scheduleHref). */}
-      <div style={{ display: 'flex' }}>
-        <Link
-          href={scheduleHref}
-          className="btn"
-          style={{
-            flex: 1,
-            justifyContent: 'flex-start',
-            minHeight: 48,
-            fontSize: 12.5,
-            borderBottom: '2px solid var(--color-divider)',
-            borderRight: '2px solid var(--color-divider)',
-            textDecoration: 'none',
-            color: 'var(--color-text)',
-          }}
-        >
-          Schedule a visit
-        </Link>
-        <a
-          href={WA_LINK}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-          style={{
-            flex: 1,
-            justifyContent: 'flex-start',
-            minHeight: 48,
-            fontSize: 12.5,
-            borderBottom: '2px solid var(--color-divider)',
-            borderRight: '1px solid var(--color-divider)',
-            gap: 8,
-            color: 'var(--color-text)',
-            textDecoration: 'none',
-          }}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
-          </svg>
-          WhatsApp us
-        </a>
-        <a
-          href={TEL_LINK}
-          className="btn btn-icon"
-          style={{ flex: 'none', width: 58, minHeight: 48, borderBottom: '2px solid var(--color-divider)', color: 'var(--color-accent)' }}
-          aria-label="Call Plot360"
-          title={DISPLAY_PHONE}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
-          </svg>
-        </a>
+          from "Register a property" above (see comment on scheduleHref).
+          Redesign 2026-09 (follow-up, round 5) — on a wide (desktop)
+          viewport this row used to run flush to the browser's edges while
+          everything above and below it (the poster's own content, the
+          "Register a property" button, "Properties under watch") sits in
+          a centered 640px column — so it looked stretched and out of line
+          with the button directly above it. Wrapped in the same
+          maxWidth:640/margin:auto box as the rest of the page so its
+          edges land exactly under "Register a property →"; on a phone-
+          width screen this is a no-op (640px is wider than the viewport,
+          same full-bleed look the mock draws). */}
+      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ display: 'flex' }}>
+          <Link
+            href={scheduleHref}
+            className="btn"
+            style={{
+              flex: 1,
+              justifyContent: 'flex-start',
+              minHeight: 48,
+              fontSize: 12.5,
+              borderBottom: '2px solid var(--color-divider)',
+              borderRight: '2px solid var(--color-divider)',
+              textDecoration: 'none',
+              color: 'var(--color-text)',
+            }}
+          >
+            Schedule a visit
+          </Link>
+          <a
+            href={WA_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+            style={{
+              flex: 1,
+              justifyContent: 'flex-start',
+              minHeight: 48,
+              fontSize: 12.5,
+              borderBottom: '2px solid var(--color-divider)',
+              borderRight: '1px solid var(--color-divider)',
+              gap: 8,
+              color: 'var(--color-text)',
+              textDecoration: 'none',
+            }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+            </svg>
+            WhatsApp us
+          </a>
+          <a
+            href={TEL_LINK}
+            className="btn btn-icon"
+            style={{ flex: 'none', width: 58, minHeight: 48, borderBottom: '2px solid var(--color-divider)', color: 'var(--color-accent)' }}
+            aria-label="Call Plot360"
+            title={DISPLAY_PHONE}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>
+          </a>
+        </div>
       </div>
 
       {/* Properties under watch */}
@@ -217,12 +229,22 @@ export function CustomerHome({
             watch" header just shows a count next to the heading (no "+ Add
             property" link — that's what the poster header's "Register a
             property" button above is for); the extra link here didn't
-            match and was removed. */}
+            match and was removed.
+            Redesign 2026-09 (follow-up, round 5) — this heading was an
+            <h2>, which this codebase's global styles render large and
+            bold; the mock (design/Plot360 Customer.dc.html, lines ~141-
+            144) draws it as a small 10px uppercase label, the same size/
+            weight/color as the count next to it — not a heading at all,
+            just two matching eyebrow-style labels sharing a row. Restyled
+            to match exactly instead of looking like a bolded section
+            title next to an unrelated small number. */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18 }}>Properties under watch</h2>
-          <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 10, color: 'var(--p-ink-soft)' }}>
-            {String(properties.length).padStart(2, '0')}
-          </span>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>
+            Properties under watch
+          </div>
+          <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 10, color: 'var(--p-ink-soft)' }}>
+            {properties.length}
+          </div>
         </div>
 
         {properties.length === 0 && (
