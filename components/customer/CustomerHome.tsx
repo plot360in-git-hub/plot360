@@ -27,16 +27,49 @@ const HOW_IT_WORKS = [
   { n: '04', title: 'Report lands here', body: 'Photos, video and a downloadable PDF.' },
 ];
 
-function visitChips(totalPurchased: number, jobs: JobRow[]): Array<'Done' | 'Set' | 'Unused'> {
+// Redesign 2026-09 (follow-up, round 6) — Plot flagged the expanded
+// property card on Home: clicking a completed visit's chip should open
+// that visit's own report, and the card was missing any way to reach a
+// report at all. Chips now carry the underlying job (state + id) instead
+// of just a display label, so a "Done" chip can link straight to
+// `/properties/[id]/visit-report/[jobId]` — a real interaction the mock
+// itself doesn't have (its chips are static, non-clickable demo data;
+// design_handoff_plot360_redesign, "Plot360 Customer.dc.html", visits()),
+// but Plot asked for it directly and it maps naturally onto data we
+// already have per visit.
+type VisitChip = { state: 'Done' | 'Set' | 'Unused'; jobId: string | null };
+
+function visitChips(totalPurchased: number, jobs: JobRow[]): VisitChip[] {
   const count = Math.min(Math.max(totalPurchased, 0), 8);
-  const chips: Array<'Done' | 'Set' | 'Unused'> = [];
+  const chips: VisitChip[] = [];
   for (let i = 1; i <= count; i++) {
     const job = jobs.find((j) => j.visit_number === i);
-    if (job && ['approved', 'ec_pending'].includes(job.status)) chips.push('Done');
-    else if (job && ['assigned', 'accepted', 'submitted', 'rejected'].includes(job.status)) chips.push('Set');
-    else chips.push('Unused');
+    if (job && ['approved', 'ec_pending'].includes(job.status)) chips.push({ state: 'Done', jobId: job.id });
+    else if (job && ['assigned', 'accepted', 'submitted', 'rejected'].includes(job.status)) chips.push({ state: 'Set', jobId: null });
+    else chips.push({ state: 'Unused', jobId: null });
   }
   return chips;
+}
+
+// The mock's expanded card leads with a one-line status ("Visit 2 report
+// ready", "Representative collecting documents" — same file, `props`
+// array) above the visit chips; this reads it off the real job/property
+// state instead of the mock's fixed demo strings. Report-ready takes
+// priority since it's the most actionable state (something new to look
+// at), same as the mock's own example properties.
+function propertyStatusLine(p: PropertyRow, jobs: JobRow[]): string | null {
+  if (p.status === 'rejected') return null; // rejection_reason is already shown separately
+  const reportJobs = jobs.filter((j) => j.visit_number && ['approved', 'ec_pending'].includes(j.status));
+  if (reportJobs.length > 0) {
+    const latest = reportJobs.reduce((a, b) => ((b.visit_number ?? 0) > (a.visit_number ?? 0) ? b : a));
+    return `Visit ${latest.visit_number} report ready`;
+  }
+  const inProgress = jobs.find((j) => j.visit_number && ['assigned', 'accepted'].includes(j.status));
+  if (inProgress) return `Visit ${inProgress.visit_number} scheduled`;
+  const underReview = jobs.find((j) => j.visit_number && j.status === 'submitted');
+  if (underReview) return `Visit ${underReview.visit_number} under review`;
+  if (p.status === 'pending') return 'Representative collecting documents';
+  return null;
 }
 
 export function CustomerHome({
@@ -304,68 +337,125 @@ export function CustomerHome({
                       <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginBottom: 10 }}>
                         {p.street_address || 'No address yet'}
                       </p>
+                      {/* Redesign 2026-09 (follow-up, round 6) — the mock
+                          (design/Plot360 Customer.dc.html, lines ~157-163)
+                          labels each of the 4 track segments individually
+                          ("Registered / Verified / Visit set / Report",
+                          all shown at once) rather than one caption below
+                          the whole bar for just the current stage — fixed
+                          to match, since Plot's own screenshot of this
+                          exact row shows all four. */}
                       <div style={{ display: 'flex', gap: 4 }}>
                         {MILESTONES.map((m, i) => (
-                          <div
-                            key={m}
-                            title={m}
-                            style={{
-                              flex: 1,
-                              height: 4,
-                              background: i < stage ? 'var(--color-accent)' : 'var(--color-divider)',
-                            }}
-                          />
+                          <div key={m} style={{ flex: 1 }}>
+                            <div
+                              title={m}
+                              style={{
+                                height: 4,
+                                background: i < stage ? 'var(--color-accent)' : 'var(--color-divider)',
+                              }}
+                            />
+                            <div
+                              style={{
+                                fontSize: 8,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em',
+                                marginTop: 4,
+                                lineHeight: 1.2,
+                                color: i < stage ? 'var(--color-text)' : 'var(--p-ink-muted)',
+                              }}
+                            >
+                              {m}
+                            </div>
+                          </div>
                         ))}
                       </div>
-                      <p style={{ fontSize: 11.5, color: 'var(--p-ink-muted)', marginTop: 6 }}>{MILESTONES[stage - 1] ?? 'Registered'}</p>
                     </div>
                   </div>
                 </button>
 
-                {isOpen && (
-                  <div style={{ background: 'var(--color-neutral-900)', color: 'var(--color-bg)', padding: 16 }}>
-                    {p.status === 'rejected' && p.rejection_reason && (
-                      <p style={{ fontSize: 12.5, marginBottom: 12, color: '#ffb3a3' }}>{p.rejection_reason}</p>
-                    )}
-                    {totalPurchased > 0 && (
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-                        {visitChips(totalPurchased, jobs).map((chip, i) => (
-                          <span
-                            key={i}
-                            className="tag"
-                            style={{
-                              background:
-                                chip === 'Done' ? 'var(--color-accent)' : chip === 'Set' ? 'var(--p-on-dark-rule)' : 'transparent',
-                              border: chip === 'Unused' ? '1px solid var(--p-on-dark-rule)' : 'none',
-                              color: 'var(--color-bg)',
-                            }}
+                {isOpen && (() => {
+                  const statusLine = propertyStatusLine(p, jobs);
+                  // Redesign 2026-09 (follow-up, round 6) — reused below
+                  // for the primary "Open visit N report" button, so it's
+                  // computed once alongside the status line rather than
+                  // twice.
+                  const reportJobs = jobs.filter((j) => j.visit_number && ['approved', 'ec_pending'].includes(j.status));
+                  const latestReport =
+                    reportJobs.length > 0
+                      ? reportJobs.reduce((a, b) => ((b.visit_number ?? 0) > (a.visit_number ?? 0) ? b : a))
+                      : null;
+
+                  return (
+                    <div style={{ background: 'var(--color-neutral-900)', color: 'var(--color-bg)', padding: 16 }}>
+                      {p.status === 'rejected' && p.rejection_reason ? (
+                        <p style={{ fontSize: 12.5, marginBottom: 12, color: '#ffb3a3' }}>{p.rejection_reason}</p>
+                      ) : (
+                        statusLine && (
+                          <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.12em', opacity: 0.65, marginBottom: 10 }}>
+                            {statusLine}
+                          </p>
+                        )
+                      )}
+                      {totalPurchased > 0 && (
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                          {visitChips(totalPurchased, jobs).map((chip, i) =>
+                            chip.state === 'Done' && chip.jobId ? (
+                              <Link
+                                key={i}
+                                href={`/properties/${p.id}/visit-report/${chip.jobId}`}
+                                className="tag"
+                                style={{ background: 'var(--color-accent)', color: 'var(--color-bg)', textDecoration: 'none' }}
+                              >
+                                Visit {i + 1} · Done
+                              </Link>
+                            ) : (
+                              <span
+                                key={i}
+                                className="tag"
+                                style={{
+                                  background: chip.state === 'Set' ? 'var(--p-on-dark-rule)' : 'transparent',
+                                  border: chip.state === 'Unused' ? '1px solid var(--p-on-dark-rule)' : 'none',
+                                  color: 'var(--color-bg)',
+                                }}
+                              >
+                                Visit {i + 1} · {chip.state}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
+                      <p style={{ fontSize: 13, marginBottom: 14 }}>{remaining} of {totalPurchased} visit credits left</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {latestReport && (
+                          <Link
+                            href={`/properties/${p.id}/visit-report/${latestReport.id}`}
+                            className="btn btn-primary btn-block"
+                            style={{ textDecoration: 'none' }}
                           >
-                            Visit {i + 1} · {chip}
-                          </span>
-                        ))}
+                            Open visit {latestReport.visit_number} report
+                          </Link>
+                        )}
+                        {p.status === 'verified' && remaining > 0 && (
+                          <Link href={`/properties/${p.id}/schedule`} className="btn btn-primary btn-block" style={{ textDecoration: 'none' }}>
+                            Schedule the next visit
+                          </Link>
+                        )}
+                        {remaining === 0 && (
+                          <Link href={`/properties/${p.id}/plan`} className="btn btn-primary btn-block" style={{ textDecoration: 'none' }}>
+                            Buy more visit credits
+                          </Link>
+                        )}
+                        <Link href={`/properties/${p.id}`} className="btn btn-secondary btn-block" style={{ textDecoration: 'none', borderColor: 'var(--p-on-dark-rule)', color: 'var(--color-bg)' }}>
+                          Property visit history
+                        </Link>
+                        <Link href="/service-requests/new" className="btn-ghost btn" style={{ color: 'var(--color-bg)' }}>
+                          Raise a service request
+                        </Link>
                       </div>
-                    )}
-                    <p style={{ fontSize: 13, marginBottom: 14 }}>{remaining} of {totalPurchased} visit credits left</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {p.status === 'verified' && remaining > 0 && (
-                        <Link href={`/properties/${p.id}/schedule`} className="btn btn-primary btn-block" style={{ textDecoration: 'none' }}>
-                          Schedule the next visit
-                        </Link>
-                      )}
-                      {remaining === 0 && (
-                        <Link href={`/properties/${p.id}/plan`} className="btn btn-primary btn-block" style={{ textDecoration: 'none' }}>
-                          Buy more visit credits
-                        </Link>
-                      )}
-                      <Link href={`/properties/${p.id}`} className="btn btn-secondary btn-block" style={{ textDecoration: 'none', borderColor: 'var(--p-on-dark-rule)', color: 'var(--color-bg)' }}>
-                        Property visit history
-                      </Link>
-                      <Link href="/service-requests/new" className="btn-ghost btn" style={{ color: 'var(--color-bg)' }}>
-                        Raise a service request
-                      </Link>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })}

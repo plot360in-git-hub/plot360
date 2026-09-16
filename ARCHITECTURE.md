@@ -982,3 +982,53 @@ eyebrow-style labels sharing a row, not a heading with a stray number.
 Restyled to match — also dropped the count's `padStart(2, '0')`
 zero-padding (e.g. showing "3" instead of "03"), which the mock doesn't
 do either.
+
+## 20. Redesign 2026-09 (round 6) — property card: status line, clickable
+##     visit reports, per-segment milestone labels
+
+Plot compared the Home screen's expanded property card against the mock
+directly and found it missing real functionality, not just styling.
+
+**No way to open a visit report from Home at all.** The expanded card's
+primary button only ever offered "Schedule the next visit" or "Buy more
+visit credits" — there was no path to a completed visit's report,
+functionality the mock's own example properties lean on heavily (its
+first two demo properties both lead with "Open visit N report" / "View
+visit N report" as the primary action). Added: when a property has at
+least one completed visit (`monitoring_jobs.status` `approved` or
+`ec_pending`), an "Open visit N report" button now appears (N = the
+most recent such visit), linking to the same `/properties/[id]/
+visit-report/[jobId]` route `MonitoringStatus.tsx` already links to
+elsewhere in the app. Unlike the mock, which only ever shows one
+primary action, this button appears *alongside* "Schedule the next
+visit" / "Buy more visit credits" rather than replacing it — flagged
+deviation, since real customers can have both a report worth reading
+and visits still worth scheduling at once, where the mock's fixed demo
+data never needed to show both together.
+
+**Visit chips weren't clickable.** Plot asked directly: clicking a
+completed ("Done") visit's chip should open that visit's own report,
+not just the general "Open visit N report" button above. This goes
+beyond the mock itself — its chips are static, non-interactive demo
+markup (`visits()` in the mock's script has no click handler at all) —
+but maps naturally onto data already on hand, so `visitChips()` now
+carries each chip's underlying `monitoring_jobs.id` and a "Done" chip
+renders as a link to that job's own report page. "Set"/"Unused" chips
+stay non-interactive, matching the mock (nothing exists yet to open).
+
+**No status line above the chips.** The mock's expanded card leads with
+a one-line status — "Visit 2 report ready", "Visit scheduled 22–25
+Sep", "Representative collecting documents" — before the chips even
+appear; the codebase had nothing here besides the rejection-reason
+message for a rejected property. Added `propertyStatusLine()`, which
+derives the same kind of line from real state (a completed report takes
+priority, then an in-progress/scheduled visit, then "under review",
+then "Representative collecting documents" for a still-pending
+property) rather than the mock's fixed per-demo-property strings.
+
+**The 4-stage milestone track only labeled the current stage.** The
+mock labels all four segments at once ("Registered / Verified / Visit
+set / Report", lines ~157–163) directly under their own bar segment;
+this codebase had one caption below the whole bar naming only the
+current stage. Restyled to label each segment individually, matching
+the mock and Plot's own screenshot of this row.
