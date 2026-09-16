@@ -1179,3 +1179,68 @@ real prices from the admin-configured `subscription_plans` table, so
 if these new prices should also apply to what a logged-in customer is
 charged, that needs an update in the admin plans screen (or database),
 not a code change.
+
+## 24. Redesign 2026-09 (round 10) — onboarding form rebuilt as a single
+##     page; database reset scripts added
+
+Plot signed up with Google and landed on the old, pre-redesign "Customer
+Registration" wizard (`/onboarding`) — a two-step form (username, DOB,
+gender, profile picture, a full current + permanent address pair,
+identity-proof upload, security questions) styled with the old
+`field-label`/`field-input`/`btn-primary` classes, not `.p360`. This had
+never been touched by the redesign; `app/auth/callback/page.tsx` routes
+any user whose `profiles.first_name` is still empty here (a Postgres
+trigger, `handle_new_user()`, creates the stub profile row on signup —
+see `supabase/schema.sql`), so every genuinely new signup — social,
+email, or WhatsApp OTP — hit it.
+
+Rebuilt as one page, per Plot's spec: `components/onboarding/
+CustomerRegistrationForm.tsx` now asks only for first/middle/last name,
+a country-code list of values (`lib/countryCodes.ts`, ~195 countries,
+defaulting to +91 — nothing like this existed anywhere in the app; the
+redesigned login/signup screen's own phone field is free-text with no
+selector) + phone number, and Terms/Privacy checkboxes that link out to
+the existing `/legal/terms-of-use.html` / `/legal/privacy-policy.html`
+pages, plus Submit and Cancel buttons (Cancel signs the user out via the
+existing `logOut` action, using a second submit button's `formAction`
+to override the form's default action). Matches the same `.p360`
+card/field/btn system and "only ask what's required" philosophy as
+`RegisterQuick.tsx` (the equivalent simplification already done for
+property registration).
+
+`components/onboarding/onboarding.actions.ts` (`saveCustomerRegistration`)
+was cut down to match — no more address parsing, identity-proof storage
+upload, or security-question handling — and now redirects straight to
+`/dashboard` on success instead of showing an in-page "done" state,
+consistent with how `createPropertyQuick` behaves. The dropped
+`profiles` columns (address, DOB, gender, profile picture, identity
+proof, security questions) are untouched in the schema and stay
+nullable — nothing else in the app reads them yet, so removing them
+from the signup form doesn't break anything downstream; a later phase
+can still collect them the way property documents are collected
+post-registration, by a representative.
+
+`app/onboarding/layout.tsx` no longer wraps the page in the full
+`CustomerHeader` (Dashboard / Add Property / Service Requests nav) —
+none of those make sense before a profile even has a name, and
+navigating away mid-onboarding left the account stuck being routed back
+to `/onboarding` forever. The form now renders its own minimal PLOT360
+header, the same pattern `ScheduleVisit.tsx`/`ChoosePlanAndPay.tsx` use.
+`app/onboarding/page.tsx` was simplified to match — it no longer wraps
+the form in the old `container-narrow` layout class, since the form is
+now a self-contained `.p360` screen with its own max-width and padding.
+
+Separately, added two ungenerated-by-the-app SQL scripts under
+`scripts/` for cleaning up test/dev data directly in Supabase (not part
+of the running application, not wired to any UI):
+`delete-users.sql` (delete specific accounts by email, plus everything
+that cascades from their properties) and `reset-database-keep-owner.sql`
+(delete every account except one kept-by-email owner login, for
+resetting the whole system to a fresh state). Both are transactional
+with sanity-check `SELECT`s and guard checks against foreign-key
+columns that don't cascade (`monitoring_jobs.assigned_by`,
+`renewal_requests.requested_by`, `payments.recorded_by`, etc.) before
+deleting; `reset-database-keep-owner.sql` commits itself in a single
+run rather than relying on a separate manual `COMMIT;`, since
+Supabase's SQL Editor doesn't reliably keep one transaction open across
+two separate "Run" clicks (a real gotcha hit while testing this).
