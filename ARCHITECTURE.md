@@ -1454,3 +1454,39 @@ is now just "Edit ownership →", and `PropertyView.tsx`'s "Add or update
 documents" link (which pointed at the deleted
 `/properties/[id]/documents`) now points at `/properties/[id]/ownership`
 and reads "Add or update ownership documents".
+
+## 29. Redesign 2026-09 (round 15) — schema drift bug; wrong back-button
+##     target on admin Edit ownership
+
+**Live DB missing round-12 columns.** Registering a property failed with
+"Could not find the 'no_legal_case_declared' column of 'properties' in
+the schema cache." `supabase/schema.sql` has had the right
+`alter table properties add column if not exists no_legal_case_declared
+boolean;` since round 12 (commit dc1fe5d) — this was schema *drift*, not
+a code bug: that migration (and the `ec_interest` column added in the
+same batch) was written into the repo's schema file but never actually
+run against the live Supabase database. Gave Plot the exact SQL to run
+once in the Supabase SQL Editor:
+```sql
+alter table properties add column if not exists ec_interest boolean;
+alter table properties add column if not exists no_legal_case_declared boolean;
+alter table properties alter column property_type drop not null;
+```
+Worth remembering for future schema.sql changes in this project: they
+need a matching manual run in Supabase's SQL Editor — nothing applies
+them automatically.
+
+**Wrong back-button target on admin Edit ownership.** The back arrow
+(top-left of `/admin/[id]/ownership`) was sending admins to the old,
+pre-redesign `/admin/[id]/edit` ("Edit Property Details") page instead
+of back to Property verification — a leftover `backHref` from before the
+round-13 rebuild that nobody had re-pointed. Plot caught it by screenshot
+after landing on that obsolete page unexpectedly. Fixed
+`app/admin/[id]/ownership/page.tsx`'s `backHref` to `/admin/${id}`
+(`PropertyVerificationDetail`). Since that was the only live link to
+`/admin/[id]/edit` from the admin UI, that page is now unreachable from
+any link — flagged to Plot rather than silently restyling or deleting
+it, since `LocationFieldsForm` on the verification page doesn't cover
+every field it used to (property_type, plot_shape, description, GPS
+corners) — if admins still need to edit those, that page (or a live link
+back to it) needs to stay somewhere.

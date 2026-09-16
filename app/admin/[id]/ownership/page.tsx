@@ -21,6 +21,22 @@ function filenameFromPath(path: string) {
 // property directly (the separate Documents step is gone), so this
 // redirects back to the property's own admin detail page instead of a
 // now-deleted /admin/[id]/documents route.
+//
+// Redesign 2026-09 (follow-up, round 15) — backHref was wrongly pointing
+// at the old, obsolete /admin/[id]/edit ("Edit Property Details") page —
+// Plot caught this: clicking the back arrow on Edit ownership landed on
+// that pre-redesign page instead of returning to Property verification.
+// Fixed to go back to the property's own verification detail page
+// (/admin/[id], PropertyVerificationDetail) instead. Nothing in the live
+// admin UI links to /admin/[id]/edit any more as a result — Plot flagged
+// that page's styling as broken too, and since it's now unreachable from
+// this flow, it wasn't restyled (matches how other confirmed-dead legacy
+// pages in this app, e.g. AdminHeader.tsx/AdminReview.tsx, are handled).
+// If property_type/plot_shape/description/GPS-corner fields (the ones
+// LocationFieldsForm on the verification page doesn't cover) still need
+// an admin-editable home, that page exists at /admin/[id]/edit by direct
+// URL, or a live link back to it can be added — flagging this rather
+// than guessing.
 export default async function AdminOwnershipPage({ params }: { params: Promise<{ id: string }> }) {
   const gate = await getAdminGateStatus();
   if (gate === 'unauthenticated') redirect('/admin/login');
@@ -52,7 +68,7 @@ export default async function AdminOwnershipPage({ params }: { params: Promise<{
       hasExisting={hasExisting}
       existingTitleDeedDocs={titleDeedDocsWithUrls}
       reusableOwnerIdProof={reusableOwnerIdProof}
-      backHref={`/admin/${id}/edit`}
+      backHref={`/admin/${id}`}
       redirectTo={`/admin/${id}`}
     />
   );
