@@ -1244,3 +1244,56 @@ deleting; `reset-database-keep-owner.sql` commits itself in a single
 run rather than relying on a separate manual `COMMIT;`, since
 Supabase's SQL Editor doesn't reliably keep one transaction open across
 two separate "Run" clicks (a real gotcha hit while testing this).
+
+## 25. Redesign 2026-09 (round 11) — name field order; Edit Profile rebuilt
+##     to match the new onboarding form, with password change added
+
+Two follow-ups to round 10's onboarding rebuild:
+
+**Name field order.** On `CustomerRegistrationForm.tsx`, first/middle/last
+name were laid out as a responsive 3-column grid — side by side on wide
+screens, wrapping to stacked only once the viewport got narrow enough.
+Plot asked for middle name to always sit directly under first name and
+above last name, so this is now a fixed single-column stack regardless of
+screen width.
+
+**Edit Profile rebuilt.** `/profile/edit` (`components/profile/
+ProfileEditForm.tsx`) was still the old, pre-redesign form — profile
+picture upload, a full current + permanent address pair, none of it
+`.p360`-styled — reached via the name/phone link in the Home poster's top
+row. Rebuilt to match the redesigned onboarding form: the same stacked
+first/middle/last name fields, the same country-code-list-of-values +
+phone row (`lib/countryCodes.ts`, added in round 10). Email stays
+editable with the same "sends a confirmation link to the new address"
+behavior as before (`supabase.auth.updateUser({ email })`, unchanged).
+
+**New: change password.** The app previously had no way to change a
+password while logged in at all — the only path anywhere was the
+forgot-password email-link flow (`components/auth/auth.actions.ts`,
+`updatePassword`, reachable only from `/auth/reset-password`). Plot asked
+for email/password changes to require reverification; added a "Change
+password" section (`profile.actions.ts`, `changeMyPassword`) that
+re-authenticates with the CURRENT password (`supabase.auth
+.signInWithPassword`) before applying a new one, then sends the same
+"your password was changed" notification email the reset-password flow
+already sends — so a password change is equally confirmed whether it
+happens from an emailed reset link or from here. This section is hidden
+entirely for Google-only accounts (checked via `user.identities` — no
+`provider: 'email'` entry means no password exists to change), showing a
+short explanatory line instead.
+
+**Dropped from Edit Profile, matching round 10's onboarding scope:**
+profile picture, current/permanent address, identity proof. None of
+these are read elsewhere in the app; the `profiles` columns are
+untouched and stay nullable. Flagging this the same way round 10 did —
+if any of this needs to be editable again later, the same pattern
+(representative collects it after the fact) still applies.
+
+Both `/onboarding` and `/profile/edit` no longer wrap their page in the
+full `CustomerHeader` nav bar (`app/onboarding/layout.tsx` already
+dropped it in round 10; `app/profile/layout.tsx` now does the same) —
+`ProfileEditForm` renders its own back-button header (← Edit profile →
+`/dashboard`), the same pattern `ScheduleVisit.tsx`/`ChoosePlanAndPay
+.tsx`/`RegisterQuick.tsx` already use, rather than reusing the onboarding
+form's bare-logo header (which has nowhere to "go back" to, unlike a
+profile edit reached from an already-onboarded dashboard).

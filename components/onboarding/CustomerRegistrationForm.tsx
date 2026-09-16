@@ -56,7 +56,11 @@ export function CustomerRegistrationForm() {
           Just your name and number — a representative collects anything else we need on WhatsApp.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 12, marginTop: 20 }}>
+        {/* Redesign 2026-09 (follow-up, round 11) — Plot asked for these
+            stacked in name order (first, then middle, then last) rather
+            than side by side, so middle name always sits directly under
+            first name and above last name regardless of screen width. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 20 }}>
           <div className="field">
             <label>
               First name <span style={{ color: 'var(--color-accent)' }}>*</span>
