@@ -231,12 +231,30 @@ export async function getReusableOwnerIdProof(propertyId: string): Promise<Reusa
 // upload one if none exists; no → owner ID proof + NOC with a
 // downloadable template, required only in this branch); and the
 // Property Title / Sale Deed upload, moved onto this same page (used to
-// live one step later, on the Documents screen — see
-// saveDocumentsAndSubmit and DocumentsForm.tsx, which no longer collect
-// it). The old "Approval letter" upload and the separate "do you allow
-// our agent to enter" question are dropped entirely — not part of Plot's
-// new field list, and agent-entry consent is already collected at
-// property creation (RegisterQuick.tsx's terms checkbox).
+// live one step later, on the Documents screen). The old "Approval
+// letter" upload and the separate "do you allow our agent to enter"
+// question are dropped entirely — not part of Plot's new field list, and
+// agent-entry consent is already collected at property creation
+// (RegisterQuick.tsx's terms checkbox).
+//
+// Redesign 2026-09 (follow-up, round 14) — the separate Documents step
+// (DocumentsForm.tsx / saveDocumentsAndSubmit, the EC certificate detail
+// fields + the two legal declaration checkboxes) is gone entirely — Plot
+// asked for it removed, not just reordered. This is now the LAST step:
+// it also does the finalization work that step used to do (stamping
+// registration_date, flipping a rejected property back to 'pending' on
+// resubmission). The EC "digital copy requested" signal that step used
+// to re-collect is instead synced here from properties.ec_interest
+// (already captured at registration — RegisterQuick.tsx's EC toggle) so
+// the downstream monitoring-job gate that reads
+// property_ownership.ec_digital_copy_requested (see monitoring.actions.ts,
+// decideMonitoringJob / getJobForReview — it holds a job open until a
+// requested digital EC is uploaded) keeps working without asking the
+// customer twice. The EC reference-copy upload and the informational-only
+// EC document number/year/SRO fields, and the no_legal_case /
+// agent_entry_terms declarations (already covered by
+// properties.no_legal_case_declared and RegisterQuick's terms checkbox),
+// are dropped with no replacement — nothing downstream reads them.
 export async function saveOwnership(propertyId: string, formData: FormData, redirectTo?: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -356,17 +374,36 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
     const ownerIdPath = reuseOwnerIdFrom ? await reuseOwnerIdProof(reuseOwnerIdFrom) : await uploadIfPresent('owner_id_proof', 'owner_id');
     await uploadTitleDeedFiles(titleDeedFiles);
 
+    // This is now the final step — no more separate Documents screen — so
+    // it also does the finalization work that used to live in
+    // saveDocumentsAndSubmit: sync the EC-requested signal from the
+    // registration-time answer, stamp registration_date, and un-stick a
+    // previously rejected property back into the verification queue.
+    const { data: propertyRow } = await supabase
+      .from('properties')
+      .select('status, ec_interest')
+      .eq('id', propertyId)
+      .single();
+
     const { error } = await supabase.from('property_ownership').upsert(
       {
         property_id: propertyId,
         owner_full_name: String(formData.get('owner_full_name') || ''),
         is_registered_user_owner: isOwner,
+        ec_digital_copy_requested: !!propertyRow?.ec_interest,
         ...(nocPath ? { noc_file_url: nocPath } : {}),
         ...(ownerIdPath ? { owner_id_proof_url: ownerIdPath } : {}),
       },
       { onConflict: 'property_id' } // fixes: duplicate key value violates unique constraint "property_ownership_property_id_key"
     );
     if (error) return { error: error.message };
+
+    const patch: Record<string, unknown> = { registration_date: new Date().toISOString().slice(0, 10) };
+    if (propertyRow?.status === 'rejected') {
+      patch.status = 'pending';
+    }
+    const { error: propError } = await supabase.from('properties').update(patch).eq('id', propertyId);
+    if (propError) return { error: propError.message };
   } catch (e: any) {
     return { error: e.message };
   }
@@ -374,100 +411,6 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
   revalidatePath('/admin');
   revalidatePath('/dashboard');
   revalidatePath(`/properties/${propertyId}`);
-  redirect(redirectTo || `/properties/${propertyId}/documents`);
-}
-
-// Final "Encumbrance Certificate" screen + legal declarations + Submit.
-// Redesign 2026-09 (follow-up, round 13) — the Property Title / Sale Deed
-// upload that used to live here moved one step earlier, onto the Edit
-// ownership screen (see saveOwnership, OwnershipForm.tsx) — Plot's new
-// spec groups it with the ownership proof instead of the documents step,
-// so it's no longer collected here to avoid asking for it twice.
-export async function saveDocumentsAndSubmit(propertyId: string, formData: FormData, redirectTo?: string) {
-  const supabase = await createClient();
-
-  const wantsDigitalEc = String(formData.get('ec_digital_copy_requested') || '');
-  if (wantsDigitalEc !== 'yes' && wantsDigitalEc !== 'no') {
-    return { error: 'Please answer whether you want a Digital Signed Certified copy of the EC.' };
-  }
-  if (wantsDigitalEc === 'yes') {
-    if (!String(formData.get('ec_document_number') || '').trim()) return { error: 'Document Number is required.' };
-    if (!String(formData.get('ec_registration_year') || '').trim()) return { error: 'Year of Registration is required.' };
-    if (!String(formData.get('ec_registered_sro') || '').trim()) return { error: 'Registered at SRO is required.' };
-  }
-
-  async function uploadIfPresent(field: string, docType: DocumentType) {
-    const file = formData.get(field) as File | null;
-    if (!file || file.size === 0) return;
-
-    const { data: existing } = await supabase
-      .from('property_documents')
-      .select('id, file_path')
-      .eq('property_id', propertyId)
-      .eq('doc_type', docType)
-      .maybeSingle();
-
-    const path = `${propertyId}/${docType}-${file.name}`;
-    const { error: uploadError } = await supabase.storage
-      .from('property-documents')
-      .upload(path, file, { upsert: true });
-    if (uploadError) throw new Error(uploadError.message);
-
-    const docError = existing
-      ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error
-      : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: docType, file_path: path })).error;
-    if (docError) throw new Error(`Saving ${docType.replace(/_/g, ' ')} record failed: ${docError.message}`);
-
-    if (existing?.file_path && existing.file_path !== path) {
-      await supabase.storage.from('property-documents').remove([existing.file_path]);
-    }
-  }
-
-  try {
-    await uploadIfPresent('ec_reference_copy', 'ec_reference_copy');
-  } catch (e: any) {
-    return { error: e.message };
-  }
-
-  const noLegalCase = formData.get('no_legal_case') === 'on';
-  const agentTerms = formData.get('agent_entry_terms') === 'on';
-  if (!noLegalCase || !agentTerms) {
-    return { error: 'Please confirm both declarations before submitting.' };
-  }
-
-  const { error: ownershipError } = await supabase
-    .from('property_ownership')
-    .update({
-      no_legal_case_declared: noLegalCase,
-      agent_entry_terms_agreed: agentTerms,
-      other_terms_conditions: String(formData.get('other_terms') || ''),
-      ec_digital_copy_requested: wantsDigitalEc === 'yes',
-      ec_document_number: wantsDigitalEc === 'yes' ? String(formData.get('ec_document_number') || '') : null,
-      ec_registration_year: wantsDigitalEc === 'yes' ? String(formData.get('ec_registration_year') || '') : null,
-      ec_registered_sro: wantsDigitalEc === 'yes' ? String(formData.get('ec_registered_sro') || '') : null,
-    })
-    .eq('property_id', propertyId);
-  if (ownershipError) return { error: ownershipError.message };
-
-  // Registration is (re)submitted. If this property was previously rejected,
-  // resubmitting sends it back into the verification queue rather than
-  // leaving it stuck as "rejected" forever.
-  const { data: currentProperty } = await supabase
-    .from('properties')
-    .select('status')
-    .eq('id', propertyId)
-    .single();
-
-  const patch: Record<string, unknown> = { registration_date: new Date().toISOString().slice(0, 10) };
-  if (currentProperty?.status === 'rejected') {
-    patch.status = 'pending';
-  }
-
-  const { error } = await supabase.from('properties').update(patch).eq('id', propertyId);
-  if (error) return { error: error.message };
-
-  revalidatePath('/admin');
-  revalidatePath('/dashboard');
   redirect(redirectTo || `/properties/${propertyId}`);
 }
 

@@ -163,9 +163,12 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
             ))}
           </ul>
         )}
+        {/* Redesign 2026-09 (follow-up, round 14) — /properties/[id]/documents
+            no longer exists (that step was removed); ownership proof and
+            the sale deed upload now live on the ownership edit page. */}
         {property.status !== 'verified' && (
-          <Link href={`/properties/${propertyId}/documents`} style={{ color: 'var(--color-link)', fontSize: 14, display: 'inline-block', marginTop: 12 }}>
-            Add or update documents
+          <Link href={`/properties/${propertyId}/ownership`} style={{ color: 'var(--color-link)', fontSize: 14, display: 'inline-block', marginTop: 12 }}>
+            Add or update ownership documents
           </Link>
         )}
       </div>

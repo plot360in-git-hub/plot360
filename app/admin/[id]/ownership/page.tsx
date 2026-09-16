@@ -16,6 +16,11 @@ function filenameFromPath(path: string) {
 // container-narrow class: OwnershipForm now renders its own full `.p360`
 // page frame (back-button header, etc.), the same pattern used by every
 // other redesigned standalone screen — see ARCHITECTURE.md.
+//
+// Redesign 2026-09 (follow-up, round 14) — Save now finalizes the
+// property directly (the separate Documents step is gone), so this
+// redirects back to the property's own admin detail page instead of a
+// now-deleted /admin/[id]/documents route.
 export default async function AdminOwnershipPage({ params }: { params: Promise<{ id: string }> }) {
   const gate = await getAdminGateStatus();
   if (gate === 'unauthenticated') redirect('/admin/login');
@@ -48,7 +53,7 @@ export default async function AdminOwnershipPage({ params }: { params: Promise<{
       existingTitleDeedDocs={titleDeedDocsWithUrls}
       reusableOwnerIdProof={reusableOwnerIdProof}
       backHref={`/admin/${id}/edit`}
-      redirectTo={`/admin/${id}/documents`}
+      redirectTo={`/admin/${id}`}
     />
   );
 }

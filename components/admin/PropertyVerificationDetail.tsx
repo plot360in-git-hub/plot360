@@ -15,8 +15,12 @@ import { hoursSince, formatWait } from '@/lib/adminQueue';
 // ARCHITECTURE.md, which also notes the one deliberate simplification:
 // document replace/"Upload from WhatsApp" and the ownership owned/not-
 // owned toggle stay on the existing, fully-working /admin/[id]/ownership
-// and /admin/[id]/documents edit routes rather than being rebuilt here,
-// since the design's own mock treats those buttons as no-ops.
+// edit route rather than being rebuilt here, since the design's own mock
+// treats those buttons as no-ops.
+//
+// Redesign 2026-09 (follow-up, round 14) — the separate /admin/[id]/
+// documents route no longer exists (Plot asked for that whole step
+// removed); /admin/[id]/ownership is now the only, final edit step.
 export async function PropertyVerificationDetail({ propertyId }: { propertyId: string }) {
   const [{ property, ownership, documents }, payment, creditBatch] = await Promise.all([
     getPropertyForReview(propertyId),
@@ -63,7 +67,7 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Ownership</div>
           <Link href={`/admin/${propertyId}/ownership`} className="btn btn-ghost" style={{ fontSize: 11.5 }}>
-            Edit ownership & documents →
+            Edit ownership →
           </Link>
         </div>
         <div style={{ display: 'flex', marginTop: 10, width: 'max-content', border: '1px solid var(--color-divider)' }}>

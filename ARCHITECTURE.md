@@ -1391,12 +1391,8 @@ case any legacy data still references them.
 upload now lives on the ownership page, it was removed from
 `DocumentsForm.tsx` (`/admin/[id]/documents`, `/properties/[id]/documents`)
 so it isn't collected twice — `saveDocumentsAndSubmit` no longer handles
-`title_deed` at all; `saveOwnership` does. The Documents step still exists
-and still collects the Encumbrance Certificate fields and the two legal
-declaration checkboxes (`no_legal_case`, `agent_entry_terms`) — Plot's
-spec didn't mention removing those, so "Save" on the ownership page still
-proceeds to that step by default (same `redirectTo` mechanism as before),
-just relabeled "Save" instead of "Continue to Documents" per the new spec.
+`title_deed` at all; `saveOwnership` does. *(Round 14, below, removes the
+Documents step entirely — this paragraph is kept for history.)*
 
 **Downstream fix — admin queue status.** `queues.actions.ts`'s Property
 verification queue computed an "Owner letter pending" / urgent state from
@@ -1406,3 +1402,55 @@ to track the NOC instead (`noc_file_url` / `doc_type='noc'`), which is
 the document actually required in that branch now. Same swap made in
 `PropertyVerificationDetail.tsx`'s document-status cards (was "Letter of
 approval from the original owner", now "NOC (No Objection Certificate)").
+
+## 28. Redesign 2026-09 (round 14) — Documents step removed entirely
+
+Plot asked to remove the separate Documents step (the Encumbrance
+Certificate detail fields + the two legal-declaration checkboxes) that
+round 13 had left in place after Edit ownership. `DocumentsForm.tsx` and
+both its routes (`app/admin/[id]/documents/page.tsx`,
+`app/properties/[id]/documents/page.tsx`) are deleted; `saveDocumentsAndSubmit`
+is gone from `registration.actions.ts`. Edit ownership (`saveOwnership`)
+is now the last step in the flow — "Save" finalizes the property
+directly instead of continuing on to a next screen.
+
+**What happened to the data that step used to collect:**
+
+- **EC "digital copy requested" flag** — this one is load-bearing, not
+  cosmetic: `property_ownership.ec_digital_copy_requested` gates a real
+  downstream feature (`components/admin/monitoring.actions.ts`,
+  `decideMonitoringJob`/`getJobForReview` — a monitoring job can't be
+  marked fully complete until a requested digital EC is uploaded, and
+  `MonitoringStatus` shows an "EC pending" state to the customer for it).
+  Re-asking for it on a now-deleted screen would have silently broken
+  that feature for every new registration. Instead, `saveOwnership` syncs
+  it straight from `properties.ec_interest` — the same yes/no question
+  already asked once, at registration, on `RegisterQuick.tsx` — so the
+  monitoring gate keeps working without asking the customer twice.
+- **EC document number / year / registered SRO** — dropped with no
+  replacement. These were informational-only reference fields, read
+  nowhere except the dead, unwired `AdminReview.tsx`.
+- **EC reference-copy upload** (`ec_reference_copy` doc type) — dropped;
+  same reasoning, no downstream reader.
+- **`no_legal_case` / `agent_entry_terms` declarations** — dropped with
+  no replacement. Both were pure duplicates: `properties
+  .no_legal_case_declared` (round 12) and RegisterQuick.tsx's terms
+  checkbox ("...allow a verified agent to visit and photograph this
+  property...") already capture the same two things once, at
+  registration. Nothing downstream reads the `property_ownership`
+  columns these used to write (`no_legal_case_declared`,
+  `agent_entry_terms_agreed`, `other_terms_conditions`) — left in the
+  schema, untouched, simply unwritten going forward.
+
+**Other cleanup.** `saveOwnership` absorbed the finalization logic that
+used to live in `saveDocumentsAndSubmit` (stamping `registration_date`,
+flipping a `rejected` property back to `pending` on resubmission).
+`app/admin/[id]/ownership/page.tsx`'s `redirectTo` now points at
+`/admin/${id}` instead of the deleted documents route; the customer-side
+`saveOwnership` default redirect changed from
+`/properties/${id}/documents` to `/properties/${id}`.
+`PropertyVerificationDetail.tsx`'s "Edit ownership & documents →" link
+is now just "Edit ownership →", and `PropertyView.tsx`'s "Add or update
+documents" link (which pointed at the deleted
+`/properties/[id]/documents`) now points at `/properties/[id]/ownership`
+and reads "Add or update ownership documents".
