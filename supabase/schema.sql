@@ -1267,6 +1267,15 @@ alter table properties alter column property_type drop not null;
 -- without requiring that row to exist yet.
 alter table properties add column if not exists ec_interest boolean;
 
+-- Redesign 2026-09 (follow-up, round 12) — mandatory declaration added to
+-- the quick registration form: no legal/criminal case, ongoing dispute or
+-- other issue on the plot that could put a visiting Plot360 agent at
+-- risk. Mirrors property_ownership.no_legal_case_declared (the later,
+-- full ownership-proof wizard's own column of the same name) the same way
+-- ec_interest above mirrors ec_digital_copy_requested — captured at
+-- quick-registration time, before that property_ownership row exists.
+alter table properties add column if not exists no_legal_case_declared boolean;
+
 -- ---------- visit_requests: customer self-service "Schedule a visit" ----------
 -- Deliberately NOT inserted directly into monitoring_jobs — that table's
 -- agent_id is NOT NULL (every job has always needed an admin to pick an

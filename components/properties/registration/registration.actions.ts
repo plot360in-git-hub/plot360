@@ -28,6 +28,16 @@ export async function createPropertyQuick(formData: FormData) {
   const name = String(formData.get('property_name') || '').trim();
   if (!name) return { error: 'Property name is required.' };
 
+  // Redesign 2026-09 (follow-up, round 12) — Plot asked for a mandatory
+  // declaration that the plot carries no legal/criminal issue that could
+  // put a visiting agent at risk, alongside the existing terms checkbox.
+  // Stored on `properties` directly (mirrors ec_interest above — a
+  // quick-flow signal captured before the full property_ownership row,
+  // which has its own later `no_legal_case_declared` column, exists yet).
+  if (!formData.get('no_legal_case_declared')) {
+    return { error: 'Please confirm there is no legal or criminal issue on this plot.' };
+  }
+
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
@@ -52,6 +62,7 @@ export async function createPropertyQuick(formData: FormData) {
       plot_size: plotSizeRaw ? Number(plotSizeRaw) : null,
       plot_gps_coordinate: gpsCoordinate || null,
       ec_interest: ecInterest === 'yes' ? true : ecInterest === 'no' ? false : null,
+      no_legal_case_declared: true,
     })
     .select('id')
     .single();

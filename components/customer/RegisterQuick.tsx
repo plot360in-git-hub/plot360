@@ -24,8 +24,9 @@ export function RegisterQuick() {
   const [name, setName] = useState('');
   const [ecInterest, setEcInterest] = useState<'yes' | 'no' | null>(null);
   const [agreed, setAgreed] = useState(false);
+  const [noLegalCase, setNoLegalCase] = useState(false);
 
-  const blocked = !name.trim() || !agreed;
+  const blocked = !name.trim() || !agreed || !noLegalCase;
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -133,7 +134,7 @@ export function RegisterQuick() {
           </button>
         </div>
 
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, margin: '20px 0 24px', cursor: 'pointer' }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, margin: '20px 0 14px', cursor: 'pointer' }}>
           <input
             type="checkbox"
             checked={agreed}
@@ -148,6 +149,25 @@ export function RegisterQuick() {
             </a>{' '}
             <span style={{ color: 'var(--color-accent)' }}>*</span> and allow a verified agent to visit and
             photograph this property for site visits I purchase.
+          </span>
+        </label>
+
+        {/* Redesign 2026-09 (follow-up, round 12) — new mandatory
+            declaration Plot asked for, alongside the terms checkbox
+            above. Name kept as `no_legal_case_declared` to match
+            registration.actions.ts / the properties column it writes to. */}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, margin: '0 0 24px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            name="no_legal_case_declared"
+            checked={noLegalCase}
+            onChange={(e) => setNoLegalCase(e.target.checked)}
+            required
+            style={{ marginTop: 2, accentColor: 'var(--color-accent)', width: 17, height: 17 }}
+          />
+          <span>
+            There is no legal or criminal case, ongoing dispute, or any other issue on this plot that could cause harm or
+            problems for Plot360's agents or employees during a visit <span style={{ color: 'var(--color-accent)' }}>*</span>
           </span>
         </label>
 

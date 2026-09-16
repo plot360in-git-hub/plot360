@@ -1297,3 +1297,34 @@ dropped it in round 10; `app/profile/layout.tsx` now does the same) —
 .tsx`/`RegisterQuick.tsx` already use, rather than reusing the onboarding
 form's bare-logo header (which has nowhere to "go back" to, unlike a
 profile edit reached from an already-onboarded dashboard).
+
+## 26. Redesign 2026-09 (round 12) — legal/criminal-case declaration on
+##     registration; "Awaiting confirmation" screen matched to the rest
+
+**New mandatory checkbox.** Plot asked for a second required declaration
+on the quick "Register a property" form, alongside the existing terms
+checkbox: "There is no legal or criminal case, ongoing dispute, or any
+other issue on this plot that could cause harm or problems for Plot360's
+agents or employees during a visit." Added to `RegisterQuick.tsx`
+(blocks submit until checked, same as the terms checkbox) and
+`registration.actions.ts` (`createPropertyQuick` now rejects the submit
+server-side too if it's missing). Stored as a new `properties
+.no_legal_case_declared` column (`supabase/schema.sql`) — mirrors
+`property_ownership.no_legal_case_declared`, the equivalent column on
+the later, full ownership-proof wizard, the same way `ec_interest`
+already mirrors `ec_digital_copy_requested`: captured at quick-
+registration time, before that `property_ownership` row exists yet.
+
+**"Awaiting confirmation" screen restyled.** Plot flagged the post-bank-
+transfer confirmation screen ("Transfer noted. We will confirm it.") as
+not matching the rest of the app — it was still the near-black,
+white-text block `ConfirmationScreen.tsx` had before round 7's gradient-
+hero pass, kept deliberately at the time to read as visually distinct
+from the celebratory "done" screens (payment received, visit scheduled).
+Both now share the same `var(--gradient-hero)` card + dark text, told
+apart only by the kicker pill's color — teal for the celebratory variants,
+warm amber for "awaiting confirmation" — the same pill mechanic the Home
+poster's "Expiring in N days" badge already uses, rather than an entirely
+different background treatment. The `DoneContent` type's `bg: 'accent' |
+'ink'` field is renamed `tone: 'success' | 'pending'` to match what it
+actually now controls.

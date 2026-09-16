@@ -28,7 +28,7 @@ function formatDate(dateStr: string): string {
 }
 
 type DoneContent = {
-  bg: 'accent' | 'ink';
+  tone: 'success' | 'pending';
   kicker: string;
   title: string;
   body: string;
@@ -41,7 +41,7 @@ function content(v: ConfirmationVariant): DoneContent {
   switch (v.kind) {
     case 'reg-upi':
       return {
-        bg: 'accent',
+        tone: 'success',
         kicker: 'Payment received',
         title: 'Registered. We take it from here.',
         body: `${REPRESENTATIVE_NAME} from Plot360 will WhatsApp you within a working day to collect documents and arrange owner approval. You do not need to fill anything else in.`,
@@ -57,7 +57,7 @@ function content(v: ConfirmationVariant): DoneContent {
       };
     case 'reg-bank':
       return {
-        bg: 'ink',
+        tone: 'pending',
         kicker: 'Awaiting confirmation',
         title: 'Transfer noted. We will confirm it.',
         body: 'Bank transfers take up to a working day to appear. Your property is registered and held; we confirm on WhatsApp the moment the amount lands.',
@@ -73,7 +73,7 @@ function content(v: ConfirmationVariant): DoneContent {
       };
     case 'sched':
       return {
-        bg: 'accent',
+        tone: 'success',
         kicker: 'Visit scheduled',
         title: 'An agent will be there in that window.',
         body: 'A representative confirms the exact day a morning ahead. Your report, photos and video arrive here when the visit is approved.',
@@ -107,24 +107,25 @@ export function ConfirmationScreen({
   homeHref?: string;
 }) {
   const c = content(variant);
-  const isAccent = c.bg === 'accent';
 
-  // Redesign 2026-09 (follow-up, round 7) — was a full-bleed solid-color
-  // band (accent for "done"/celebratory screens, dark ink for the
-  // bank-transfer "awaiting confirmation" one). Accent branch now uses the
-  // same inset var(--gradient-hero) card + dark text treatment as the Home
-  // poster, per Plot's facebook.com/developers reference. The ink branch's
-  // colors are unchanged (still solid dark, still white text — nothing
-  // there was coupled to the accent color) but it's inset and rounded too,
-  // so both "done" variants read as the same kind of card, just two moods.
+  // Redesign 2026-09 (follow-up, round 12) — Plot flagged the bank-transfer
+  // "Awaiting confirmation" screen as not matching the rest of the app: it
+  // was still the near-black, white-text block from before round 7 (a
+  // deliberate choice at the time, to read as visually distinct from the
+  // celebratory "done" screens) while everything else had moved to the
+  // soft var(--gradient-hero) card. Both tones now share the same card —
+  // dark text on the pastel gradient — and are told apart only by the
+  // kicker: a teal pill for 'success' (payment received, visit scheduled),
+  // a warm amber pill for 'pending' (awaiting confirmation), same pattern
+  // as the "Expiring in N days" pill on the Home poster.
   return (
     <div className="p360" style={{ minHeight: '100vh' }}>
       <div style={{ padding: '16px 16px 0' }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
           <div
             style={{
-              background: isAccent ? 'var(--gradient-hero)' : 'var(--color-text)',
-              color: isAccent ? 'var(--color-text)' : 'var(--color-bg)',
+              background: 'var(--gradient-hero)',
+              color: 'var(--color-text)',
               borderRadius: 'var(--radius-lg)',
               padding: '26px 22px 24px',
             }}
@@ -132,10 +133,14 @@ export function ConfirmationScreen({
             <div
               style={{
                 fontSize: 10,
+                fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                color: isAccent ? 'var(--color-accent-700)' : 'var(--color-bg)',
-                opacity: isAccent ? 1 : 0.8,
+                letterSpacing: '0.1em',
+                display: 'inline-block',
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: 'rgba(255,255,255,.6)',
+                color: c.tone === 'pending' ? '#b45309' : 'var(--color-accent-700)',
               }}
             >
               {c.kicker}
@@ -147,22 +152,12 @@ export function ConfirmationScreen({
                 fontSize: 30,
                 lineHeight: 1.06,
                 letterSpacing: '-.03em',
-                marginTop: 12,
+                marginTop: 14,
               }}
             >
               {c.title}
             </div>
-            <p
-              style={{
-                fontSize: 13.5,
-                lineHeight: 1.55,
-                marginTop: 12,
-                maxWidth: '24em',
-                color: isAccent ? 'var(--p-ink-soft)' : undefined,
-              }}
-            >
-              {c.body}
-            </p>
+            <p style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 12, maxWidth: '24em', color: 'var(--p-ink-soft)' }}>{c.body}</p>
           </div>
         </div>
       </div>
