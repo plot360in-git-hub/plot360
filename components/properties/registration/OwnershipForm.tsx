@@ -80,6 +80,14 @@ function YesNoToggle({
             minHeight: 42,
             border: '1px solid var(--color-divider)',
             borderLeft: i === 1 ? 0 : undefined,
+            // Redesign 2026-09 (follow-up, round 15) — the shared .btn
+            // class rounds all 4 corners (--radius-md) independently on
+            // each button; without overriding it here too, the two
+            // buttons' rounded corners curve away from each other right
+            // where they touch, leaving a small gap that reads as a
+            // missing border there (Plot's report). Square off the
+            // shared inner edge, keep the outer ends rounded.
+            borderRadius: i === 0 ? 'var(--radius-md) 0 0 var(--radius-md)' : '0 var(--radius-md) var(--radius-md) 0',
             background: value === opt ? 'var(--color-accent)' : 'transparent',
             color: value === opt ? 'var(--color-bg)' : 'var(--color-text)',
             fontSize: 12.5,
@@ -190,6 +198,7 @@ export function OwnershipForm({
                       flex: 1,
                       minHeight: 38,
                       border: '1px solid var(--color-divider)',
+                      borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
                       background: ownerIdMode === 'reuse' ? 'var(--color-accent)' : 'transparent',
                       color: ownerIdMode === 'reuse' ? 'var(--color-bg)' : 'var(--color-text)',
                       fontSize: 12,
@@ -207,6 +216,7 @@ export function OwnershipForm({
                       minHeight: 38,
                       border: '1px solid var(--color-divider)',
                       borderLeft: 0,
+                      borderRadius: '0 var(--radius-md) var(--radius-md) 0',
                       background: ownerIdMode === 'new' ? 'var(--color-accent)' : 'transparent',
                       color: ownerIdMode === 'new' ? 'var(--color-bg)' : 'var(--color-text)',
                       fontSize: 12,

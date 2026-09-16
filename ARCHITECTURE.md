@@ -1490,3 +1490,21 @@ it, since `LocationFieldsForm` on the verification page doesn't cover
 every field it used to (property_type, plot_shape, description, GPS
 corners) — if admins still need to edit those, that page (or a live link
 back to it) needs to stay somewhere.
+
+**Segmented Yes/No toggle border bug.** Plot flagged (and, once asked to
+narrow it down, confirmed) a border rendering glitch on Edit ownership's
+"Is this plot owned by the user?" Yes/No buttons — the border looked
+broken/missing right where the two buttons meet. Root cause: the shared
+`.p360 .btn` class applies `border-radius: var(--radius-md)` (14px) to
+*all four corners of each button independently*; the toggle only
+overrode `border-left` on the second button to avoid a doubled divider
+line, never `border-radius`, so each button's rounded corner at the
+shared edge curved away from the other, leaving a small gap there. Fixed
+by squaring off the shared inner corners and keeping only the outer ends
+rounded (`border-radius: var(--radius-md) 0 0 var(--radius-md)` /
+`0 var(--radius-md) var(--radius-md) 0`). Same bug, same fix, in two
+other segmented two-button toggles built the same way: the "Use this
+proof / Upload a new one" reuse toggle (also `OwnershipForm.tsx`) and
+the EC-interest "Yes, include EC / No, not needed" toggle on
+`RegisterQuick.tsx` (identical pattern, not separately reported but
+caught while fixing the first one).

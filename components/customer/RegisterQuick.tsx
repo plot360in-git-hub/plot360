@@ -106,6 +106,14 @@ export function RegisterQuick() {
               flex: 1,
               minHeight: 42,
               border: '1px solid var(--color-divider)',
+              // Redesign 2026-09 (follow-up, round 15) — the shared .btn
+              // class rounds all 4 corners independently on each button;
+              // without squaring off the shared inner edge, the two
+              // buttons' rounded corners curve away from each other right
+              // where they touch, leaving a small gap that reads as a
+              // missing border there (same bug Plot caught on the Edit
+              // ownership Yes/No toggle — see OwnershipForm.tsx).
+              borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
               background: ecInterest === 'yes' ? 'var(--color-accent)' : 'transparent',
               color: ecInterest === 'yes' ? 'var(--color-bg)' : 'var(--color-text)',
               fontSize: 12.5,
@@ -123,6 +131,7 @@ export function RegisterQuick() {
               minHeight: 42,
               border: '1px solid var(--color-divider)',
               borderLeft: 0,
+              borderRadius: '0 var(--radius-md) var(--radius-md) 0',
               background: ecInterest === 'no' ? 'var(--color-accent)' : 'transparent',
               color: ecInterest === 'no' ? 'var(--color-bg)' : 'var(--color-text)',
               fontSize: 12.5,
