@@ -31,9 +31,13 @@ function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
   );
 }
 
+// Redesign 2026-09 (follow-up, round 13) — the Title deed / Sale Deed
+// upload that used to be the first card on this page moved to the Edit
+// ownership screen instead (see OwnershipForm.tsx, saveOwnership) as
+// part of Plot's ownership-page redesign, so this screen no longer takes
+// an existingTitleDeedDocs prop or shows that section.
 export function DocumentsForm({
   propertyId,
-  existingTitleDeedDocs,
   existingEcReferenceCopy,
   initialOwnership,
   backHref,
@@ -41,7 +45,6 @@ export function DocumentsForm({
   redirectTo,
 }: {
   propertyId: string;
-  existingTitleDeedDocs?: ExistingDoc[];
   existingEcReferenceCopy?: ExistingDoc;
   initialOwnership?: Partial<PropertyOwnership>;
   backHref?: string;
@@ -58,7 +61,6 @@ export function DocumentsForm({
       : ''
   );
   const router = useRouter();
-  const hasTitleDeed = (existingTitleDeedDocs ?? []).length > 0;
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -72,34 +74,8 @@ export function DocumentsForm({
     <form action={handleSubmit} style={{ maxWidth: 680, margin: '0 auto' }}>
       <h1 style={{ fontSize: 28, marginBottom: 6 }}>Ownership Documents</h1>
       <p style={{ color: 'var(--color-text-muted)', fontSize: 15.5, marginBottom: 28 }}>
-        Last step — upload the title deed and confirm a couple of declarations.
+        Last step — confirm the encumbrance certificate details and a couple of declarations.
       </p>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 18, marginBottom: 16 }}>Title deed</h3>
-        <div>
-          <label className="field-label">
-            Property Title / Sale Deed (make sure first page or last page where owner name, property
-            details clearly state property &amp; the owner details match)<Required />
-          </label>
-          <input className="field-input" type="file" name="title_deed" accept="image/*,.pdf" multiple required={!hasTitleDeed} />
-          {(existingTitleDeedDocs ?? []).map((doc) => (
-            <p key={doc?.name} style={{ fontSize: 13, marginTop: 6 }}>
-              Uploaded:{' '}
-              {doc?.url ? (
-                <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{doc.name}</a>
-              ) : (
-                <span style={{ color: 'var(--color-text-muted)' }}>{doc?.name}</span>
-              )}
-            </p>
-          ))}
-          {hasTitleDeed && (
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              Choosing files above adds them alongside what's already uploaded — it doesn't replace them.
-            </p>
-          )}
-        </div>
-      </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 18, marginBottom: 16 }}>Encumbrance Certificate</h3>

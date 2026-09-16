@@ -5,12 +5,19 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { DashboardTile } from './dashboard.actions';
 import type { AdminRole } from './admin-role.actions';
+import { logOut } from '@/components/auth/auth.actions';
 
 // Redesign 2026-09 — admin console shell (design_handoff_plot360_redesign,
 // "Plot360 Admin.dc.html"): top bar + left nav with live badge counts +
 // role footnote. Replaces components/layout/AdminHeader.tsx (kept
 // intact, no longer wired — see app/admin/layout.tsx) which had no
 // owner/operations distinction and only a flat link list.
+//
+// Redesign 2026-09 (follow-up, round 13) — Plot pointed out this shell has
+// no way to log out at all (the legacy AdminHeader.tsx had one, but it's
+// dead code now — see app/admin/layout.tsx). Added a "Log out" button to
+// the top-right corner, reusing the same logOut server action and
+// `.p360` btn-secondary styling as CustomerHeader.tsx's logout button.
 const NAV: { id: string; label: string; href: string; ownerOnly?: boolean }[] = [
   { id: 'dash', label: 'Dashboard', href: '/admin' },
   { id: 'qProperty', label: 'Property verification', href: '/admin/queue/property-verification' },
@@ -58,6 +65,11 @@ export function AdminShell({
         <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)' }}>
           {name} · {role === 'owner' ? 'owner · full access' : 'operations · queues and assignment'}
         </div>
+        <form action={logOut}>
+          <button type="submit" className="btn btn-secondary" style={{ minHeight: 32, fontSize: 12, padding: '0 14px' }}>
+            Log out
+          </button>
+        </form>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>

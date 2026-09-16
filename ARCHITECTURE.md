@@ -1328,3 +1328,81 @@ poster's "Expiring in N days" badge already uses, rather than an entirely
 different background treatment. The `DoneContent` type's `bg: 'accent' |
 'ink'` field is renamed `tone: 'success' | 'pending'` to match what it
 actually now controls.
+
+## 27. Redesign 2026-09 (round 13) — admin logout button; "Edit ownership"
+##     page redesigned, owner ID proof reuse across properties
+
+**Admin logout button.** The new admin console shell (`AdminShell.tsx`,
+wired in round 7-ish's admin redesign) had no way to log out at all —
+the legacy `AdminHeader.tsx` had one, but it's dead code, not rendered by
+`app/admin/layout.tsx`. Added a "Log out" button to the top-right corner
+of the top bar, reusing the `logOut` server action and the same
+`.p360` `btn btn-secondary` styling `CustomerHeader.tsx` already uses for
+its own logout button.
+
+**"Edit ownership" page redesigned.** Plot sent an exact field-by-field
+spec for the page reached from admin property verification's "Edit
+ownership" link (`/admin/[id]/ownership`, and the equivalent customer
+route `/properties/[id]/ownership` — both share `OwnershipForm.tsx`):
+
+1. Owner Name (required)
+2. Is this plot owned by the user? (required)
+   - Yes → if another property owned by the same customer already has an
+     owner ID proof on file, offer to reuse it instead of asking for a
+     re-upload; otherwise require an upload.
+   - No → require the actual registered owner's ID proof, plus an NOC
+     (No Objection Certificate) with a downloadable template — NOC is
+     only asked for in this branch.
+3. Sale Deed: Property Title / Sale Deed upload (same field/hint text
+   that used to live one step later, on the Documents screen).
+4. Save / Cancel buttons.
+
+`OwnershipForm.tsx` was fully rebuilt to this spec and restyled to the
+`.p360` design system (it still used the pre-redesign `card`/
+`field-label` classes) with its own back-button header, matching every
+other redesigned standalone screen (`RegisterQuick`, `ScheduleVisit`,
+`ProfileEditForm`). Both `app/admin/[id]/ownership/page.tsx` and
+`app/properties/[id]/ownership/page.tsx` dropped their old
+`container-narrow` wrapper (and, on the customer side, the `CustomerHeader`
+wrapper) for the same reason rounds 10-11 dropped them elsewhere.
+
+**New: owner ID proof reuse.** `registration.actions.ts` gained
+`getReusableOwnerIdProof(propertyId)` — looks across every other property
+owned by the same customer (`properties.owner_id`) for an existing
+`property_documents` row with `doc_type='owner_id'`, and returns the most
+recently uploaded one. When found (and this property doesn't already
+have its own), `OwnershipForm.tsx` shows a card offering "Use this
+proof" vs. "Upload a new one"; choosing reuse copies the file
+server-side (`supabase.storage...copy()`) into this property's own
+storage path rather than sharing one file across two properties' rows,
+so each property keeps an independent, deletable copy.
+
+**Deliberately dropped from this screen, flagged to Plot:** the old
+"Approval letter" upload and the "do you allow our agent to enter this
+property" question are gone — neither is in Plot's new field list, and
+agent-entry consent is already collected at property creation time via
+`RegisterQuick.tsx`'s terms checkbox ("...allow a verified agent to visit
+and photograph this property..."). The `property_ownership.
+approval_letter_url` / `agent_entry_allowed` columns are left in the
+schema untouched (nullable, simply no longer written by this form) in
+case any legacy data still references them.
+
+**Sale Deed moved, not duplicated.** Since the Property Title / Sale Deed
+upload now lives on the ownership page, it was removed from
+`DocumentsForm.tsx` (`/admin/[id]/documents`, `/properties/[id]/documents`)
+so it isn't collected twice — `saveDocumentsAndSubmit` no longer handles
+`title_deed` at all; `saveOwnership` does. The Documents step still exists
+and still collects the Encumbrance Certificate fields and the two legal
+declaration checkboxes (`no_legal_case`, `agent_entry_terms`) — Plot's
+spec didn't mention removing those, so "Save" on the ownership page still
+proceeds to that step by default (same `redirectTo` mechanism as before),
+just relabeled "Save" instead of "Continue to Documents" per the new spec.
+
+**Downstream fix — admin queue status.** `queues.actions.ts`'s Property
+verification queue computed an "Owner letter pending" / urgent state from
+`approval_letter_url`, which the ownership form no longer sets — left
+as-is, every non-owner property would show that state forever. Changed
+to track the NOC instead (`noc_file_url` / `doc_type='noc'`), which is
+the document actually required in that branch now. Same swap made in
+`PropertyVerificationDetail.tsx`'s document-status cards (was "Letter of
+approval from the original owner", now "NOC (No Objection Certificate)").

@@ -178,13 +178,65 @@ export async function updateProperty(propertyId: string, formData: FormData, red
 
 const REQUIRED_OWNERSHIP_FIELDS: Array<[string, string]> = [
   ['owner_full_name', 'Owner Name'],
-  ['is_owner', 'Is this plot owned by you?'],
+  ['is_owner', 'Is this plot owned by the user?'],
 ];
 
-// "Proofs of Ownership" screen: owner name, is-registered-user-owner,
-// agent-entry consent, plus NOC/approval-letter/owner-ID uploads when the
-// plot owner differs from the logged-in user. Every visible field on this
-// screen is mandatory regardless of which branch (yes/no) is showing.
+export type ReusableOwnerIdProof = {
+  propertyId: string;
+  propertyName: string;
+  filePath: string;
+  url: string | null;
+};
+
+// Redesign 2026-09 (follow-up, round 13) — new: when the registering
+// customer owns more than one property and another one of their
+// properties already has an owner ID proof on file, this offers to reuse
+// it here instead of asking them to upload the same ID again (Plot's
+// explicit ask). Looks at property_documents (doc_type='owner_id') across
+// every OTHER property with the same owner_id, and returns the most
+// recently uploaded one, if any.
+export async function getReusableOwnerIdProof(propertyId: string): Promise<ReusableOwnerIdProof | null> {
+  const supabase = await createClient();
+  const { data: property } = await supabase.from('properties').select('owner_id').eq('id', propertyId).single();
+  if (!property?.owner_id) return null;
+
+  const { data: otherProperties } = await supabase
+    .from('properties')
+    .select('id, property_name')
+    .eq('owner_id', property.owner_id)
+    .neq('id', propertyId);
+  if (!otherProperties || otherProperties.length === 0) return null;
+
+  const otherIds = otherProperties.map((p) => p.id);
+  const { data: docs } = await supabase
+    .from('property_documents')
+    .select('property_id, file_path, uploaded_at')
+    .eq('doc_type', 'owner_id')
+    .in('property_id', otherIds)
+    .order('uploaded_at', { ascending: false })
+    .limit(1);
+
+  const doc = docs?.[0];
+  if (!doc) return null;
+
+  const propertyName = otherProperties.find((p) => p.id === doc.property_id)?.property_name || 'another property';
+  const { data: signed } = await supabase.storage.from('property-documents').createSignedUrl(doc.file_path, 60 * 5);
+
+  return { propertyId: doc.property_id, propertyName, filePath: doc.file_path, url: signed?.signedUrl ?? null };
+}
+
+// "Edit ownership" screen — redesigned round 13 (follow-up) per Plot's
+// exact spec: Owner Name; Is this plot owned by the user (yes → reuse an
+// owner ID proof already on file for another of their properties, or
+// upload one if none exists; no → owner ID proof + NOC with a
+// downloadable template, required only in this branch); and the
+// Property Title / Sale Deed upload, moved onto this same page (used to
+// live one step later, on the Documents screen — see
+// saveDocumentsAndSubmit and DocumentsForm.tsx, which no longer collect
+// it). The old "Approval letter" upload and the separate "do you allow
+// our agent to enter" question are dropped entirely — not part of Plot's
+// new field list, and agent-entry consent is already collected at
+// property creation (RegisterQuick.tsx's terms checkbox).
 export async function saveOwnership(propertyId: string, formData: FormData, redirectTo?: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -196,37 +248,29 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
 
   const isOwner = formData.get('is_owner') === 'yes';
 
-  if (isOwner) {
-    if (!String(formData.get('agent_entry_allowed') || '').trim()) {
-      return { error: 'Please answer whether you allow our agent to enter this property.' };
-    }
-    if (formData.get('agent_entry_allowed') === 'no') {
-      return {
-        error:
-          "Without agent access to visit and photograph the property, we can't verify its security or condition. Please allow agent entry to continue, or contact support for other options.",
-      };
-    }
-  }
-
   const { data: existingOwnershipDocs } = await supabase
     .from('property_documents')
     .select('doc_type')
     .eq('property_id', propertyId)
-    .in('doc_type', ['approval_letter', 'noc', 'owner_id']);
+    .in('doc_type', ['noc', 'owner_id', 'title_deed']);
   const existingDocTypes = new Set((existingOwnershipDocs ?? []).map((d) => d.doc_type));
 
-  const approvalFile = formData.get('approval_letter') as File | null;
   const nocFile = formData.get('noc_file') as File | null;
   const ownerIdFile = formData.get('owner_id_proof') as File | null;
+  const reuseOwnerIdFrom = String(formData.get('reuse_owner_id_from') || '').trim();
+  const titleDeedFiles = (formData.getAll('title_deed') as File[]).filter((f) => f.size > 0);
 
-  if (!existingDocTypes.has('approval_letter') && (!approvalFile || approvalFile.size === 0)) {
-    return { error: 'Approval letter is required.' };
+  const ownerIdMissing = !existingDocTypes.has('owner_id') && !reuseOwnerIdFrom && (!ownerIdFile || ownerIdFile.size === 0);
+  if (ownerIdMissing) {
+    return { error: isOwner ? 'Owner ID proof is required.' : "Owner ID proof (on which the plot is registered) is required." };
   }
-  if (!existingDocTypes.has('noc') && (!nocFile || nocFile.size === 0)) {
-    return { error: 'NOC letter is required.' };
+  if (!isOwner) {
+    if (!existingDocTypes.has('noc') && (!nocFile || nocFile.size === 0)) {
+      return { error: 'NOC (No Objection Certificate) is required.' };
+    }
   }
-  if (!existingDocTypes.has('owner_id') && (!ownerIdFile || ownerIdFile.size === 0)) {
-    return { error: 'Owner ID proof is required.' };
+  if (!existingDocTypes.has('title_deed') && titleDeedFiles.length === 0) {
+    return { error: 'Property Title / Sale Deed is required.' };
   }
 
   async function uploadIfPresent(field: string, docType: DocumentType) {
@@ -265,19 +309,59 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
     return path;
   }
 
+  // Copies another property's already-uploaded owner ID proof into this
+  // property's own storage path and property_documents row, rather than
+  // asking the customer to upload the same ID a second time.
+  async function reuseOwnerIdProof(sourcePath: string) {
+    const filename = sourcePath.split('/').pop() || 'owner-id';
+    const path = `${propertyId}/owner_id-${filename}`;
+    const { error: copyError } = await supabase.storage.from('property-documents').copy(sourcePath, path);
+    if (copyError) throw new Error(copyError.message);
+
+    const { data: existing } = await supabase
+      .from('property_documents')
+      .select('id, file_path')
+      .eq('property_id', propertyId)
+      .eq('doc_type', 'owner_id')
+      .maybeSingle();
+
+    const docError = existing
+      ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error
+      : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: 'owner_id', file_path: path })).error;
+    if (docError) throw new Error(`Saving owner id record failed: ${docError.message}`);
+
+    if (existing?.file_path && existing.file_path !== path) {
+      await supabase.storage.from('property-documents').remove([existing.file_path]);
+    }
+    return path;
+  }
+
+  // Title deed allows multiple pages/files (e.g. first page + last page) —
+  // each upload ADDS a new row rather than replacing the previous one,
+  // unlike the other document types above, which stay single-file.
+  async function uploadTitleDeedFiles(files: File[]) {
+    for (const file of files) {
+      const path = `${propertyId}/title_deed-${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('property-documents').upload(path, file);
+      if (uploadError) throw new Error(uploadError.message);
+      const { error: docError } = await supabase
+        .from('property_documents')
+        .insert({ property_id: propertyId, doc_type: 'title_deed', file_path: path });
+      if (docError) throw new Error(`Saving title deed record failed: ${docError.message}`);
+    }
+  }
+
   try {
     const nocPath = await uploadIfPresent('noc_file', 'noc');
-    const approvalPath = await uploadIfPresent('approval_letter', 'approval_letter');
-    const ownerIdPath = await uploadIfPresent('owner_id_proof', 'owner_id');
+    const ownerIdPath = reuseOwnerIdFrom ? await reuseOwnerIdProof(reuseOwnerIdFrom) : await uploadIfPresent('owner_id_proof', 'owner_id');
+    await uploadTitleDeedFiles(titleDeedFiles);
 
     const { error } = await supabase.from('property_ownership').upsert(
       {
         property_id: propertyId,
         owner_full_name: String(formData.get('owner_full_name') || ''),
         is_registered_user_owner: isOwner,
-        agent_entry_allowed: formData.get('agent_entry_allowed') === 'yes',
         ...(nocPath ? { noc_file_url: nocPath } : {}),
-        ...(approvalPath ? { approval_letter_url: approvalPath } : {}),
         ...(ownerIdPath ? { owner_id_proof_url: ownerIdPath } : {}),
       },
       { onConflict: 'property_id' } // fixes: duplicate key value violates unique constraint "property_ownership_property_id_key"
@@ -287,27 +371,20 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
     return { error: e.message };
   }
 
+  revalidatePath('/admin');
+  revalidatePath('/dashboard');
+  revalidatePath(`/properties/${propertyId}`);
   redirect(redirectTo || `/properties/${propertyId}/documents`);
 }
 
-// Final "Property Title / Sale Deed / Encumbrance Certificate" screen +
-// legal declarations + Submit / Reset / Cancel. Title deed and
-// encumbrance certificate are mandatory on first submission; if they were
-// already uploaded in an earlier visit (edit flow), re-uploading is optional.
+// Final "Encumbrance Certificate" screen + legal declarations + Submit.
+// Redesign 2026-09 (follow-up, round 13) — the Property Title / Sale Deed
+// upload that used to live here moved one step earlier, onto the Edit
+// ownership screen (see saveOwnership, OwnershipForm.tsx) — Plot's new
+// spec groups it with the ownership proof instead of the documents step,
+// so it's no longer collected here to avoid asking for it twice.
 export async function saveDocumentsAndSubmit(propertyId: string, formData: FormData, redirectTo?: string) {
   const supabase = await createClient();
-
-  const { data: existingDocs } = await supabase
-    .from('property_documents')
-    .select('doc_type')
-    .eq('property_id', propertyId)
-    .eq('doc_type', 'title_deed');
-  const existingTypes = new Set((existingDocs ?? []).map((d) => d.doc_type));
-
-  const titleDeedFiles = (formData.getAll('title_deed') as File[]).filter((f) => f.size > 0);
-  if (!existingTypes.has('title_deed') && titleDeedFiles.length === 0) {
-    return { error: 'Property Title / Sale Deed is required.' };
-  }
 
   const wantsDigitalEc = String(formData.get('ec_digital_copy_requested') || '');
   if (wantsDigitalEc !== 'yes' && wantsDigitalEc !== 'no') {
@@ -346,23 +423,7 @@ export async function saveDocumentsAndSubmit(propertyId: string, formData: FormD
     }
   }
 
-  // Title deed allows multiple pages/files (e.g. first page + last page).
-  // Each upload ADDS a new row rather than replacing the previous one —
-  // unlike the other document types above, which stay single-file.
-  async function uploadTitleDeedFiles(files: File[]) {
-    for (const file of files) {
-      const path = `${propertyId}/title_deed-${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('property-documents').upload(path, file);
-      if (uploadError) throw new Error(uploadError.message);
-      const { error: docError } = await supabase
-        .from('property_documents')
-        .insert({ property_id: propertyId, doc_type: 'title_deed', file_path: path });
-      if (docError) throw new Error(`Saving title deed record failed: ${docError.message}`);
-    }
-  }
-
   try {
-    await uploadTitleDeedFiles(titleDeedFiles);
     await uploadIfPresent('ec_reference_copy', 'ec_reference_copy');
   } catch (e: any) {
     return { error: e.message };

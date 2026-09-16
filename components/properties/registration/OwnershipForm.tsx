@@ -4,9 +4,30 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveOwnership } from './registration.actions';
 import type { PropertyOwnership } from '@/types/database.types';
+import type { ReusableOwnerIdProof } from './registration.actions';
+
+// Redesign 2026-09 (follow-up, round 13) — full rebuild of the "Proofs of
+// Ownership" screen (reached from admin property verification's "Edit
+// ownership" link, and from the customer's own pre-verification edit
+// flow) per Plot's exact spec, sent field by field:
+//   1) Owner Name *
+//   2) Is this plot owned by the user? * — Yes: reuse an owner ID proof
+//      already on file for another property this same customer owns, or
+//      upload one if none exists. No: owner ID proof (the actual
+//      registered owner's) + NOC, only asked in this branch, with a
+//      downloadable template.
+//   3) Sale Deed: Property Title / Sale Deed upload (moved here from the
+//      separate Documents step — see registration.actions.ts).
+//   Save / Cancel buttons.
+// Restyled to the `.p360` design system to match the rest of the
+// redesigned app (this screen still used the pre-redesign `card`/
+// `field-label` classes). Dropped entirely: the old "Approval letter"
+// upload and the "do you allow our agent to enter" question — neither is
+// in Plot's new field list, and agent-entry consent is already collected
+// at property creation via RegisterQuick.tsx's terms checkbox.
 
 function Required() {
-  return <span style={{ color: 'var(--color-danger)' }}> *</span>;
+  return <span style={{ color: 'var(--color-accent)' }}> *</span>;
 }
 
 type ExistingDoc = { name: string; url: string | null } | null;
@@ -14,61 +35,61 @@ type ExistingDoc = { name: string; url: string | null } | null;
 function ExistingDocLink({ doc }: { doc: ExistingDoc }) {
   if (!doc) return null;
   return (
-    <p style={{ fontSize: 13, marginTop: 6 }}>
+    <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginTop: 6 }}>
       Currently uploaded:{' '}
       {doc.url ? (
-        <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
+        <a href={doc.url} target="_blank" rel="noreferrer">
           {doc.name}
         </a>
       ) : (
-        <span style={{ color: 'var(--color-text-muted)' }}>{doc.name}</span>
+        <span>{doc.name}</span>
       )}
-      {' — '}
-      <span style={{ color: 'var(--color-text-muted)' }}>choose a file below only to replace it</span>
+      {' — choose a file below only to replace it.'}
     </p>
   );
 }
 
 function DownloadTemplateLink({ href }: { href: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-link)', marginLeft: 8 }}>
+    <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 12, marginLeft: 8 }}>
       (download template)
     </a>
   );
 }
 
-function OwnershipDocsUpload({
-  intro,
-  hasExisting,
+function YesNoToggle({
+  value,
+  onChange,
+  yesLabel = 'Yes',
+  noLabel = 'No',
 }: {
-  intro: string;
-  hasExisting?: { noc: ExistingDoc; approval: ExistingDoc; ownerId: ExistingDoc };
+  value: 'yes' | 'no' | '';
+  onChange: (v: 'yes' | 'no') => void;
+  yesLabel?: string;
+  noLabel?: string;
 }) {
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
-      <h3 style={{ fontSize: 18, marginBottom: 8 }}>Authorize verification</h3>
-      <p style={{ marginBottom: 16, fontSize: 14, color: 'var(--color-text-muted)' }}>{intro}</p>
-      <div style={{ marginBottom: 12 }}>
-        <label className="field-label">
-          Approval letter<Required />
-          <DownloadTemplateLink href="/documents/approval-letter-template.pdf" />
-        </label>
-        <input className="field-input" type="file" name="approval_letter" accept="image/*,.pdf" required={!hasExisting?.approval} />
-        <ExistingDocLink doc={hasExisting?.approval ?? null} />
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <label className="field-label">
-          NOC letter<Required />
-          <DownloadTemplateLink href="/documents/noc-template.pdf" />
-        </label>
-        <input className="field-input" type="file" name="noc_file" accept="image/*,.pdf" required={!hasExisting?.noc} />
-        <ExistingDocLink doc={hasExisting?.noc ?? null} />
-      </div>
-      <div>
-        <label className="field-label">Owner ID proof<Required /></label>
-        <input className="field-input" type="file" name="owner_id_proof" accept="image/*,.pdf" required={!hasExisting?.ownerId} />
-        <ExistingDocLink doc={hasExisting?.ownerId ?? null} />
-      </div>
+    <div style={{ display: 'flex', gap: 0 }}>
+      {(['yes', 'no'] as const).map((opt, i) => (
+        <button
+          key={opt}
+          type="button"
+          className="btn"
+          style={{
+            flex: 1,
+            minHeight: 42,
+            border: '1px solid var(--color-divider)',
+            borderLeft: i === 1 ? 0 : undefined,
+            background: value === opt ? 'var(--color-accent)' : 'transparent',
+            color: value === opt ? 'var(--color-bg)' : 'var(--color-text)',
+            fontSize: 12.5,
+            justifyContent: 'center',
+          }}
+          onClick={() => onChange(opt)}
+        >
+          {opt === 'yes' ? yesLabel : noLabel}
+        </button>
+      ))}
     </div>
   );
 }
@@ -77,12 +98,16 @@ export function OwnershipForm({
   propertyId,
   initialData,
   hasExisting,
+  existingTitleDeedDocs,
+  reusableOwnerIdProof,
   backHref,
   redirectTo,
 }: {
   propertyId: string;
   initialData?: Partial<PropertyOwnership>;
-  hasExisting?: { noc: ExistingDoc; approval: ExistingDoc; ownerId: ExistingDoc };
+  hasExisting?: { noc: ExistingDoc; ownerId: ExistingDoc };
+  existingTitleDeedDocs?: ExistingDoc[];
+  reusableOwnerIdProof?: ReusableOwnerIdProof | null;
   backHref?: string;
   redirectTo?: string;
 }) {
@@ -91,105 +116,208 @@ export function OwnershipForm({
   const [isOwner, setIsOwner] = useState<'yes' | 'no' | ''>(
     initialData?.is_registered_user_owner === true ? 'yes' : initialData?.is_registered_user_owner === false ? 'no' : ''
   );
-  const [agentEntry, setAgentEntry] = useState<'yes' | 'no' | ''>(
-    initialData?.agent_entry_allowed === true ? 'yes' : initialData?.agent_entry_allowed === false ? 'no' : ''
+  // Defaults to reusing the found proof (when one exists and this
+  // property doesn't already have its own owner ID on file) — the whole
+  // point of offering it is to save the customer an upload.
+  const [ownerIdMode, setOwnerIdMode] = useState<'reuse' | 'new'>(
+    reusableOwnerIdProof && !hasExisting?.ownerId ? 'reuse' : 'new'
   );
   const router = useRouter();
 
+  const hasTitleDeed = (existingTitleDeedDocs ?? []).length > 0;
+
   function handleSubmit(formData: FormData) {
     setError(null);
+    if (isOwner === 'yes' && ownerIdMode === 'reuse' && reusableOwnerIdProof) {
+      formData.set('reuse_owner_id_from', reusableOwnerIdProof.filePath);
+    }
     startTransition(async () => {
       const result = await saveOwnership(propertyId, formData, redirectTo);
       if (result?.error) setError(result.error);
     });
   }
 
-  const blockedByAgentEntry = isOwner === 'yes' && agentEntry === 'no';
-
   return (
-    <form action={handleSubmit} style={{ maxWidth: 680, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 28, marginBottom: 6 }}>Proofs of Ownership</h1>
-      <p style={{ color: 'var(--color-text-muted)', fontSize: 15.5, marginBottom: 28 }}>
-        Tell us who owns this plot, and authorize a Plot360 agent to verify it in person.
-      </p>
+    <div className="p360" style={{ minHeight: '80vh' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '2px solid var(--color-divider)' }}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ minWidth: 36, minHeight: 36, fontSize: 16, padding: 0, justifyContent: 'center' }}
+          aria-label="Back"
+          onClick={() => router.push(backHref || `/properties/${propertyId}/edit`)}
+        >
+          ←
+        </button>
+        <h1 style={{ fontSize: 17, flex: 1 }}>Edit ownership</h1>
+      </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 18, marginBottom: 16 }}>Owner details</h3>
+      <form action={handleSubmit} style={{ maxWidth: 560, margin: '0 auto', padding: '20px 20px 60px' }}>
+        <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', lineHeight: 1.5, marginBottom: 20 }}>
+          Tell us who owns this plot, and provide proof of ownership.
+        </p>
 
-        <div style={{ marginBottom: 16 }}>
-          <label className="field-label">Owner Name<Required /></label>
-          <input className="field-input" name="owner_full_name" required defaultValue={initialData?.owner_full_name ?? ''} />
+        {/* Section 1 — Owner name */}
+        <div className="field">
+          <label>
+            Owner Name<Required />
+          </label>
+          <input className="input" name="owner_full_name" required defaultValue={initialData?.owner_full_name ?? ''} />
         </div>
 
-        <div style={{ marginBottom: isOwner === 'yes' ? 16 : 0 }}>
-          <label className="field-label">Is this plot owned by you?<Required /></label>
-          <select
-            className="field-input"
-            name="is_owner"
-            required
-            value={isOwner}
-            onChange={(e) => setIsOwner(e.target.value as 'yes' | 'no')}
-          >
-            <option value="" disabled>Select…</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
+        {/* Section 2 — Is this plot owned by the user? */}
+        <div className="field" style={{ marginTop: 18 }}>
+          <label>
+            Is this plot owned by the user?<Required />
+          </label>
+          <input type="hidden" name="is_owner" value={isOwner} />
+          <YesNoToggle value={isOwner} onChange={setIsOwner} />
         </div>
 
         {isOwner === 'yes' && (
-          <div>
-            <label className="field-label">Do you allow our agent to enter this property to take photos/video?<Required /></label>
-            <select
-              className="field-input"
-              name="agent_entry_allowed"
-              required
-              value={agentEntry}
-              onChange={(e) => setAgentEntry(e.target.value as 'yes' | 'no')}
-            >
-              <option value="" disabled>Select…</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
+          <div style={{ marginTop: 16 }}>
+            {reusableOwnerIdProof && !hasExisting?.ownerId ? (
+              <div className="card section-alt" style={{ marginBottom: 12 }}>
+                <p style={{ fontSize: 12.5, marginBottom: 10 }}>
+                  We already have an owner ID proof on file from <strong>{reusableOwnerIdProof.propertyName}</strong>, another
+                  property this customer owns.
+                </p>
+                <div style={{ display: 'flex', gap: 0, marginBottom: ownerIdMode === 'new' ? 12 : 0 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{
+                      flex: 1,
+                      minHeight: 38,
+                      border: '1px solid var(--color-divider)',
+                      background: ownerIdMode === 'reuse' ? 'var(--color-accent)' : 'transparent',
+                      color: ownerIdMode === 'reuse' ? 'var(--color-bg)' : 'var(--color-text)',
+                      fontSize: 12,
+                      justifyContent: 'center',
+                    }}
+                    onClick={() => setOwnerIdMode('reuse')}
+                  >
+                    Use this proof
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{
+                      flex: 1,
+                      minHeight: 38,
+                      border: '1px solid var(--color-divider)',
+                      borderLeft: 0,
+                      background: ownerIdMode === 'new' ? 'var(--color-accent)' : 'transparent',
+                      color: ownerIdMode === 'new' ? 'var(--color-bg)' : 'var(--color-text)',
+                      fontSize: 12,
+                      justifyContent: 'center',
+                    }}
+                    onClick={() => setOwnerIdMode('new')}
+                  >
+                    Upload a new one
+                  </button>
+                </div>
+                {ownerIdMode === 'reuse' && reusableOwnerIdProof.url && (
+                  <p style={{ fontSize: 12, marginTop: 8 }}>
+                    <a href={reusableOwnerIdProof.url} target="_blank" rel="noreferrer">
+                      View the proof we'll reuse
+                    </a>
+                  </p>
+                )}
+                {ownerIdMode === 'new' && (
+                  <div className="field" style={{ marginTop: 0 }}>
+                    <label>
+                      Owner ID proof<Required />
+                    </label>
+                    <input className="input" type="file" name="owner_id_proof" accept="image/*,.pdf" required />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="field">
+                <label>
+                  Owner ID proof<Required />
+                </label>
+                <input className="input" type="file" name="owner_id_proof" accept="image/*,.pdf" required={!hasExisting?.ownerId} />
+                <ExistingDocLink doc={hasExisting?.ownerId ?? null} />
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      {blockedByAgentEntry && (
-        <div className="card" style={{ marginBottom: 20, borderColor: 'var(--color-danger)' }}>
-          <p style={{ fontSize: 14 }}>
-            Without allowing our agent to visit and photograph the property, we can't verify how
-            secure the plot is, its current condition, or confirm the details you've provided.
-            Registration can't continue past this step unless agent access is allowed — please
-            change your answer above to "Yes" to proceed, or contact support if you'd like to
-            discuss other verification options.
-          </p>
+        {isOwner === 'no' && (
+          <div style={{ marginTop: 16 }}>
+            <div className="field">
+              <label>
+                Owner ID proof <span className="text-muted">(on which the plot is registered)</span>
+                <Required />
+              </label>
+              <input className="input" type="file" name="owner_id_proof" accept="image/*,.pdf" required={!hasExisting?.ownerId} />
+              <ExistingDocLink doc={hasExisting?.ownerId ?? null} />
+            </div>
+            <div className="field" style={{ marginTop: 14 }}>
+              <label>
+                NOC (No Objection Certificate)
+                <DownloadTemplateLink href="/documents/noc-template.pdf" />
+                <Required />
+              </label>
+              <input className="input" type="file" name="noc_file" accept="image/*,.pdf" required={!hasExisting?.noc} />
+              <ExistingDocLink doc={hasExisting?.noc ?? null} />
+            </div>
+          </div>
+        )}
+
+        {/* Section 3 — Sale Deed */}
+        <div style={{ height: 2, background: 'var(--color-divider)', margin: '22px 0 18px' }} />
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--p-ink-soft)', marginBottom: 10 }}>
+          Sale deed
         </div>
-      )}
+        <div className="field">
+          <label>
+            Property Title / Sale Deed <span className="text-muted">(make sure the first or last page, where owner name and property details are clearly stated, matches the owner details)</span>
+            <Required />
+          </label>
+          <input className="input" type="file" name="title_deed" accept="image/*,.pdf" multiple required={!hasTitleDeed} />
+          {(existingTitleDeedDocs ?? []).map((doc) => (
+            <p key={doc?.name} style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginTop: 6 }}>
+              Uploaded:{' '}
+              {doc?.url ? (
+                <a href={doc.url} target="_blank" rel="noreferrer">
+                  {doc.name}
+                </a>
+              ) : (
+                <span>{doc?.name}</span>
+              )}
+            </p>
+          ))}
+          {hasTitleDeed && (
+            <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>
+              Choosing files above adds them alongside what's already uploaded — it doesn't replace them.
+            </p>
+          )}
+        </div>
 
-      {isOwner === 'yes' && !blockedByAgentEntry && (
-        <OwnershipDocsUpload
-          intro="Please provide an approval letter, NOC letter, and the owner's signed ID proof."
-          hasExisting={hasExisting}
-        />
-      )}
+        {error && <p style={{ color: 'var(--p-alert)', marginTop: 16, fontSize: 13.5 }}>{error}</p>}
 
-      {isOwner === 'no' && (
-        <OwnershipDocsUpload
-          intro="Since the plot owner is different from the registering user, please provide an approval letter, NOC letter, and the owner's signed ID proof."
-          hasExisting={hasExisting}
-        />
-      )}
-
-      {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
-
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn-primary" onClick={() => router.push(backHref || `/properties/${propertyId}/edit`)}>
-          Back
-        </button>
-        <button className="btn-primary" type="submit" disabled={isPending || blockedByAgentEntry}>
-          {isPending ? 'Saving…' : 'Continue to Documents'}
-        </button>
-      </div>
-    </form>
+        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ flex: 1, minHeight: 46, fontSize: 14, justifyContent: 'center' }}
+            onClick={() => router.push(backHref || `/properties/${propertyId}/edit`)}
+          >
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={isPending || !isOwner}
+            style={{ flex: 1, minHeight: 46, fontSize: 14, justifyContent: 'center' }}
+          >
+            {isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

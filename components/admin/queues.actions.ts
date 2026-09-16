@@ -54,7 +54,7 @@ export async function getPropertyVerificationQueue(opts: { query?: string; sort?
 
   const ids = list.map((p) => p.id);
   const [{ data: ownerships }, { data: documents }, { data: payments }] = await Promise.all([
-    supabase.from('property_ownership').select('property_id, is_registered_user_owner, approval_letter_url, owner_id_proof_url').in('property_id', ids),
+    supabase.from('property_ownership').select('property_id, is_registered_user_owner, noc_file_url, owner_id_proof_url').in('property_id', ids),
     supabase.from('property_documents').select('property_id, doc_type').in('property_id', ids),
     supabase.from('payments').select('property_id, status, subscription_plans(visit_quantity)').in('property_id', ids).order('created_at', { ascending: false }),
   ]);
@@ -71,12 +71,16 @@ export async function getPropertyVerificationQueue(opts: { query?: string; sort?
     const docs = docTypesByProperty[p.id] ?? new Set();
     const hasSaleDeed = docs.has('title_deed');
     const hasIdProof = docs.has('owner_id') || !!ownership?.owner_id_proof_url;
-    const needsOwnerLetter = ownership && ownership.is_registered_user_owner === false && !ownership.approval_letter_url && !docs.has('approval_letter');
+    // Redesign 2026-09 (follow-up, round 13) — the Edit ownership page no
+    // longer collects an "approval letter" (see OwnershipForm.tsx); the
+    // NOC is now the document required only when the plot owner differs
+    // from the registering user, so this queue flag tracks that instead.
+    const needsNoc = ownership && ownership.is_registered_user_owner === false && !ownership.noc_file_url && !docs.has('noc');
 
     let state = 'Ready to verify';
     if (!hasSaleDeed) state = 'Docs pending';
     else if (!hasIdProof) state = 'ID proof pending';
-    else if (needsOwnerLetter) state = 'Owner letter pending';
+    else if (needsNoc) state = 'NOC pending';
 
     const plan = planByProperty[p.id];
     const visitQuantity = plan?.subscription_plans?.visit_quantity;
@@ -87,7 +91,7 @@ export async function getPropertyVerificationQueue(opts: { query?: string; sort?
       name: p.property_name,
       place: [p.village_town, p.district, p.sro_code ? `SRO ${p.sro_code}` : null].filter(Boolean).join(' · '),
       state,
-      urgent: state === 'Owner letter pending',
+      urgent: state === 'NOC pending',
       window: visitQuantity ? `${visitQuantity} visit${visitQuantity > 1 ? 's' : ''}` : '—',
       waitHours,
       href: `/admin/${p.id}`,

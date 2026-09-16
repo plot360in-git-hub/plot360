@@ -28,11 +28,15 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
 
   const saleDeed = documents.find((d: any) => d.doc_type === 'title_deed');
   const idProofDoc = documents.find((d: any) => d.doc_type === 'owner_id');
-  const approvalDoc = documents.find((d: any) => d.doc_type === 'approval_letter');
-  const [saleDeedUrl, idProofUrl, approvalUrl] = await Promise.all([
+  // Redesign 2026-09 (follow-up, round 13) — the Edit ownership page no
+  // longer collects an "approval letter" (see OwnershipForm.tsx); the NOC
+  // is now the document required when the plot owner differs from the
+  // registering user, so this detail view shows that instead.
+  const nocDoc = documents.find((d: any) => d.doc_type === 'noc');
+  const [saleDeedUrl, idProofUrl, nocUrl] = await Promise.all([
     saleDeed ? getDocumentSignedUrl(saleDeed.file_path) : null,
     idProofDoc ? getDocumentSignedUrl(idProofDoc.file_path) : null,
-    approvalDoc ? getDocumentSignedUrl(approvalDoc.file_path) : null,
+    nocDoc ? getDocumentSignedUrl(nocDoc.file_path) : null,
   ]);
 
   const owner: any = property.profiles;
@@ -97,11 +101,11 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
 
         {notOwned && (
           <div style={{ border: '1px solid var(--color-divider)', padding: 12, marginTop: 12 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600 }}>Letter of approval from the original owner</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600 }}>NOC (No Objection Certificate)</div>
             <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 5 }}>Required when the customer is not the owner.</div>
-            <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 7 }}>{approvalDoc || ownership?.approval_letter_url ? 'On file.' : 'Not received yet.'}</div>
-            {approvalUrl && (
-              <a href={approvalUrl} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ minHeight: 30, fontSize: 11, padding: '0 10px', marginTop: 9, display: 'inline-flex', textDecoration: 'none' }}>
+            <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 7 }}>{nocDoc || ownership?.noc_file_url ? 'On file.' : 'Not received yet.'}</div>
+            {nocUrl && (
+              <a href={nocUrl} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ minHeight: 30, fontSize: 11, padding: '0 10px', marginTop: 9, display: 'inline-flex', textDecoration: 'none' }}>
                 View
               </a>
             )}
