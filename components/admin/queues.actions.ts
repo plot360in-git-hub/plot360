@@ -44,10 +44,22 @@ function finish(rows: (Omit<QueueRow, 'wait' | 'late'> & {})[], query: string, s
 
 export async function getPropertyVerificationQueue(opts: { query?: string; sort?: QueueSort; page?: number } = {}) {
   const supabase = await createClient();
+  // Redesign 2026-09 (follow-up, round 18) — Plot asked to also surface
+  // rejected properties here so the admin can follow up with customers,
+  // and to fold "customer resubmitted after a rejection" into what counts
+  // as urgent. A rejected property's status flips back to 'pending' the
+  // moment the customer re-saves ownership (saveOwnership,
+  // registration.actions.ts) but rejection_reason is deliberately left in
+  // place until the admin approves — so status==='pending' with a
+  // rejection_reason still set is exactly "customer resubmitted, waiting
+  // on admin review", with no schema change needed. A plain
+  // status==='rejected' row means the customer hasn't acted yet, so it's
+  // shown for follow-up but not flagged urgent (nothing for the admin to
+  // do until the customer responds).
   const { data: properties } = await supabase
     .from('properties')
-    .select('id, property_name, village_town, district, sro_name, sro_code, created_at')
-    .eq('status', 'pending')
+    .select('id, property_name, village_town, district, sro_name, sro_code, created_at, status, rejection_reason')
+    .in('status', ['pending', 'rejected'])
     .order('created_at', { ascending: true });
   const list = properties ?? [];
   if (list.length === 0) return { rows: [], total: 0, page: 1, pageCount: 1 };
@@ -76,11 +88,26 @@ export async function getPropertyVerificationQueue(opts: { query?: string; sort?
     // NOC is now the document required only when the plot owner differs
     // from the registering user, so this queue flag tracks that instead.
     const needsNoc = ownership && ownership.is_registered_user_owner === false && !ownership.noc_file_url && !docs.has('noc');
+    const wasResubmitted = p.status === 'pending' && !!p.rejection_reason;
 
-    let state = 'Ready to verify';
-    if (!hasSaleDeed) state = 'Docs pending';
-    else if (!hasIdProof) state = 'ID proof pending';
-    else if (needsNoc) state = 'NOC pending';
+    let state: string;
+    let urgent: boolean;
+
+    if (p.status === 'rejected') {
+      // Rejected and the customer hasn't resubmitted yet — waiting on
+      // them, not on the admin, so it's visible for follow-up but not
+      // pushed to the top of "Most urgent first".
+      state = 'Rejected · follow up with customer';
+      urgent = false;
+    } else {
+      let baseState = 'Ready to verify';
+      if (!hasSaleDeed) baseState = 'Docs pending';
+      else if (!hasIdProof) baseState = 'ID proof pending';
+      else if (needsNoc) baseState = 'NOC pending';
+
+      state = wasResubmitted ? `${baseState} · resubmitted` : baseState;
+      urgent = wasResubmitted || needsNoc || baseState === 'Ready to verify';
+    }
 
     const plan = planByProperty[p.id];
     const visitQuantity = plan?.subscription_plans?.visit_quantity;
@@ -91,7 +118,7 @@ export async function getPropertyVerificationQueue(opts: { query?: string; sort?
       name: p.property_name,
       place: [p.village_town, p.district, p.sro_code ? `SRO ${p.sro_code}` : null].filter(Boolean).join(' · '),
       state,
-      urgent: state === 'NOC pending',
+      urgent,
       window: visitQuantity ? `${visitQuantity} visit${visitQuantity > 1 ? 's' : ''}` : '—',
       waitHours,
       href: `/admin/${p.id}`,

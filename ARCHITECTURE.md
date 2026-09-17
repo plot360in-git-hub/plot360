@@ -1577,3 +1577,65 @@ confirm by watching whether the button's dark highlight itself moves
 between "Most urgent first" and "Oldest waiting" on click, which would
 tell them the click is registering even though the row order doesn't
 visibly change for this data set.
+
+## 31. Redesign 2026-09 (round 18) — broader "urgent" logic + rejected
+##     properties surfaced in the verification queue
+
+Plot's request: fold "customer resubmitted after a rejection" and
+"fully ready for review" into what "Most urgent first" flags, and asked
+whether rejected-but-not-yet-resubmitted properties should be shown too
+so the admin can follow up — leaving the call on merged-vs-separate to
+this round.
+
+**Detecting "resubmitted after rejection" needed no schema change.**
+`setPropertyStatus` (`admin.actions.ts`) sets `properties.rejection_reason`
+on rejection and only clears it back to `null` when the property is
+later approved (`status: 'verified'`) — it is deliberately *not*
+cleared by `saveOwnership`'s rejected→pending flip (round 14). So
+`status === 'pending' && rejection_reason !== null` is already, on its
+own, an exact signal for "this was rejected and the customer has since
+resubmitted, now waiting on the admin" — confirmed by reading both
+functions again before relying on it.
+
+**Decision: merged into the existing Property verification queue,
+not a separate view.** The app's established pattern is one shared
+queue table per concern (`QueueScreen`/`QueueControls`/`queues.actions.ts`
+— six queues total, all built the same way); adding a seventh queue just
+for "rejected, following up" would fragment that pattern for a case
+that's really the same concern (properties working their way through
+verification) at a different stage. `getPropertyVerificationQueue`'s
+`properties` query changed from `.eq('status', 'pending')` to
+`.in('status', ['pending', 'rejected'])`, with `status` and
+`rejection_reason` added to the select.
+
+**New state/urgency logic per row:**
+- Plain `status === 'rejected'` (customer hasn't acted yet): state
+  shown as "Rejected · follow up with customer", **not** marked
+  urgent — nothing for the admin to do until the customer responds, so
+  it stays out of "Most urgent first" while still being visible in the
+  list (and matchable by search) for proactive follow-up.
+- `status === 'pending'` with a `rejection_reason` still set (customer
+  resubmitted): the usual doc-completeness state label (Docs pending /
+  ID proof pending / NOC pending / Ready to verify) gets a
+  "· resubmitted" suffix, and the row is always marked `urgent: true`
+  regardless of which doc-state it's in — Plot's phrasing ("now that
+  information is provided and waiting for admin to review") reads as
+  "this needs an admin's eyes regardless of exactly which fields came
+  back," so resubmission itself is the urgency signal here, not just
+  reaching "Ready to verify".
+- `status === 'pending'`, never rejected, `state === 'Ready to verify'`
+  (all documents in, nothing more needed from the customer): now also
+  `urgent: true` — previously only "NOC pending" counted as urgent,
+  which meant a fully-ready property could sit un-flagged waiting on
+  the admin. Kept as urgent per Plot's message re-confirming it.
+- The existing NOC-pending condition (`needsNoc`) is unchanged and
+  still counts as urgent on its own, independent of the above.
+
+Not changed: `getAdminPendingCounts`'s sidebar badge for this queue
+still counts strictly `status === 'pending'` rows — a rejected property
+sitting untouched by the customer isn't a pending admin action, so
+folding it into that badge's number would overstate what needs the
+admin's attention right now. It remains visible in the queue list
+itself (this round's whole point) without inflating the badge count.
+The queue's note text under the page title was updated to mention that
+rejected/awaiting-resubmission properties now appear here too.

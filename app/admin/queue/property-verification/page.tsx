@@ -18,7 +18,7 @@ export default async function PropertyVerificationQueuePage({
   return (
     <QueueScreen
       title="Property verification"
-      note="Registrations waiting for document collection, SRO details and owner approval."
+      note="Registrations waiting for document collection, SRO details and owner approval — plus rejected properties still waiting on the customer to resubmit."
       colA="Property"
       colB="Location · SRO"
       colD="Plan"
