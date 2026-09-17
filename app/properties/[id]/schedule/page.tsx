@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getVisitCreditsForProperty, getOpenVisitRequestCounts } from '@/components/payments/visitCredits.actions';
+import { getVisitCreditsForProperty, getReservedCreditCounts } from '@/components/payments/visitCredits.actions';
 import { remainingAfterReservations, nearestExpiry, canScheduleVisit } from '@/lib/visitCredits';
 import { maskPhone } from '@/components/customer/home.data';
 import { ScheduleVisit } from '@/components/customer/ScheduleVisit';
@@ -21,7 +21,7 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
 
   const [credits, reservedCounts, { data: profile }, { count: jobCount }] = await Promise.all([
     getVisitCreditsForProperty(id),
-    getOpenVisitRequestCounts([id]),
+    getReservedCreditCounts([id]),
     supabase.from('profiles').select('phone_number').eq('id', userData.user.id).maybeSingle(),
     // Redesign 2026-09 (follow-up, round 19) — gates this whole screen:
     // the first visit is arranged automatically (see canScheduleVisit's

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { getVisitCreditsForProperty, getOpenVisitRequestCounts } from '@/components/payments/visitCredits.actions';
+import { getVisitCreditsForProperty, getReservedCreditCounts } from '@/components/payments/visitCredits.actions';
 import { totalRemainingCredits, nearestExpiry, canScheduleVisit, milestoneStage, MILESTONES } from '@/lib/visitCredits';
 
 const VISIT_STATUS_LABEL: Record<string, string> = {
@@ -46,7 +46,7 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
       .select('id, status, visit_number, assigned_at, decided_at, observations, admin_feedback')
       .eq('property_id', propertyId)
       .order('assigned_at', { ascending: false }),
-    getOpenVisitRequestCounts([propertyId]),
+    getReservedCreditCounts([propertyId]),
   ]);
 
   if (!property) return <p className="p360" style={{ padding: 24 }}>Property not found.</p>;

@@ -29,18 +29,39 @@ export async function getVisitCreditsForProperties(propertyIds: string[]): Promi
   return byProperty;
 }
 
-// How many credits are already spoken for by an open/assigned request —
-// see lib/visitCredits.ts, remainingAfterReservations.
-export async function getOpenVisitRequestCounts(propertyIds: string[]): Promise<Record<string, number>> {
+// How many credits are already spoken for by activity in progress — see
+// lib/visitCredits.ts, remainingAfterReservations.
+//
+// Redesign 2026-09 (follow-up, round 20) — this used to count only
+// visit_requests with status 'open' or 'assigned'. That missed any
+// monitoring_jobs row holding a visit_credit_id that didn't come from a
+// visit_request at all — specifically round 19's auto-assigned first
+// visit, but really any job assigned straight from the admin's Job
+// assignment queue. Now counts two buckets that never overlap: a
+// visit_request still 'open' (the customer's ask hasn't become a job
+// yet), and any monitoring_jobs row already holding a visit_credit_id
+// that hasn't reached a final, credit-consuming outcome yet ('approved'
+// is what actually decrements the credit — see finalizeApprovedJob,
+// monitoring.actions.ts — so an approved job is correctly excluded
+// here and picked up instead by quantity_used). The moment a
+// visit_request becomes a job (assignAgentToTarget flips it to
+// status='assigned' and creates the job), it drops out of the first
+// bucket and its job picks it up in the second — never double-counted.
+export async function getReservedCreditCounts(propertyIds: string[]): Promise<Record<string, number>> {
   if (propertyIds.length === 0) return {};
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('visit_requests')
-    .select('property_id')
-    .in('property_id', propertyIds)
-    .in('status', ['open', 'assigned']);
+  const [{ data: openRequests }, { data: inProgressJobs }] = await Promise.all([
+    supabase.from('visit_requests').select('property_id').in('property_id', propertyIds).eq('status', 'open'),
+    supabase
+      .from('monitoring_jobs')
+      .select('property_id')
+      .in('property_id', propertyIds)
+      .not('visit_credit_id', 'is', null)
+      .in('status', ['assigned', 'accepted', 'submitted', 'ec_pending', 'rejected']),
+  ]);
   const counts: Record<string, number> = {};
-  for (const row of data ?? []) counts[row.property_id] = (counts[row.property_id] ?? 0) + 1;
+  for (const row of openRequests ?? []) counts[row.property_id] = (counts[row.property_id] ?? 0) + 1;
+  for (const row of inProgressJobs ?? []) counts[row.property_id] = (counts[row.property_id] ?? 0) + 1;
   return counts;
 }
 
@@ -248,12 +269,16 @@ export async function requestVisit(propertyId: string, windowStart: string, wind
   }
 
   const credits = await getVisitCreditsForProperty(propertyId);
-  const { count: reserved } = await supabase
-    .from('visit_requests')
-    .select('id', { count: 'exact', head: true })
-    .eq('property_id', propertyId)
-    .in('status', ['open', 'assigned']);
-  const remaining = remainingAfterReservations(credits, reserved ?? 0);
+  // Redesign 2026-09 (follow-up, round 20) — used to count only this
+  // property's own open/assigned visit_requests, which missed a credit
+  // already tied up by an in-progress job that didn't come from a
+  // visit_request at all (round 19's auto-assigned first visit, or any
+  // job the admin assigned straight from Job assignment). Sharing
+  // getReservedCreditCounts with the read-side screens keeps this gate
+  // and what the customer sees as "remaining" in agreement.
+  const reservedCounts = await getReservedCreditCounts([propertyId]);
+  const reserved = reservedCounts[propertyId] ?? 0;
+  const remaining = remainingAfterReservations(credits, reserved);
   if (remaining <= 0) {
     return { error: 'No visit credits remaining on this property.' };
   }

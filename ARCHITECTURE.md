@@ -1722,3 +1722,82 @@ it, even for what should have been an automatic first visit.
   (set `expiration_date` from each property's latest completed
   payment's `valid_until`, same as this round's SQL note below) is
   worth running once against the live database.
+
+## 33. Redesign 2026-09 (round 20) — visit_credits.quantity_used now
+##     actually moves
+
+Follow-up to round 19's flagged gap: `quantity_used` — the column the
+credits ledger's "remaining" count is meant to subtract — was never
+written anywhere. `totalRemainingCredits` only ever shrank via
+`remainingAfterReservations`, which counted open `visit_requests`
+rows, so a property's "remaining credits" never actually went down no
+matter how many visits were completed, and a legacy-assigned visit
+(round 19's auto-assigned first visit, or any job the admin assigns
+straight from Job assignment without a visit_request behind it) wasn't
+counted as reserved at all while in progress either.
+
+**Design: reserve on assignment, consume on completion**, mirroring
+the pattern the visit_request flow already half-implemented (it always
+set `monitoring_jobs.visit_credit_id` on assignment; it just never
+followed through at the other end):
+
+- `assignAgentToProperty` (`components/admin/monitoring.actions.ts`,
+  the "legacy" assignment path — also what round 19 uses for a
+  visit-credits property's auto-eligible first visit) now picks a
+  credit the same way `requestVisit` already does (`creditToConsume`,
+  oldest-expiry-first) and attaches it via `visit_credit_id` on the
+  job it creates. A true pre-visit-credits legacy property has no
+  visit_credits rows, so this stays a no-op for it — unchanged
+  behavior.
+- `finalizeApprovedJob` — the function's own header comment already
+  called this "the job is truly, fully done" — now increments that
+  credit's `quantity_used` by 1, guarded so it can never push past
+  `quantity_purchased`. This function is the single place both
+  approval paths funnel through (a direct approve, and an EC-pending
+  job finally closing out via `uploadEcDigitalCopy`), so a credit is
+  marked used exactly once, exactly when the visit is truly done — not
+  on a rejection (the agent redoes the same job, same credit) and not
+  while `ec_pending` (photos are out, but the job itself isn't done
+  until the EC paperwork closes it).
+- `deleteMonitoringJob` — an admin's manual cleanup tool, allowed on a
+  job in any status except `submitted` — now releases the credit back
+  (`quantity_used - 1`) when deleting a job that had already reached
+  `approved`, so removing a stray/duplicate completed job doesn't
+  permanently strand a credit as used for a job that no longer exists.
+  An `ec_pending` job never incremented in the first place, so
+  deleting one needs no release.
+- `getOpenVisitRequestCounts` (`components/payments/visitCredits.
+  actions.ts`) — the "how many credits are already spoken for"
+  helper used by the customer-facing screens — is renamed
+  `getReservedCreditCounts` and now counts two non-overlapping
+  buckets: a `visit_requests` row still `status='open'` (hasn't become
+  a job yet), and any `monitoring_jobs` row already holding a
+  `visit_credit_id` that hasn't reached a final, credit-consuming
+  outcome (`status` in assigned/accepted/submitted/ec_pending/
+  rejected — not `approved`, which is what `quantity_used` itself now
+  covers). The moment a visit_request becomes a job
+  (`assignAgentToTarget` flips it to `status='assigned'` and creates
+  the job), it drops out of the first bucket and the job picks it up
+  in the second, so the same reservation is never counted twice.
+  `requestVisit` itself (previously its own separate, narrower inline
+  query — `visit_requests` in open/assigned only, blind to any
+  legacy-assigned job) now calls this same shared helper too, so the
+  screen that actually gates "can you request another visit" agrees
+  with what the read-only screens display as remaining.
+
+Net effect: a property's "remaining credits" now genuinely counts
+down as visits are assigned and completed, for both the
+customer-scheduled path and the auto-assigned first visit — closing
+the exact gap flagged at the end of round 19.
+
+**Not touched:** `visit_credits` rows that were already fully or
+partially "used" before this fix shipped have `quantity_used` frozen
+at whatever it was (0, in every case, since nothing ever wrote to it)
+— their true usage lives only in already-approved `monitoring_jobs`
+rows with no `visit_credit_id` recorded (that association didn't
+exist for legacy-path jobs before this round either). Backfilling
+those retroactively would mean guessing which now-untracked approved
+visit consumed which credit batch on properties with more than one
+batch, which isn't safe to script automatically — worth a manual look
+only if a specific property's credit count looks wrong, not a
+blanket migration.

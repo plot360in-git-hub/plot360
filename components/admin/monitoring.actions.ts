@@ -6,6 +6,7 @@ import { isCurrentUserAdmin } from './admin.actions';
 import { getOrCreateUploadToken } from '@/components/agent/magic-link.actions';
 import { maxVisitsForPlan } from '@/lib/subscription';
 import { sendNotificationEmail } from '@/lib/email';
+import { creditToConsume } from '@/lib/visitCredits';
 
 // Eligible = verified + the MOST RECENT payment for the property is
 // actually 'completed' + no currently-open monitoring job (assigned/
@@ -162,6 +163,21 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
     }
   }
 
+  // Redesign 2026-09 (follow-up, round 20) — this "legacy" assignment
+  // path is also what round 19 wired up to auto-surface a visit-credits
+  // property's FIRST visit. Those properties do have real visit_credits
+  // rows even though this function otherwise predates that table
+  // entirely, so pick one the same way requestVisit does (oldest expiry
+  // first) and attach it to the job — that's what lets
+  // finalizeApprovedJob (below) actually mark the credit as used once
+  // the visit is done, and what lets the "remaining credits" display
+  // count this job as reserved while it's in progress (see
+  // getReservedCreditCounts). A true pre-visit-credits legacy property
+  // has no visit_credits rows at all, so this is a no-op for it —
+  // visit_credit_id stays null, exactly as before.
+  const { data: credits } = await supabase.from('visit_credits').select('*').eq('property_id', propertyId).order('expires_at', { ascending: true });
+  const credit = creditToConsume(credits ?? []);
+
   const { data, error } = await supabase
     .from('monitoring_jobs')
     .insert({
@@ -169,6 +185,7 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
       agent_id: agentId,
       assigned_by: userData.user?.id,
       status: 'assigned',
+      visit_credit_id: credit?.id ?? null,
     })
     .select('id')
     .single();
@@ -246,7 +263,7 @@ export async function deleteMonitoringJob(jobId: string) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
 
-  const { data: job } = await supabase.from('monitoring_jobs').select('status, property_id').eq('id', jobId).single();
+  const { data: job } = await supabase.from('monitoring_jobs').select('status, property_id, visit_credit_id').eq('id', jobId).single();
   if (!job) return { error: 'Job not found.' };
   if (job.status === 'submitted') {
     return { error: 'This job is currently awaiting review — decide it first, then delete if still needed.' };
@@ -259,6 +276,20 @@ export async function deleteMonitoringJob(jobId: string) {
 
   const { error } = await supabase.from('monitoring_jobs').delete().eq('id', jobId);
   if (error) return { error: error.message };
+
+  // Redesign 2026-09 (follow-up, round 20) — a stray/duplicate job that
+  // already reached 'approved' already incremented its visit_credit's
+  // quantity_used (see finalizeApprovedJob); deleting it as cleanup
+  // should give that credit back rather than leaving it permanently
+  // marked used for a job that no longer exists. An 'ec_pending' job
+  // never incremented quantity_used yet (that only happens once it
+  // actually closes out to 'approved'), so it needs no release.
+  if (job.status === 'approved' && job.visit_credit_id) {
+    const { data: credit } = await supabase.from('visit_credits').select('quantity_used').eq('id', job.visit_credit_id).maybeSingle();
+    if (credit && credit.quantity_used > 0) {
+      await supabase.from('visit_credits').update({ quantity_used: credit.quantity_used - 1 }).eq('id', job.visit_credit_id);
+    }
+  }
 
   revalidatePath(`/admin/${job.property_id}`);
   revalidatePath('/admin/monitoring');
@@ -454,6 +485,33 @@ async function finalizeApprovedJob(jobId: string, propertyId: string) {
     .select('property_name, owner_id')
     .single();
   if (propertyError) return { error: propertyError.message };
+
+  // Redesign 2026-09 (follow-up, round 20) — this is "the job is truly,
+  // fully done" (this function's own header comment), which is exactly
+  // the moment a visit_credits row should actually be marked used. This
+  // was the missing half of the ledger: visit_credit_id got attached to
+  // a job at assignment time (requestVisit's flow, and now round 19's
+  // auto-assigned first visit + the change above), but nothing ever
+  // incremented quantity_used, so "remaining credits" never actually
+  // went down no matter how many visits were completed. Guarded with a
+  // floor at quantity_purchased purely as a safety net — nothing should
+  // call finalizeApprovedJob twice for the same job, but an accidental
+  // double-call shouldn't be able to push quantity_used past what was
+  // actually purchased.
+  const { data: job } = await supabase.from('monitoring_jobs').select('visit_credit_id').eq('id', jobId).maybeSingle();
+  if (job?.visit_credit_id) {
+    const { data: credit } = await supabase
+      .from('visit_credits')
+      .select('quantity_used, quantity_purchased')
+      .eq('id', job.visit_credit_id)
+      .maybeSingle();
+    if (credit && credit.quantity_used < credit.quantity_purchased) {
+      await supabase
+        .from('visit_credits')
+        .update({ quantity_used: credit.quantity_used + 1 })
+        .eq('id', job.visit_credit_id);
+    }
+  }
 
   // Revoke the agent's upload link the moment work is confirmed complete —
   // per the requirement that access ends as soon as the job is approved,

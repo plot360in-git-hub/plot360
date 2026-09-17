@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { getVisitCreditsForProperties, getOpenVisitRequestCounts } from '@/components/payments/visitCredits.actions';
+import { getVisitCreditsForProperties, getReservedCreditCounts } from '@/components/payments/visitCredits.actions';
 
 // Redesign 2026-09 — data for the new customer Home screen
 // (components/customer/CustomerHome.tsx). Deliberately a new loader
@@ -23,7 +23,7 @@ export async function getCustomerHomeData() {
 
   const [creditsByProperty, reservedByProperty, { data: monitoringJobs }] = await Promise.all([
     getVisitCreditsForProperties(propertyIds),
-    getOpenVisitRequestCounts(propertyIds),
+    getReservedCreditCounts(propertyIds),
     propertyIds.length > 0
       ? supabase
           .from('monitoring_jobs')
