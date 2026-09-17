@@ -58,6 +58,15 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
         <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>
           registered {property.created_at?.slice(0, 10)} · {planNote} · waiting {formatWait(waitHours)}
         </div>
+        {/* Redesign 2026-09 (follow-up, round 17) — Plot asked for the
+            customer's name and phone number on this page: the property
+            fetch already joins profiles (getPropertyForReview), it just
+            wasn't rendered anywhere. */}
+        <div style={{ fontSize: 12.5, marginTop: 6 }}>
+          {[owner?.first_name, owner?.last_name].filter(Boolean).join(' ') || owner?.username || 'Customer name unknown'}
+          {' · '}
+          {owner?.phone_number ? `${owner?.phone_country_code ?? ''} ${owner.phone_number}`.trim() : 'Phone number unknown'}
+        </div>
 
         <div style={{ borderTop: '2px solid var(--color-divider)', marginTop: 20, paddingTop: 4 }} />
         <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Site location</div>

@@ -1523,3 +1523,57 @@ by exactly `marginLeft: -1` (1px) so the two borders land on the exact
 same pixel; later DOM order paints on top, so there's always exactly one
 visible divider line, never a gap, regardless of sub-pixel rounding.
 Applied to all three toggles from the round-15 note above.
+
+## 30. Redesign 2026-09 (round 17) — customer name/phone on the admin
+##     verification page; SRO/Maps hyperlinks; property-verification sort
+
+**Customer name and phone number.** `PropertyVerificationDetail.tsx` was
+already fetching the customer's profile (`getPropertyForReview` joins
+`profiles` — name, email, phone) into an `owner` variable, but never
+actually rendered it anywhere on the page, so an admin reviewing a
+property had no way to see who it belonged to without leaving the
+screen. Added a line right under the property name/registered-date
+summary: `<first> <last> · <country code> <phone number>`, falling back
+to the username or "Customer name unknown" / "Phone number unknown" if
+either is missing. Also added `phone_country_code` to the profile
+columns `getPropertyForReview` selects — it was fetching the bare phone
+number without the country code needed to display it meaningfully.
+
+**SRO "Find SRO" link.** The admin verification page's inline
+"SRO name and number" field (`LocationFieldsForm.tsx`) had no lookup
+link at all, unlike the older `PlotDetailsForm.tsx`, which has always
+linked "Find SRO" to Telangana's SRO jurisdiction lookup
+(`registration.telangana.gov.in/jusrisdictionSro.htm`) in a new tab.
+Added the same link here.
+
+**Google Maps link on the pin field.** Same idea for "Google map pin" —
+added an "Open in Google Maps →" link next to the label. The field can
+hold either a raw coordinate pair, a full Maps URL, or free-text (the
+column is a general-purpose paste target, not a structured lat/lng —
+see `RegisterQuick.tsx`'s own comment on why), so the link builder
+passes anything that's already an `http(s)://` URL straight through, and
+otherwise hands the raw text to Google's generic Maps search endpoint
+(`google.com/maps/search/?api=1&query=...`), which resolves a
+coordinate pair or a place name equally well. This one field is now
+tracked in local state (the rest of the form's fields stay uncontrolled
+`defaultValue` inputs, unchanged) so the link updates live as the value
+is edited, not just after a save.
+
+**Property-verification "Most urgent first" / "Oldest waiting" sort.**
+Plot reported these buttons don't appear to filter/sort. Read through
+`QueueControls.tsx` (pushes `?sort=` into the URL via `router.push`) and
+`queues.actions.ts`'s `getPropertyVerificationQueue`/`finish()` (sorts
+rows server-side based on that query param) — found no code bug; the
+mechanism matches the pattern used by all six queues. The likely
+explanation: "urgent" here specifically means "NOC pending" (see round
+13's admin-queue fix), and none of the currently-listed test properties
+have reached that state yet (they're all sitting at "Docs pending" /
+"Ready to verify" since round 14 moved the sale deed upload to Edit
+ownership and this batch of test properties hasn't been through that
+screen) — with nothing flagged urgent, both sorts fall back to the same
+"longest waiting first" order, so toggling between them looks like
+nothing happened even though the code did run. Flagged to Plot to
+confirm by watching whether the button's dark highlight itself moves
+between "Most urgent first" and "Oldest waiting" on click, which would
+tell them the click is registering even though the row order doesn't
+visibly change for this data set.

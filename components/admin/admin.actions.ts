@@ -62,7 +62,7 @@ export async function getPropertyForReview(propertyId: string) {
   const [{ data: property }, { data: ownership }, { data: documents }] = await Promise.all([
     supabase
       .from('properties')
-      .select('*, profiles(username, first_name, last_name, email, phone_number)')
+      .select('*, profiles(username, first_name, last_name, email, phone_country_code, phone_number)')
       .eq('id', propertyId)
       .single(),
     supabase.from('property_ownership').select('*').eq('property_id', propertyId).single(),

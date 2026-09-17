@@ -3,6 +3,20 @@
 import { useState, useTransition } from 'react';
 import { updatePropertyLocationFields } from './admin.actions';
 
+const SRO_HELP_URL = 'https://registration.telangana.gov.in/jusrisdictionSro.htm';
+
+// Redesign 2026-09 (follow-up, round 17) — turns whatever the customer
+// typed into the Google map pin field into something clickable: already
+// a Maps link (goo.gl short link, full maps.google.com URL) → open it
+// as-is; a raw coordinate pair or free-text landmark → hand it to Maps'
+// generic search endpoint, which resolves either kind of input fine.
+function buildMapsUrl(value?: string | null): string | null {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`;
+}
+
 // Redesign 2026-09 — admin console, Property verification detail
 // screen's editable "Site location" fields — the quick registration
 // flow leaves most of these blank for an admin to fill in while
@@ -11,6 +25,12 @@ export function LocationFieldsForm({ property }: { property: any }) {
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Redesign 2026-09 (follow-up, round 17) — the Google-maps link needs
+  // to react to what's typed, not just what was last saved, so this one
+  // field is tracked in state (the rest stay uncontrolled/defaultValue —
+  // no other field needs a live-updating link next to it).
+  const [gpsValue, setGpsValue] = useState(property.plot_gps_coordinate ?? '');
+  const mapsUrl = buildMapsUrl(gpsValue);
 
   return (
     <form
@@ -40,15 +60,34 @@ export function LocationFieldsForm({ property }: { property: any }) {
           <input className="input" style={{ minHeight: 38 }} name="mandal_taluka" defaultValue={property.mandal_taluka ?? ''} />
         </div>
         <div className="field">
-          <label>SRO name and number</label>
+          <label>
+            SRO name and number{' '}
+            <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>
+              Find SRO →
+            </a>
+          </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="input" style={{ minHeight: 38 }} name="sro_name" defaultValue={property.sro_name ?? ''} placeholder="SRO name" />
             <input className="input" style={{ minHeight: 38, maxWidth: 90 }} name="sro_code" defaultValue={property.sro_code ?? ''} placeholder="Code" />
           </div>
         </div>
         <div className="field">
-          <label>Google map pin</label>
-          <input className="input" style={{ minHeight: 38 }} name="plot_gps_coordinate" defaultValue={property.plot_gps_coordinate ?? ''} placeholder="17.1766, 78.4429" />
+          <label>
+            Google map pin{' '}
+            {mapsUrl && (
+              <a href={mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>
+                Open in Google Maps →
+              </a>
+            )}
+          </label>
+          <input
+            className="input"
+            style={{ minHeight: 38 }}
+            name="plot_gps_coordinate"
+            value={gpsValue}
+            onChange={(e) => setGpsValue(e.target.value)}
+            placeholder="17.1766, 78.4429"
+          />
         </div>
         <div className="field">
           <label>Site size in yards</label>
