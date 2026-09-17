@@ -69,7 +69,7 @@ function YesNoToggle({
   noLabel?: string;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 0 }}>
+    <div style={{ display: 'flex' }}>
       {(['yes', 'no'] as const).map((opt, i) => (
         <button
           key={opt}
@@ -78,15 +78,18 @@ function YesNoToggle({
           style={{
             flex: 1,
             minHeight: 42,
+            // Redesign 2026-09 (follow-up, round 16) — squaring off just
+            // the touching corner (round 15) still left an inconsistent
+            // divider for Plot — flex items butted edge-to-edge can be a
+            // hair off by sub-pixel layout rounding, so a 0-width border
+            // on one side isn't reliable. Standard segmented-control fix
+            // instead: BOTH buttons keep a full border, and every button
+            // after the first overlaps the previous one by exactly 1px
+            // (marginLeft: -1) so the two borders land on the exact same
+            // pixel — later DOM order paints on top, so there is always
+            // one visible divider line, never a gap.
+            marginLeft: i === 0 ? 0 : -1,
             border: '1px solid var(--color-divider)',
-            borderLeft: i === 1 ? 0 : undefined,
-            // Redesign 2026-09 (follow-up, round 15) — the shared .btn
-            // class rounds all 4 corners (--radius-md) independently on
-            // each button; without overriding it here too, the two
-            // buttons' rounded corners curve away from each other right
-            // where they touch, leaving a small gap that reads as a
-            // missing border there (Plot's report). Square off the
-            // shared inner edge, keep the outer ends rounded.
             borderRadius: i === 0 ? 'var(--radius-md) 0 0 var(--radius-md)' : '0 var(--radius-md) var(--radius-md) 0',
             background: value === opt ? 'var(--color-accent)' : 'transparent',
             color: value === opt ? 'var(--color-bg)' : 'var(--color-text)',
@@ -190,7 +193,7 @@ export function OwnershipForm({
                   We already have an owner ID proof on file from <strong>{reusableOwnerIdProof.propertyName}</strong>, another
                   property this customer owns.
                 </p>
-                <div style={{ display: 'flex', gap: 0, marginBottom: ownerIdMode === 'new' ? 12 : 0 }}>
+                <div style={{ display: 'flex', marginBottom: ownerIdMode === 'new' ? 12 : 0 }}>
                   <button
                     type="button"
                     className="btn"
@@ -214,8 +217,8 @@ export function OwnershipForm({
                     style={{
                       flex: 1,
                       minHeight: 38,
+                      marginLeft: -1,
                       border: '1px solid var(--color-divider)',
-                      borderLeft: 0,
                       borderRadius: '0 var(--radius-md) var(--radius-md) 0',
                       background: ownerIdMode === 'new' ? 'var(--color-accent)' : 'transparent',
                       color: ownerIdMode === 'new' ? 'var(--color-bg)' : 'var(--color-text)',

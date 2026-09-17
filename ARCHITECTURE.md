@@ -1508,3 +1508,18 @@ proof / Upload a new one" reuse toggle (also `OwnershipForm.tsx`) and
 the EC-interest "Yes, include EC / No, not needed" toggle on
 `RegisterQuick.tsx` (identical pattern, not separately reported but
 caught while fixing the first one).
+
+**Round 16 — the border-radius fix above wasn't actually enough.** Plot
+re-tested and the divider between Yes and No was still inconsistent.
+Root cause: two flex items butted exactly edge-to-edge (one with its
+touching border zeroed out) can be a hair off due to sub-pixel layout
+rounding in the browser, so relying on one button's zero-width border
+lining up perfectly with its neighbor's is not reliable — it can render
+as a hairline gap depending on zoom level/device pixel ratio. Replaced
+with the standard, robust segmented-control technique used elsewhere
+(e.g. Bootstrap's button groups): both buttons keep a **full** border on
+every side, and every button after the first overlaps the previous one
+by exactly `marginLeft: -1` (1px) so the two borders land on the exact
+same pixel; later DOM order paints on top, so there's always exactly one
+visible divider line, never a gap, regardless of sub-pixel rounding.
+Applied to all three toggles from the round-15 note above.

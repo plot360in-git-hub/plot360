@@ -98,7 +98,7 @@ export function RegisterQuick() {
         <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', lineHeight: 1.5, marginTop: 5 }}>
           Want a Digital Signed Certified copy of the EC delivered with your visit report?
         </p>
-        <div style={{ display: 'flex', gap: 0, marginTop: 10 }}>
+        <div style={{ display: 'flex', marginTop: 10 }}>
           <button
             type="button"
             className="btn"
@@ -106,13 +106,16 @@ export function RegisterQuick() {
               flex: 1,
               minHeight: 42,
               border: '1px solid var(--color-divider)',
-              // Redesign 2026-09 (follow-up, round 15) — the shared .btn
-              // class rounds all 4 corners independently on each button;
-              // without squaring off the shared inner edge, the two
-              // buttons' rounded corners curve away from each other right
-              // where they touch, leaving a small gap that reads as a
-              // missing border there (same bug Plot caught on the Edit
-              // ownership Yes/No toggle — see OwnershipForm.tsx).
+              // Redesign 2026-09 (follow-up, round 16) — squaring off just
+              // the touching corner (round 15) still left an inconsistent
+              // divider — flex items butted edge-to-edge can be a hair off
+              // by sub-pixel layout rounding, so a 0-width border on one
+              // side isn't reliable. Standard segmented-control fix
+              // instead: BOTH buttons keep a full border, and the second
+              // one overlaps the first by exactly 1px (marginLeft: -1) so
+              // the two borders land on the same pixel — later DOM order
+              // paints on top, so there is always one visible divider
+              // line, never a gap (see OwnershipForm.tsx's YesNoToggle).
               borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
               background: ecInterest === 'yes' ? 'var(--color-accent)' : 'transparent',
               color: ecInterest === 'yes' ? 'var(--color-bg)' : 'var(--color-text)',
@@ -129,8 +132,8 @@ export function RegisterQuick() {
             style={{
               flex: 1,
               minHeight: 42,
+              marginLeft: -1,
               border: '1px solid var(--color-divider)',
-              borderLeft: 0,
               borderRadius: '0 var(--radius-md) var(--radius-md) 0',
               background: ecInterest === 'no' ? 'var(--color-accent)' : 'transparent',
               color: ecInterest === 'no' ? 'var(--color-bg)' : 'var(--color-text)',
