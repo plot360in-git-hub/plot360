@@ -156,8 +156,40 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
     });
     if (creditError) return { error: creditError.message };
 
+    // Redesign 2026-09 (follow-up, round 19) — real bug Plot hit: a
+    // property paid for through this instant-UPI path never got
+    // properties.expiration_date set (only recordPayment, the admin
+    // bank-transfer confirmation path, did that), and
+    // getEligiblePropertiesForAssignment (monitoring.actions.ts) — the
+    // "legacy" Job assignment source, which already has "the first visit
+    // of a cycle is eligible immediately on payment, no due-date wait"
+    // built in — filters on `expiration_date is not null`. So a property
+    // paid via UPI just sat there: verified, paid, credits issued, but
+    // invisible to Job assignment, leaving "Schedule a visit" as the only
+    // apparent next step even for a brand-new property's first visit.
+    // Setting expiration_date here (matching what recordPayment does for
+    // the same paymentType==='initial' case) makes it flow through that
+    // same existing mechanism instead of building a second one.
+    // Deliberately NOT setting next_monitoring_due_date here (unlike
+    // recordPayment's legacy branch) — that column is what lets
+    // getEligiblePropertiesForAssignment auto-surface a property's
+    // SECOND+ visit once a due-date window opens, with no customer
+    // action. For these visit-credit-based plans (1, 4, or any other
+    // purchased quantity) every visit after the first should only ever
+    // appear once the customer explicitly schedules it (ScheduleVisit ->
+    // requestVisit -> visit_requests -> the "visit_request" Job
+    // assignment source) — leaving next_monitoring_due_date null keeps
+    // this property out of the legacy auto-surface path for anything
+    // past its first visit.
+    const { error: propertyError } = await admin
+      .from('properties')
+      .update({ expiration_date: expiresAt })
+      .eq('id', propertyId);
+    if (propertyError) return { error: propertyError.message };
+
     revalidatePath('/dashboard');
     revalidatePath(`/properties/${propertyId}`);
+    revalidatePath('/admin/queue/job-assignment');
     return {
       success: true as const,
       method: 'upi' as const,

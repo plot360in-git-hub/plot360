@@ -1639,3 +1639,86 @@ admin's attention right now. It remains visible in the queue list
 itself (this round's whole point) without inflating the badge count.
 The queue's note text under the page title was updated to mention that
 rejected/awaiting-resubmission properties now appear here too.
+
+## 32. Redesign 2026-09 (round 19) — first visit now goes straight to Job
+##     assignment; "Schedule a visit" is for the second visit onward
+
+Plot's report: a property that's registered, verified, and paid for was
+"going back to customer to raise a visit request or schedule a visit"
+instead of appearing in the admin's Job assignment queue. Expected: the
+FIRST visit on a newly verified, paid property should always be ready
+for the admin to assign an agent to, with nothing required from the
+customer; only a SECOND (or later) visit on that same property should
+ever be something the customer explicitly schedules.
+
+**Root cause.** `getEligiblePropertiesForAssignment`
+(`components/admin/monitoring.actions.ts` — the "legacy" Job assignment
+source) already had exactly this rule built in ("the first visit of a
+cycle is available immediately on payment confirmation, no due-date
+wait"), but it only considers properties where `properties.
+expiration_date` is set. `recordPayment` (the admin's bank-transfer
+confirmation path) sets that column, but `purchaseVisitCredits`'s UPI
+branch (`components/payments/visitCredits.actions.ts` — what a customer
+actually hits paying for a 1-visit/4-visit/etc. plan themselves) never
+did. So a UPI-paid property sat there fully verified and paid, with
+visit credits issued, but invisible to Job assignment — "Schedule a
+visit" was the only thing left pointing anywhere, so the customer used
+it, even for what should have been an automatic first visit.
+
+**Fix, three parts:**
+- `purchaseVisitCredits`'s UPI branch now also sets `properties.
+  expiration_date` after issuing the payment/visit_credits rows —
+  matching what `recordPayment` already does for the same
+  `paymentType==='initial'` case. That alone is enough for the property
+  to flow through the existing legacy-assignment logic for its first
+  visit; no new assignment mechanism was needed, since one was already
+  built for this and just wasn't being reached.
+- Deliberately did **not** also set `next_monitoring_due_date` there
+  (unlike `recordPayment`'s legacy branch) — that column is what lets
+  `getEligiblePropertiesForAssignment` auto-surface a property's
+  SECOND+ visit with no customer action, once a due-date window opens.
+  That's correct for the old fixed 6/12-month subscription cadence, but
+  wrong for a visit-credits plan (1, 4, or any other purchased
+  quantity) — every visit after the first should only appear once the
+  customer explicitly schedules it. Leaving this column null keeps a
+  visit-credits property out of that auto-surface path for anything
+  past its first visit. `recordPayment` was updated to match: it now
+  only sets `next_monitoring_due_date` when the payment has no
+  `plan_id` (a true legacy payment) — previously it set this
+  unconditionally for any `payment_type==='initial'` payment, which
+  would have let a plan-based property paid via bank transfer
+  auto-surface its second visit too, inconsistently with one paid via
+  UPI.
+- `canScheduleVisit` (`lib/visitCredits.ts`) — the "Schedule a visit"
+  screen's own gate — took a new `hasFirstVisit` parameter and now
+  refuses to unlock at all until it's true (at least one
+  `monitoring_jobs` row already exists for the property, meaning the
+  first visit has been created — assigned, in progress, or done). This
+  closes the other half of the gap: without it, a customer could still
+  open "Schedule a visit" right after paying and self-schedule what was
+  supposed to be their automatic first visit, landing two assignment
+  targets for what was really one visit. Both call sites —
+  `app/properties/[id]/schedule/page.tsx` (queries a
+  `monitoring_jobs` count for the property) and
+  `components/customer/PropertyVisitHistory.tsx` (already had the
+  job list loaded) — were updated to pass this through, with a new
+  "arranged automatically, no action needed" message shown in place of
+  the date picker when it's not yet unlocked.
+
+**Not changed / known follow-up, flagged rather than fixed here:**
+- `visit_credits.quantity_used` — the column the ledger's "remaining"
+  count is meant to subtract — is never actually incremented anywhere
+  in the codebase (checked before making this change, to be sure this
+  round wasn't adding to that gap). `totalRemainingCredits` currently
+  only shrinks via `remainingAfterReservations`, which counts open
+  `visit_requests` rows — a legacy-assigned first visit never creates
+  one of those, so it doesn't reduce the credits shown as remaining
+  either. This is a pre-existing gap in the credits ledger, not
+  something this round's fix introduces or worsens, but worth a
+  dedicated round of its own before this scales.
+- Properties that already completed a UPI payment *before* this fix
+  shipped still have `expiration_date = null` and won't retroactively
+  appear in Job assignment on their own. A one-time backfill for those
+  (set `expiration_date` from each property's latest completed
+  payment's `valid_until`, same as this round's SQL note below) is
+  worth running once against the live database.

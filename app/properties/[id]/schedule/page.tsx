@@ -19,13 +19,18 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
     .single();
   if (!property || property.owner_id !== userData.user.id) redirect('/dashboard');
 
-  const [credits, reservedCounts, { data: profile }] = await Promise.all([
+  const [credits, reservedCounts, { data: profile }, { count: jobCount }] = await Promise.all([
     getVisitCreditsForProperty(id),
     getOpenVisitRequestCounts([id]),
     supabase.from('profiles').select('phone_number').eq('id', userData.user.id).maybeSingle(),
+    // Redesign 2026-09 (follow-up, round 19) — gates this whole screen:
+    // the first visit is arranged automatically (see canScheduleVisit's
+    // own note), so this only unlocks once at least one monitoring_jobs
+    // row already exists for the property.
+    supabase.from('monitoring_jobs').select('id', { count: 'exact', head: true }).eq('property_id', id),
   ]);
   const reserved = reservedCounts[id] ?? 0;
-  const gate = canScheduleVisit(property.status, credits);
+  const gate = canScheduleVisit(property.status, credits, (jobCount ?? 0) > 0);
   const remaining = remainingAfterReservations(credits, reserved);
   const expiry = nearestExpiry(credits);
 

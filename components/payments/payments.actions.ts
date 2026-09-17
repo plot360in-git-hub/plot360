@@ -177,7 +177,19 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
   // First payment starts the twice-yearly monitoring clock; renewal
   // payments don't reset it — that's driven by each monitoring job's
   // own approval instead (see decideMonitoringJob).
-  if (paymentRow?.payment_type === 'initial') {
+  //
+  // Redesign 2026-09 (follow-up, round 19) — only do this for a true
+  // legacy payment (no plan_id) now. next_monitoring_due_date is what
+  // lets getEligiblePropertiesForAssignment auto-surface a property's
+  // SECOND+ visit with no customer action once a due-date window opens —
+  // right for the old fixed-cadence subscription model, wrong for a
+  // visit-credits plan (1, 4, or any other purchased quantity), where
+  // every visit after the first should only appear once the customer
+  // explicitly schedules it via "Schedule a visit". Leaving this unset
+  // for plan-based payments keeps recordPayment (this admin bank-
+  // transfer path) consistent with purchaseVisitCredits' UPI path,
+  // which never sets it either — see that function's own note.
+  if (paymentRow?.payment_type === 'initial' && !paymentRow?.plan_id) {
     const firstMonitoringDue = new Date(paidAt);
     firstMonitoringDue.setMonth(firstMonitoringDue.getMonth() + 6);
     propertyPatch.next_monitoring_due_date = firstMonitoringDue.toISOString().slice(0, 10);

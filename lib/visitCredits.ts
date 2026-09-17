@@ -58,13 +58,38 @@ export function creditToConsume(credits: VisitCredit[], today: Date = new Date()
 //   "Schedule a visit" screen) — that branching stays in the UI, this
 //   function only reports the boolean the UI branches on
 // - unverified -> disabled entirely
+// - first visit not started yet -> disabled entirely (see hasFirstVisit below)
+//
+// Redesign 2026-09 (follow-up, round 19) — Plot's report: once a property
+// is verified and paid, the FIRST visit should go straight to Job
+// assignment (components/admin/monitoring.actions.ts,
+// getEligiblePropertiesForAssignment — already built to surface it
+// immediately, no due-date wait), with no action needed from the
+// customer. Only a SECOND or later visit on the same property should
+// ever be something the customer explicitly schedules here. Before this,
+// canScheduleVisit had no way to tell the two apart — a customer with
+// spare credits could open this screen and self-schedule what was
+// supposed to be their automatic first visit, right alongside (or ahead
+// of) the one already sitting in the admin's Job assignment queue.
+// hasFirstVisit — true once at least one monitoring_jobs row already
+// exists for the property, i.e. the first visit has been created
+// (assigned, in progress, or done) by the admin — is now required to
+// unlock this screen at all.
 export function canScheduleVisit(
   propertyStatus: 'pending' | 'verified' | 'rejected',
   credits: VisitCredit[],
+  hasFirstVisit: boolean,
   today: Date = new Date()
 ): { eligible: boolean; hasCredits: boolean; reason?: string } {
   if (propertyStatus !== 'verified') {
     return { eligible: false, hasCredits: false, reason: 'Not verified yet — a representative is still collecting documents' };
+  }
+  if (!hasFirstVisit) {
+    return {
+      eligible: false,
+      hasCredits: false,
+      reason: 'Your first visit is arranged automatically — our team is assigning an agent, no action needed from you. You can schedule additional visits here once it’s done.',
+    };
   }
   const hasCredits = totalRemainingCredits(credits, today) > 0;
   return { eligible: true, hasCredits };

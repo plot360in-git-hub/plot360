@@ -55,8 +55,8 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
   const remaining = Math.max(totalRemainingCredits(credits) - reserved, 0);
   const totalPurchased = credits.reduce((sum, c) => sum + c.quantity_purchased, 0);
   const expiry = nearestExpiry(credits);
-  const gate = canScheduleVisit(property.status, credits);
   const allJobs = jobs ?? [];
+  const gate = canScheduleVisit(property.status, credits, allJobs.length > 0);
   const stage = milestoneStage(property, allJobs, reserved > 0);
   const completedCount = allJobs.filter((j) => ['approved', 'ec_pending'].includes(j.status)).length;
   const latestVisitNumber = allJobs[0]?.visit_number ?? null;
