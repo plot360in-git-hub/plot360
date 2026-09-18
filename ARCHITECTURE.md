@@ -2178,3 +2178,80 @@ already open WhatsApp correctly (click-through link) — they don't call
 outbox row for those sends) not covered by this round since it isn't
 the bug Plot reported (those already work; they just aren't logged to
 the outbox for a Resend later).
+
+## 38. Redesign 2026-09 (round 22 follow-up 3) — owner/operations
+##     restriction: verified, and closed the gaps that let it be bypassed
+
+Plot asked whether the "operations manager can do everything admin can
+except Plans & pricing and Users" restriction was actually implemented.
+**It was — mostly.** The owner/operations role split
+(`components/admin/admin-role.actions.ts`, `profiles.admin_role`) was
+built in an earlier round: `app/admin/plans/page.tsx` and
+`app/admin/users/page.tsx` both redirect a non-owner away server-side,
+and `AdminShell.tsx`'s nav hides both links unless `role === 'owner'`.
+Every other admin page (queues, assignment, agents, monitoring,
+renewals, service requests) is open to both roles, exactly as asked.
+
+**What was missing: the restriction only worked if you used the page.**
+Server Actions are their own reachable endpoints, independent of
+whether their page renders them — and the actual data-mutating actions
+behind Plans & Users didn't check the role at all, only
+`profiles.is_admin` (true for operations too):
+
+- `components/payments/plans.actions.ts` — `upsertPlan`,
+  `togglePlanActive`, `updatePaymentSettings` (and `getAllPlans`, the
+  full plan catalog including inactive/draft plans) all gated on a
+  local `requireAdmin()` that only checked `is_admin`.
+- `components/admin/users.actions.ts` — `getAllUsers`, `toggleUserBan`
+  (goes through the Supabase Auth Admin API via the service-role
+  client, so RLS can't help here at all) — same local, role-blind
+  `requireAdmin()`.
+- RLS itself: `subscription_plans_write_admin` / `payment_settings_write_admin`
+  (and the `payment-info` storage bucket's admin write policy) all
+  checked `is_admin()`, not the owner role — so even bypassing the app
+  entirely and calling Supabase directly, an operations-role admin's own
+  session could still write plans/pricing data.
+
+**Fixed:** both action files now route through
+`requireOwnerAdmin()`/a new `is_owner_admin()` SQL function (mirrors
+`is_admin()`, additionally checks `admin_role = 'owner'`) instead of the
+old admin-only checks — enforced at both the Server Action layer (for
+Users, which is the only layer available since it bypasses RLS) and the
+RLS layer (for Plans & pricing, which does go through RLS).
+`getActivePlans`/`getPaymentSettings`/`getPaymentQrUrl` are deliberately
+untouched — customers use them on the plan/subscribe pages before
+they're an admin at all.
+
+**Separate, more serious issue found while auditing this:**
+`profiles_update_own` (`using (auth.uid() = id)`, no column
+restriction — RLS is row-level, not column-level) meant ANY signed-in
+customer or agent could call
+`supabase.from('profiles').update({is_admin: true, admin_role: 'owner'})`
+on their own row from the browser and grant themselves full admin
+access. Nothing in the app ever legitimately sets `is_admin`/
+`admin_role` through the regular client (confirmed — both are only
+ever set by hand in the Supabase dashboard), so:
+
+```sql
+revoke update (is_admin, admin_role) on profiles from authenticated, anon;
+```
+
+This is enforced below RLS, at the Postgres column-privilege layer, so
+it can't be reopened by a future policy change on `profiles`.
+`is_agent` deliberately left alone — agent self-registration
+legitimately sets it through the regular client, and being an agent
+doesn't grant admin-console access.
+
+**⚠️ Action needed in Supabase** — on top of every previous round's
+pending statements, this round's must also be run:
+- `create or replace function is_owner_admin() ...`
+- `subscription_plans_write_admin` / `payment_settings_write_admin` /
+  `payment_info_admin_write` (storage) redefined to use `is_owner_admin()`
+- `revoke update (is_admin, admin_role) on profiles from authenticated, anon;`
+
+Until these run: an operations-role admin can still write Plans/pricing
+data and ban/unban users by calling the action directly (not through
+the UI, which already correctly blocks them) — and, separately and more
+urgently, any signed-in user can still self-promote to owner-admin via
+a raw profile update. The self-promotion hole is the one to prioritize
+running first.

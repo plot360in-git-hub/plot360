@@ -3,13 +3,25 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { computePlanPrice } from '@/lib/subscription';
+import { requireOwnerAdmin } from '@/components/admin/admin-role.actions';
 
+// Redesign 2026-09 (follow-up) — Plot: confirming the owner/operations
+// split actually restricts operations from Plans & pricing, not just
+// hides the nav link and redirects the page. Before this, every write
+// below gated on plain requireAdmin() (any admin, operations included).
+// The page (app/admin/plans/page.tsx) already redirected a non-owner
+// away, but Server Actions are their own reachable endpoints — an
+// operations-role admin could still call upsertPlan/togglePlanActive/
+// updatePaymentSettings directly and it would have succeeded (RLS
+// wouldn't have stopped it either — subscription_plans_write_admin/
+// payment_settings_write_admin, supabase/schema.sql, checked is_admin(),
+// not the owner role, until this round). getActivePlans/getPaymentSettings/
+// getPaymentQrUrl are deliberately NOT gated here at all — customers use
+// them on the plan/subscribe pages before they're even an admin.
 async function requireAdmin() {
+  const gate = await requireOwnerAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
   const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { ok: false as const, error: 'Not signed in.' };
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).single();
-  if (!profile?.is_admin) return { ok: false as const, error: 'Only an admin can do this.' };
   return { ok: true as const, supabase };
 }
 
@@ -23,9 +35,13 @@ export async function getActivePlans() {
   return data ?? [];
 }
 
+// Owner-only (unlike getActivePlans above) — this is the full catalog
+// including inactive/draft plans and internal discount fields, i.e. the
+// actual "Plans and pricing" data, not the public price list.
 export async function getAllPlans() {
-  const supabase = await createClient();
-  const { data } = await supabase.from('subscription_plans').select('*').order('display_order', { ascending: true });
+  const gate = await requireAdmin();
+  if (!gate.ok) return [];
+  const { data } = await gate.supabase.from('subscription_plans').select('*').order('display_order', { ascending: true });
   return data ?? [];
 }
 

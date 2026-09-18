@@ -3,13 +3,21 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
+import { requireOwnerAdmin } from './admin-role.actions';
 
+// Redesign 2026-09 (follow-up) — Plot: confirming the owner/operations
+// split actually restricts operations from Users, not just hides the
+// nav link and redirects the page. Before this, both actions below
+// gated on plain requireAdmin() (any admin, operations included) — the
+// page (app/admin/users/page.tsx) already redirected a non-owner away,
+// but these Server Actions are their own reachable endpoints, so an
+// operations-role admin could still call getAllUsers/toggleUserBan
+// directly and it would have succeeded. Since these go through the
+// service-role admin client (Auth Admin API), RLS can't help here —
+// this app-level check is the only gate, so it has to be the real one.
 async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { ok: false as const, error: 'Not signed in.' };
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).single();
-  if (!profile?.is_admin) return { ok: false as const, error: 'Only an admin can do this.' };
+  const gate = await requireOwnerAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
   return { ok: true as const };
 }
 

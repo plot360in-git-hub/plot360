@@ -1372,6 +1372,52 @@ create policy "visit_requests_update_admin" on visit_requests for update using (
 alter table profiles add column if not exists admin_role text check (admin_role in ('operations','owner'));
 update profiles set admin_role = 'owner' where is_admin and admin_role is null;
 
+-- Redesign 2026-09 (follow-up) — critical: found while checking the
+-- owner/operations restriction actually holds. profiles_update_own
+-- ("for update using (auth.uid() = id)") has no column restriction —
+-- RLS is row-level only — so ANY signed-in customer or agent could call
+-- supabase.from('profiles').update({is_admin: true, admin_role: 'owner'})
+-- on their own row from the browser and grant themselves full admin
+-- access. Nothing in the app ever legitimately sets is_admin/admin_role
+-- through the regular (non-service-role) client — both are only ever
+-- set by hand in the Supabase dashboard — so it's safe to remove
+-- UPDATE on just these two columns from the client-facing roles
+-- entirely. This is enforced below the RLS layer (Postgres column
+-- privileges), so it can't be worked around by any future policy
+-- change on profiles. is_agent is deliberately left alone — agent
+-- self-registration (agent-auth.actions.ts, onboarding.actions.ts)
+-- legitimately sets it through the regular client, and being an agent
+-- doesn't grant admin-console access.
+revoke update (is_admin, admin_role) on profiles from authenticated, anon;
+
+-- Redesign 2026-09 (follow-up) — Plot: confirming operations really
+-- can't reach Plans & pricing / Users, not just that the page redirects
+-- them and the nav hides the link. subscription_plans_write_admin and
+-- payment_settings_write_admin (above) still only checked is_admin() —
+-- true for operations too — so an operations-role admin's own session
+-- could still write those tables directly (e.g. via the Supabase client
+-- or by calling the Server Action), RLS wouldn't have stopped it. Same
+-- SECURITY DEFINER pattern as is_admin() itself, just also checking
+-- admin_role. (Users/agent bans go through the service-role Auth Admin
+-- API, which bypasses RLS entirely either way — that restriction is
+-- enforced at the app layer instead, see components/admin/users.actions.ts.)
+create or replace function is_owner_admin() returns boolean
+language sql security definer stable
+set search_path = public
+as $$
+  select coalesce((select is_admin and admin_role = 'owner' from profiles where id = auth.uid()), false);
+$$;
+
+drop policy if exists "subscription_plans_write_admin" on subscription_plans;
+create policy "subscription_plans_write_admin" on subscription_plans for all using (is_owner_admin()) with check (is_owner_admin());
+drop policy if exists "payment_settings_write_admin" on payment_settings;
+create policy "payment_settings_write_admin" on payment_settings for all using (is_owner_admin()) with check (is_owner_admin());
+-- payment-info storage bucket: the QR code image updatePaymentSettings
+-- uploads is also Plans & pricing data — same owner-only tightening.
+drop policy if exists "payment_info_admin_write" on storage.objects;
+create policy "payment_info_admin_write" on storage.objects for all
+  using (bucket_id = 'payment-info' and is_owner_admin()) with check (bucket_id = 'payment-info' and is_owner_admin());
+
 -- Payment mismatch flag (Payments queue → Payment detail → "Flag a
 -- mismatch"). Additive rather than a new payments.status value, since
 -- 'pending'/'completed' are relied on elsewhere (recordPayment,
