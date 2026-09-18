@@ -32,12 +32,12 @@ export function buildAssignmentMessage(params: {
 
 // Redesign 2026-09 (follow-up) — Plot's fixed wording for the "need more
 // info from the owner" message sent from the Property verification detail
-// screen, before the property has been approved or rejected. Kept verbatim
-// as given, name substituted in.
+// screen, before the property has been approved or rejected. "with you
+// collect" corrected to "with you to collect" per Plot's follow-up.
 export function buildAdditionalInfoMessage(customerName: string) {
   return [
     `Dear ${customerName},`,
-    `Thank you for choosing, trusting and providing us an opportunity to serve you. Before we move to the next steps, we need additional information and our member will be in touch with you collect remaining information.`,
+    `Thank you for choosing, trusting and providing us an opportunity to serve you. Before we move to the next steps, we need additional information and our member will be in touch with you to collect remaining information.`,
     ``,
     `Thank you,`,
     `Plot360 Team`,
