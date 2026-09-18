@@ -291,13 +291,23 @@ export async function assignAgentToTarget(kind: 'legacy' | 'visit_request' | 'st
 
   const tokenResult = await getOrCreateUploadToken(jobId);
   const agentProfile: any = job?.agent_profiles;
-  const phone = agentProfile?.profiles ? `${agentProfile.profiles.phone_country_code ?? ''}${agentProfile.profiles.phone_number ?? ''}` : '';
+  const phoneCountryCode = agentProfile?.profiles?.phone_country_code ?? null;
+  const phoneNumber = agentProfile?.profiles?.phone_number ?? null;
+  const phone = agentProfile?.profiles ? `${phoneCountryCode ?? ''}${phoneNumber ?? ''}` : '';
 
+  // Redesign 2026-09 (follow-up) — Plot: "check ... any other place
+  // where whatsapp is not opening and just logging internally ... and
+  // fix it." This used to only log the assignment message; nothing ever
+  // opened WhatsApp for the admin to actually send it. Now returns the
+  // phone/message too so AssignAgentButtons.tsx can show a "Send via
+  // WhatsApp" link, same shape AssignAgentForm.tsx/ReassignAgentForm.tsx
+  // already use for the "legacy"-flow equivalent of this same action.
+  let message: string | null = null;
   if (property && !('error' in tokenResult) && phone) {
     const uploadLink = `${process.env.NEXT_PUBLIC_SITE_URL}/m/${tokenResult.token}`;
     const address = addressOf(property);
-    const body = `Plot360: New visit job. Property: ${property.property_name}. Location: ${address}. Pin: ${property.plot_gps_coordinate || `${property.google_map_lat}, ${property.google_map_lng}`}. Upload link: ${uploadLink} (closes on submit or in 7 days). No owner name, phone or document is included.`;
-    await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body });
+    message = `Plot360: New visit job. Property: ${property.property_name}. Location: ${address}. Pin: ${property.plot_gps_coordinate || `${property.google_map_lat}, ${property.google_map_lng}`}. Upload link: ${uploadLink} (closes on submit or in 7 days). No owner name, phone or document is included.`;
+    await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
 
   await logAdminAction({
@@ -306,5 +316,5 @@ export async function assignAgentToTarget(kind: 'legacy' | 'visit_request' | 'st
     action: kind === 'stuck' ? 'Reassigned (previous agent stuck)' : kind === 'visit_request' ? 'Assigned from customer visit request' : 'Assigned (SRO/due-date match)',
   });
 
-  return { success: true, jobId, propertyId };
+  return message ? { success: true as const, jobId, propertyId, phoneCountryCode, phoneNumber, message } : { success: true as const, jobId, propertyId };
 }

@@ -17,6 +17,20 @@ import { buildAdditionalInfoMessage } from './whatsapp';
 // hand panels show. Kept separate from those files so their own tested
 // logic (email sending, ec_pending handling, revalidatePath timing)
 // isn't touched — this is purely additive plumbing on top.
+//
+// Redesign 2026-09 (follow-up) — Plot: "check ... any other place where
+// whatsapp is not opening and just logging internally in all the
+// application and fix it." Every function below used to only call
+// logWhatsAppMessage and stop — the message sat in the outbox, but
+// nothing ever opened WhatsApp, so the customer/agent was never actually
+// messaged (same bug already found and fixed for the agent "Request
+// missing documents" button). Each one now also returns
+// phoneCountryCode/phoneNumber/message when it logged something, so the
+// calling UI can open the real wa.me link — either automatically
+// (RejectionDialog's onSubmit → whatsappLink, for the three reject/flag
+// flows) or via a "Send via WhatsApp" link shown after success (the
+// three plain-button approve/confirm flows, same shape
+// MonitoringDecision.tsx/AssignAgentForm.tsx already use).
 
 function phoneOf(profile: any) {
   return profile ? `${profile.phone_country_code ?? ''}${profile.phone_number ?? ''}` : '';
@@ -34,17 +48,16 @@ export async function verifyProperty(propertyId: string) {
     .select('property_name, profiles(phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
-  const phone = phoneOf((property as any)?.profiles);
+  const profile: any = (property as any)?.profiles;
+  const phone = phoneOf(profile);
+  const message = `Plot360: ${property?.property_name ?? 'Your property'} is verified. We will be in touch to schedule your first visit.`;
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'property',
-      relatedEntityId: propertyId,
-      recipientPhone: phone,
-      body: `Plot360: ${property?.property_name ?? 'Your property'} is verified. We will be in touch to schedule your first visit.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'property', relatedEntityId: propertyId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'property', entityId: propertyId, action: 'Verified' });
-  return { success: true };
+  return phone
+    ? { success: true as const, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message }
+    : { success: true as const };
 }
 
 export async function rejectPropertyVerification(propertyId: string, reasonText: string) {
@@ -57,17 +70,16 @@ export async function rejectPropertyVerification(propertyId: string, reasonText:
     .select('property_name, profiles(phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
-  const phone = phoneOf((property as any)?.profiles);
+  const profile: any = (property as any)?.profiles;
+  const phone = phoneOf(profile);
+  const message = `Plot360: We could not complete verification for ${property?.property_name ?? 'your property'}. ${reasonText.trim()}. Reply here with the document and we will continue — your plan and visit credits are unaffected.`;
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'property',
-      relatedEntityId: propertyId,
-      recipientPhone: phone,
-      body: `Plot360: We could not complete verification for ${property?.property_name ?? 'your property'}. ${reasonText.trim()}. Reply here with the document and we will continue — your plan and visit credits are unaffected.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'property', relatedEntityId: propertyId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'property', entityId: propertyId, action: 'Rejected', note: reasonText.trim() });
-  return { success: true };
+  return phone
+    ? { success: true as const, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message }
+    : { success: true as const };
 }
 
 // Redesign 2026-09 (follow-up) — Plot asked for a way, right from the
@@ -122,17 +134,16 @@ export async function approveSubmission(jobId: string, propertyId: string, admin
     .select('property_name, profiles(phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
-  const phone = phoneOf((property as any)?.profiles);
+  const profile: any = (property as any)?.profiles;
+  const phone = phoneOf(profile);
+  const message = `Plot360: Your visit report for ${property?.property_name ?? 'your property'} is ready, with photographs${result.ecPending ? '' : ' and your EC copy'}.`;
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'monitoring_job',
-      relatedEntityId: jobId,
-      recipientPhone: phone,
-      body: `Plot360: Your visit report for ${property?.property_name ?? 'your property'} is ready, with photographs${result.ecPending ? '' : ' and your EC copy'}.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'monitoring_job', entityId: jobId, action: result.ecPending ? 'Approved — EC copy pending' : 'Approved, report sent' });
-  return result;
+  return phone
+    ? { ...result, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message }
+    : result;
 }
 
 export async function rejectSubmission(jobId: string, propertyId: string, reasonText: string) {
@@ -146,22 +157,21 @@ export async function rejectSubmission(jobId: string, propertyId: string, reason
     .eq('id', jobId)
     .single();
   const propertyName = (job as any)?.properties?.property_name ?? 'this property';
-  const phone = phoneOf((job as any)?.agent_profiles?.profiles);
+  const profile: any = (job as any)?.agent_profiles?.profiles;
+  const phone = phoneOf(profile);
 
   const { getOrCreateUploadToken } = await import('@/components/agent/magic-link.actions');
   const tokenResult = await getOrCreateUploadToken(jobId);
   const uploadLink = 'error' in tokenResult ? '' : `${process.env.NEXT_PUBLIC_SITE_URL}/m/${tokenResult.token}`;
+  const message = `Plot360: Your visit submission for ${propertyName} needs rework. ${reasonText.trim()} New upload link: ${uploadLink} (valid 7 days). The job stays with you.`;
 
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'monitoring_job',
-      relatedEntityId: jobId,
-      recipientPhone: phone,
-      body: `Plot360: Your visit submission for ${propertyName} needs rework. ${reasonText.trim()} New upload link: ${uploadLink} (valid 7 days). The job stays with you.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'monitoring_job', entityId: jobId, action: 'Rejected, sent back to agent', note: reasonText.trim() });
-  return { success: true };
+  return phone
+    ? { success: true as const, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message }
+    : { success: true as const };
 }
 
 // ---------- Agent verification ----------
@@ -186,17 +196,14 @@ export async function confirmPaymentWithLog(paymentId: string, propertyId: strin
     .select('property_name, profiles(phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
-  const phone = phoneOf((property as any)?.profiles);
+  const profile: any = (property as any)?.profiles;
+  const phone = phoneOf(profile);
+  const message = `Plot360: Payment received for ${property?.property_name ?? 'your property'}, valid until ${result.validUntil}. Your visit will now be scheduled.`;
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'payment',
-      relatedEntityId: paymentId,
-      recipientPhone: phone,
-      body: `Plot360: Payment received for ${property?.property_name ?? 'your property'}, valid until ${result.validUntil}. Your visit will now be scheduled.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'payment', relatedEntityId: paymentId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'payment', entityId: paymentId, action: 'Confirmed, credits released' });
-  return result;
+  return phone ? { ...result, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message } : result;
 }
 
 export async function flagPaymentMismatchWithLog(paymentId: string, reasonText: string) {
@@ -210,15 +217,14 @@ export async function flagPaymentMismatchWithLog(paymentId: string, reasonText: 
     .eq('id', paymentId)
     .single();
   const propertyName = (payment as any)?.properties?.property_name ?? 'your property';
-  const phone = phoneOf((payment as any)?.properties?.profiles);
+  const profile: any = (payment as any)?.properties?.profiles;
+  const phone = phoneOf(profile);
+  const message = `Plot360: We have a question about your bank transfer for ${propertyName}. ${reasonText.trim()} Reply here with the transfer receipt and we will release your visit credits.`;
   if (phone) {
-    await logWhatsAppMessage({
-      relatedEntityType: 'payment',
-      relatedEntityId: paymentId,
-      recipientPhone: phone,
-      body: `Plot360: We have a question about your bank transfer for ${propertyName}. ${reasonText.trim()} Reply here with the transfer receipt and we will release your visit credits.`,
-    });
+    await logWhatsAppMessage({ relatedEntityType: 'payment', relatedEntityId: paymentId, recipientPhone: phone, body: message });
   }
   await logAdminAction({ entityType: 'payment', entityId: paymentId, action: 'Flagged a mismatch', note: reasonText.trim() });
-  return { success: true };
+  return phone
+    ? { success: true as const, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message }
+    : { success: true as const };
 }

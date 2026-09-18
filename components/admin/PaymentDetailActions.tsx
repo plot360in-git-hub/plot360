@@ -4,7 +4,12 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { confirmPaymentWithLog, flagPaymentMismatchWithLog } from './review-decisions.actions';
 import { RejectionDialog } from './RejectionDialog';
+import { buildWhatsAppLink } from './whatsapp';
 
+// Redesign 2026-09 (follow-up) — confirmPaymentWithLog/
+// flagPaymentMismatchWithLog used to log the WhatsApp and route away
+// with nothing ever opening it. Same "Send via WhatsApp / Done" panel
+// fix as PropertyVerificationActions.tsx/SubmissionReviewActions.tsx.
 export function PaymentDetailActions({
   paymentId,
   propertyId,
@@ -25,6 +30,26 @@ export function PaymentDetailActions({
   const [reference, setReference] = useState(defaultReference ?? '');
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [waLink, setWaLink] = useState<string | null>(null);
+
+  if (waLink) {
+    return (
+      <div style={{ marginTop: 18, paddingTop: 16, borderTop: '2px solid var(--color-divider)' }}>
+        <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginBottom: 10 }}>Saved. Now send the customer their WhatsApp:</p>
+        <a href={waLink} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', textDecoration: 'none', display: 'inline-flex' }}>
+          Send via WhatsApp
+        </a>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', marginLeft: 10 }}
+          onClick={() => router.push('/admin/queue/payments')}
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -51,6 +76,7 @@ export function PaymentDetailActions({
               formData.set('transaction_reference', reference);
               const result = await confirmPaymentWithLog(paymentId, propertyId, formData);
               if ('error' in result) setError(result.error);
+              else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
               else router.push('/admin/queue/payments');
             })
           }
@@ -70,8 +96,10 @@ export function PaymentDetailActions({
           messageSuffix=" Reply here with the transfer receipt and we will release your visit credits."
           onSubmit={async (reasonText) => {
             const result = await flagPaymentMismatchWithLog(paymentId, reasonText);
-            if (!('error' in result)) router.push('/admin/queue/payments');
-            return result;
+            if ('error' in result) return result;
+            if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
+            else router.push('/admin/queue/payments');
+            return { success: true };
           }}
         />
       </div>

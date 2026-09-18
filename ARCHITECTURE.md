@@ -2119,3 +2119,62 @@ Until these run: admin's Save on the verification screen will fail with
 an RLS error, a second document upload for the same type will still
 silently overwrite the first (old constraint still in place), and admin
 document upload/remove will fail with an RLS error.
+
+## 37. Redesign 2026-09 (round 22 follow-up 2) — audit: every "logs but
+##     never opens WhatsApp" spot, found and fixed
+
+Plot: "check the same if any other place where whatsapp is not opening
+and just logging internally in all the application and fix it" — after
+round 36 fixed this for agent "Request missing documents". Audited
+every call site of `logWhatsAppMessage` in the codebase
+(`components/admin/agents.actions.ts`, `assignment.actions.ts`,
+`review-decisions.actions.ts`, and the function's own definition in
+`whatsapp-log.actions.ts` — no other file calls it). Found six more,
+all in the same shape: log the message, return `{success: true}`,
+nothing ever opens WhatsApp for the admin to actually send it.
+
+**Fixed, all six:**
+- `verifyProperty` / `rejectPropertyVerification` (Property verification
+  detail screen's Approve / "Reject with reason")
+- `approveSubmission` / `rejectSubmission` (Submission review screen's
+  Approve / "Reject and reassign")
+- `confirmPaymentWithLog` / `flagPaymentMismatchWithLog` (Payment detail
+  screen's Confirm / "Flag a mismatch")
+- `assignAgentToTarget` (Job assignment queue's Assign buttons —
+  `AssignAgentButtons.tsx`)
+
+Each of the six now returns `phoneCountryCode`/`phoneNumber`/`message`
+alongside `success: true` when it actually logged something (omits them
+if the customer/agent has no phone on file, same as before).
+
+Two different UI fixes, matched to how each screen already navigates:
+- The three plain-button approve/confirm flows and the job-assignment
+  Assign buttons (`PropertyVerificationActions.tsx`,
+  `SubmissionReviewActions.tsx`, `PaymentDetailActions.tsx`,
+  `AssignAgentButtons.tsx`) now show a "Send via WhatsApp / Done" panel
+  after success — same shape `MonitoringDecision.tsx`/
+  `AssignAgentForm.tsx`/`ReassignAgentForm.tsx` already use elsewhere —
+  instead of routing straight to the queue.
+- The three `RejectionDialog`-based reject/flag flows
+  (`PropertyVerificationActions.tsx`'s reject,
+  `SubmissionReviewActions.tsx`'s reject,
+  `PaymentDetailActions.tsx`'s flag) deliberately do NOT use
+  `RejectionDialog`'s `whatsappLink` auto-open feature (round 36) —
+  these three screens navigate away right after a successful submit,
+  and doing that at the same moment as an auto `window.open` risks the
+  new tab closing before it opens. They instead call `setWaLink` inside
+  their own `onSubmit`, which shows the same "Send via WhatsApp / Done"
+  panel as the approve buttons above and only navigates once the admin
+  clicks Done.
+
+**Confirmed NOT a bug, left alone:** the welcome WhatsApp
+`agentSignUpAndRegister` writes directly via the admin client (not
+through `logWhatsAppMessage`) is a passive record shown back to the
+agent themselves on "Account under review" — there's no admin action to
+trigger, so nothing needs to open. `MonitoringDecision.tsx`/
+`AssignAgentForm.tsx`/`ReassignAgentForm.tsx`'s own existing flows
+already open WhatsApp correctly (click-through link) — they don't call
+`logWhatsAppMessage` at all today, a separate, lower-priority gap (no
+outbox row for those sends) not covered by this round since it isn't
+the bug Plot reported (those already work; they just aren't logged to
+the outbox for a Resend later).
