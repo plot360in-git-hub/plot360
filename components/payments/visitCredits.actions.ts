@@ -111,7 +111,16 @@ export async function getActiveVisitPlans() {
 // service-role admin client, the same pattern already used elsewhere in
 // this codebase (lib/supabase/admin.ts) for a legitimately privileged
 // write after manual authorization, not a way around RLS in general.
-export async function purchaseVisitCredits(propertyId: string, planId: string, method: 'upi' | 'bank') {
+// Redesign 2026-09 (follow-up) — Plot asked for an optional "Payment
+// transaction ID" field on the customer payment screen (ChoosePlanAndPay.tsx)
+// so a customer paying by real UPI/bank transfer can hand the admin the
+// actual reference their bank/UPI app gave them, instead of relying only
+// on the UPI branch's own generated placeholder (which isn't a real
+// transaction id — there's no live payment gateway here, see the comment
+// a few lines down) or the bank branch, which previously stored no
+// reference at all until an admin filled one in later via
+// PaymentRecordForm. Optional — customerTransactionId may be blank.
+export async function purchaseVisitCredits(propertyId: string, planId: string, method: 'upi' | 'bank', customerTransactionId?: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
@@ -147,7 +156,9 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       return { error: 'UPI activation is not configured on the server yet (missing SUPABASE_SERVICE_ROLE_KEY).' };
     }
 
-    const transactionReference = `UPI-${Date.now()}`;
+    // Prefer whatever the customer typed in (their real UPI reference) —
+    // fall back to the generated placeholder only when they left it blank.
+    const transactionReference = customerTransactionId?.trim() || `UPI-${Date.now()}`;
 
     const { data: payment, error: paymentError } = await admin
       .from('payments')
@@ -233,6 +244,12 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
     status: 'pending',
     amount: plan.price,
     payment_method: 'Bank transfer',
+    // Was previously always left null here — an admin only ever set it
+    // later via PaymentRecordForm's own "Transaction / reference number"
+    // field when confirming the transfer. Now pre-filled from what the
+    // customer entered, if anything, so the admin sees it immediately
+    // (PaymentRecordForm's defaultReference already reads this column).
+    transaction_reference: customerTransactionId?.trim() || null,
   });
   if (paymentError) return { error: paymentError.message };
 

@@ -1801,3 +1801,65 @@ visit consumed which credit batch on properties with more than one
 batch, which isn't safe to script automatically — worth a manual look
 only if a specific property's credit count looks wrong, not a
 blanket migration.
+
+## 34. Redesign 2026-09 (round 21) — optional transaction ID field, bold
+##     Log out, "Request more info" WhatsApp button
+
+Three small, unrelated requests in one round.
+
+**Payment transaction ID (optional).** `ChoosePlanAndPay.tsx` (the
+current Register Step 2 / Payment screen) previously asked for nothing
+beyond plan + method before "paying" — UPI wrote its own generated
+`UPI-<timestamp>` as `payments.transaction_reference` and bank transfer
+wrote no reference at all (an admin only ever added one later, by hand,
+via `PaymentRecordForm`). Added an optional "Payment transaction ID"
+input, shown once a method is picked; `purchaseVisitCredits` now takes
+a fourth, optional `customerTransactionId` param and prefers it over
+the generated UPI placeholder, and writes it into the bank-transfer
+insert too. Left blank, behavior is unchanged (same generated UPI
+reference, same null bank reference an admin fills in later) —
+`PaymentRecordForm`'s existing `defaultReference` prop already surfaces
+whatever's on the row, so a customer-supplied bank reference now shows
+up there automatically with no admin-side change needed. The older,
+separate `/properties/[id]/subscribe` flow (`SubscribeForm.tsx`) already
+had its own *required* Transaction ID field from before the redesign —
+left untouched, out of scope here.
+
+**Bold Log out.** Made the "Log out" button bold (`fontWeight: 700`) in
+every screen it's actually wired into today: `CustomerHome.tsx`'s
+dashboard poster, `CustomerHeader.tsx` (properties/onboarding/profile/
+tasks/service-requests), `AgentHeader.tsx`, and `AdminShell.tsx`. Left
+`AppHeader.tsx` and the legacy `AdminHeader.tsx` alone — neither is
+imported anywhere anymore (superseded by CustomerHeader/CustomerHome
+and AdminShell respectively), same "kept but dead" pattern as
+elsewhere in this redesign.
+
+**"Request more info" WhatsApp button on Property verification.** Plot
+asked for a way to WhatsApp the owner from the Property verification
+detail screen, before any approve/reject decision, with this fixed
+wording:
+
+> Dear \<customer Name\>,
+> Thank you for choosing, trusting and providing us an opportunity to
+> serve you. Before we move to the next steps, we need additional
+> information and our member will be in touch with you collect
+> remaining information.
+>
+> Thank you,
+> Plot360 Team
+
+Added `buildAdditionalInfoMessage(customerName)` to `whatsapp.ts`
+(verbatim text, name substituted in — including "in touch with you
+collect remaining information" exactly as given; flagged to Plot as a
+likely typo, not silently corrected), a new
+`sendAdditionalInfoRequest(propertyId)` action in
+`review-decisions.actions.ts`, and `SendInfoRequestButton.tsx`, wired
+into `PropertyVerificationDetail.tsx` right under the customer name/
+phone line (only rendered when a phone number is on file). Deliberately
+uses the click-to-open-wa.me-link + log pattern (`ResendWhatsAppButton`'s
+shape), not the auto-logged-as-sent pattern `verifyProperty`/
+`rejectPropertyVerification` use — this message is a one-off the admin
+chooses to send right now, not a side effect of a status change, so the
+admin still taps Send inside WhatsApp themselves and it shows up in the
+same "WhatsApp outbox" panel (`TimelineOutboxPanel`) as everything
+else sent for that property.

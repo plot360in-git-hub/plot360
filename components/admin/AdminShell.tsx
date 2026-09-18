@@ -66,7 +66,7 @@ export function AdminShell({
           {name} · {role === 'owner' ? 'owner · full access' : 'operations · queues and assignment'}
         </div>
         <form action={logOut}>
-          <button type="submit" className="btn btn-secondary" style={{ minHeight: 32, fontSize: 12, padding: '0 14px' }}>
+          <button type="submit" className="btn btn-secondary" style={{ minHeight: 32, fontSize: 12, padding: '0 14px', fontWeight: 700 }}>
             Log out
           </button>
         </form>

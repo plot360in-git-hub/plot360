@@ -7,6 +7,8 @@ import { logWhatsAppMessage } from './whatsapp-log.actions';
 import { logAdminAction } from './timeline.actions';
 import { flagPaymentMismatch } from '@/components/payments/payments.actions';
 import { setAgentStatus } from './agents.actions';
+import { isCurrentUserAdmin } from './admin.actions';
+import { buildAdditionalInfoMessage } from './whatsapp';
 
 // Redesign 2026-09 — admin console. Thin wrappers around the existing,
 // untouched decision actions (setPropertyStatus, decideMonitoringJob,
@@ -66,6 +68,46 @@ export async function rejectPropertyVerification(propertyId: string, reasonText:
   }
   await logAdminAction({ entityType: 'property', entityId: propertyId, action: 'Rejected', note: reasonText.trim() });
   return { success: true };
+}
+
+// Redesign 2026-09 (follow-up) — Plot asked for a way, right from the
+// Property verification detail screen and before any approve/reject
+// decision, to send the owner a WhatsApp saying more info/documents are
+// needed and a team member will follow up. Same click-to-open-wa.me +
+// log pattern as ResendWhatsAppButton (not the auto-logged-as-sent
+// pattern verifyProperty/rejectPropertyVerification use above) since
+// this is a message the admin is choosing to send right now, not a side
+// effect of a status change — the admin still taps Send inside WhatsApp.
+export async function sendAdditionalInfoRequest(propertyId: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
+  const { data: property } = await supabase
+    .from('properties')
+    .select('property_name, profiles(first_name, last_name, username, phone_country_code, phone_number)')
+    .eq('id', propertyId)
+    .single();
+  if (!property) return { error: 'Property not found.' };
+
+  const owner: any = property.profiles;
+  if (!owner?.phone_number) return { error: 'No phone number on file for this customer.' };
+
+  const customerName = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || owner.username || 'Customer';
+  const message = buildAdditionalInfoMessage(customerName);
+
+  await logWhatsAppMessage({
+    relatedEntityType: 'property',
+    relatedEntityId: propertyId,
+    recipientPhone: phoneOf(owner),
+    body: message,
+  });
+  await logAdminAction({ entityType: 'property', entityId: propertyId, action: 'Requested additional information' });
+
+  return {
+    success: true as const,
+    phoneCountryCode: owner.phone_country_code ?? null,
+    phoneNumber: owner.phone_number as string,
+    message,
+  };
 }
 
 // ---------- Agent submissions ----------

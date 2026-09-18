@@ -87,7 +87,7 @@ export async function CustomerHeader() {
               {displayName}
             </Link>
             <form action={logOut}>
-              <button type="submit" className="btn btn-secondary" style={{ minHeight: 36, fontSize: 12.5, padding: '0 14px' }}>
+              <button type="submit" className="btn btn-secondary" style={{ minHeight: 36, fontSize: 12.5, padding: '0 14px', fontWeight: 700 }}>
                 Log out
               </button>
             </form>

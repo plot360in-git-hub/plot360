@@ -30,6 +30,20 @@ export function buildAssignmentMessage(params: {
   return lines.join('\n');
 }
 
+// Redesign 2026-09 (follow-up) — Plot's fixed wording for the "need more
+// info from the owner" message sent from the Property verification detail
+// screen, before the property has been approved or rejected. Kept verbatim
+// as given, name substituted in.
+export function buildAdditionalInfoMessage(customerName: string) {
+  return [
+    `Dear ${customerName},`,
+    `Thank you for choosing, trusting and providing us an opportunity to serve you. Before we move to the next steps, we need additional information and our member will be in touch with you collect remaining information.`,
+    ``,
+    `Thank you,`,
+    `Plot360 Team`,
+  ].join('\n');
+}
+
 export function buildCompletionMessage(propertyName: string) {
   return `Plot360 — Your monitoring visit for "${propertyName}" has been reviewed and approved by the admin. Thank you for completing this job — it's now closed.`;
 }

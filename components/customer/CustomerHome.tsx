@@ -172,6 +172,7 @@ export function CustomerHome({
                       padding: 0,
                       color: 'var(--p-ink-soft)',
                       fontSize: 10,
+                      fontWeight: 700,
                       textTransform: 'uppercase',
                       letterSpacing: '0.1em',
                       cursor: 'pointer',

@@ -25,7 +25,7 @@ export async function AgentHeader() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>{user.email}</span>
             <form action={logOut}>
-              <button type="submit" className="btn-primary" style={{ padding: '8px 20px', fontSize: 14 }}>
+              <button type="submit" className="btn-primary" style={{ padding: '8px 20px', fontSize: 14, fontWeight: 700 }}>
                 Log out
               </button>
             </form>

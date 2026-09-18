@@ -52,6 +52,11 @@ export function ChoosePlanAndPay({
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationVariant | null>(null);
+  // Redesign 2026-09 (follow-up) — optional: the customer can paste the
+  // reference their UPI app / bank gave them for this payment, so the
+  // admin has real proof to check instead of only the simulated
+  // UPI-<timestamp> placeholder (see purchaseVisitCredits).
+  const [transactionId, setTransactionId] = useState('');
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
 
@@ -64,7 +69,7 @@ export function ChoosePlanAndPay({
       window.setTimeout(() => {
         setOpening(false);
         startTransition(async () => {
-          const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi');
+          const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', transactionId);
           if ('error' in result) setError(result.error);
           else
             setConfirmation({
@@ -82,7 +87,7 @@ export function ChoosePlanAndPay({
     }
 
     startTransition(async () => {
-      const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank');
+      const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank', transactionId);
       if ('error' in result) setError(result.error);
       else setConfirmation({ kind: 'reg-bank', propertyName: result.propertyName, amount: result.amount, planName: result.planName });
     });
@@ -247,6 +252,18 @@ export function ChoosePlanAndPay({
             <p>Account number: <strong>{paymentSettings.bank_account_number}</strong></p>
             <p>IFSC: <strong>{paymentSettings.bank_ifsc}</strong></p>
             <p>Bank: <strong>{paymentSettings.bank_name}</strong></p>
+          </div>
+        )}
+
+        {method && (
+          <div className="field" style={{ marginBottom: 20 }}>
+            <label>Payment transaction ID (optional)</label>
+            <input
+              className="input"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              placeholder="Reference number from your UPI app or bank, if you have it"
+            />
           </div>
         )}
 

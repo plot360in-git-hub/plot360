@@ -7,6 +7,7 @@ import { PropertyVerificationActions } from './PropertyVerificationActions';
 import { LocationFieldsForm } from './LocationFieldsForm';
 import { ExtendCreditsForm } from './ExtendCreditsForm';
 import { DeletePropertyButton } from './DeletePropertyButton';
+import { SendInfoRequestButton } from './SendInfoRequestButton';
 import { hoursSince, formatWait } from '@/lib/adminQueue';
 
 // Redesign 2026-09 — admin console, Property verification detail screen
@@ -67,6 +68,7 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
           {' · '}
           {owner?.phone_number ? `${owner?.phone_country_code ?? ''} ${owner.phone_number}`.trim() : 'Phone number unknown'}
         </div>
+        {owner?.phone_number && <SendInfoRequestButton propertyId={propertyId} />}
 
         <div style={{ borderTop: '2px solid var(--color-divider)', marginTop: 20, paddingTop: 4 }} />
         <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Site location</div>
