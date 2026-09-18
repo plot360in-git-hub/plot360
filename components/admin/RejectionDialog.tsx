@@ -32,7 +32,14 @@ export function RejectionDialog({
   cta: string;
   messagePrefix: string;
   messageSuffix: string;
-  onSubmit: (reasonText: string) => Promise<{ error?: string } | { success: boolean } | void>;
+  // Redesign 2026-09 (follow-up) — onSubmit can now hand back a wa.me
+  // link (whatsappLink) alongside success, same shape ResendWhatsAppButton/
+  // SendInfoRequestButton already use: the server action logs the message,
+  // this dialog opens the link so the admin actually taps Send inside
+  // WhatsApp, instead of the message only ever being logged with no one —
+  // least of all the agent — finding out. Optional: a context that
+  // doesn't pass it back behaves exactly as before.
+  onSubmit: (reasonText: string) => Promise<{ error?: string; whatsappLink?: string } | { success: boolean; whatsappLink?: string } | void>;
 }) {
   const [open, setOpen] = useState(false);
   const [reasonIndex, setReasonIndex] = useState(0);
@@ -93,6 +100,9 @@ export function RejectionDialog({
                     if (result && 'error' in result && result.error) {
                       setError(result.error);
                       return;
+                    }
+                    if (result && 'whatsappLink' in result && result.whatsappLink) {
+                      window.open(result.whatsappLink, '_blank');
                     }
                     setOpen(false);
                   })

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { updateAgentContactInfo } from './onboarding.actions';
+import { updateAgentContactInfo, deleteAgentDocument } from './onboarding.actions';
 import { agentDisplayId, maskAgentPhone } from './agentDisplay';
 import type { Profile, AgentProfile, AgentDocument } from '@/types/database.types';
 
@@ -24,6 +24,13 @@ const STATUS_LABEL: Record<string, string> = { verified: 'Verified', pending: 'U
 // review screen). "Verified <date>" in the mock becomes "Uploaded
 // <date>" here — there's no per-document verification timestamp, only
 // the agent's overall status above.
+//
+// Redesign 2026-09 (follow-up) — Plot: "multi files should be allowed for
+// Agent ... front side as well as back side." Each row now lists every
+// file on file for that type (not just one), "Attach more" accepts
+// several files at once as part of the regular Save, and each existing
+// file gets its own immediate Remove (deleteAgentDocument) — removing a
+// bad photo shouldn't require re-submitting the whole form.
 export function AgentProfileEditForm({
   profile,
   agentProfile,
@@ -32,12 +39,14 @@ export function AgentProfileEditForm({
 }: {
   profile: Profile;
   agentProfile: AgentProfile | null;
-  documents: Pick<AgentDocument, 'doc_type' | 'uploaded_at'>[];
+  documents: Pick<AgentDocument, 'id' | 'doc_type' | 'uploaded_at'>[];
   completedVisits: number;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [docList, setDocList] = useState(documents);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -54,8 +63,20 @@ export function AgentProfileEditForm({
     });
   }
 
+  function handleRemoveDoc(documentId: string) {
+    setError(null);
+    setDeletingId(documentId);
+    startTransition(async () => {
+      const result = await deleteAgentDocument(documentId);
+      if (result?.error) setError(result.error);
+      else setDocList((list) => list.filter((d) => d.id !== documentId));
+      setDeletingId(null);
+    });
+  }
+
   const status = agentProfile?.status ?? 'pending';
-  const docByType = Object.fromEntries(documents.map((d) => [d.doc_type, d]));
+  const docsByType: Record<string, typeof docList> = { driving_license: [], secondary_id: [] };
+  for (const d of docList) (docsByType[d.doc_type] ??= []).push(d);
 
   return (
     <div className="p360" style={{ minHeight: '100vh' }}>
@@ -109,19 +130,38 @@ export function AgentProfileEditForm({
         <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Documents</p>
 
         {DOC_ROWS.map((row) => {
-          const doc = docByType[row.type];
+          const docs = docsByType[row.type] ?? [];
           return (
-            <div key={row.type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: '1px solid var(--color-divider)' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</div>
-                <div style={{ fontSize: 11.5, color: doc ? 'var(--p-ink-soft)' : 'var(--p-alert)', marginTop: 2 }}>
-                  {doc ? `Uploaded ${doc.uploaded_at?.slice(0, 10)}` : 'Missing'}
+            <div key={row.type} style={{ padding: '13px 0', borderBottom: '1px solid var(--color-divider)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</div>
+                  <div style={{ fontSize: 11.5, color: docs.length ? 'var(--p-ink-soft)' : 'var(--p-alert)', marginTop: 2 }}>
+                    {docs.length ? `${docs.length} file${docs.length > 1 ? 's' : ''} on file` : 'Missing'}
+                  </div>
                 </div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-accent-700)', cursor: 'pointer' }}>
+                  {docs.length ? 'Attach more' : 'Attach'}
+                  <input type="file" name={row.type} accept="image/jpeg,image/png,.pdf" multiple style={{ display: 'none' }} />
+                </label>
               </div>
-              <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-accent-700)', cursor: 'pointer' }}>
-                {doc ? 'Replace' : 'Attach'}
-                <input type="file" name={row.type} accept="image/jpeg,image/png,.pdf" style={{ display: 'none' }} />
-              </label>
+              {docs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
+                  {docs.map((d) => (
+                    <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, color: 'var(--p-ink-soft)' }}>
+                      <span>Uploaded {d.uploaded_at?.slice(0, 10)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDoc(d.id)}
+                        disabled={isPending && deletingId === d.id}
+                        style={{ fontSize: 11, color: 'var(--p-alert)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        {isPending && deletingId === d.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

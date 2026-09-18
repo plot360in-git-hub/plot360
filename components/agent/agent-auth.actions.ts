@@ -124,23 +124,28 @@ export async function agentSignUpAndRegister(formData: FormData) {
   const { error: agentError } = await admin.from('agent_profiles').upsert({ id: userId, status: 'pending' });
   if (agentError) return { error: agentError.message };
 
+  // Redesign 2026-09 (follow-up) — Plot: "multi files should be allowed
+  // for Agent ... at the time of registration" (front + back of the same
+  // ID). formData.getAll picks up every file an <input multiple> selected;
+  // each is its own INSERT now, not an upsert that only ever kept one
+  // file per doc_type (supabase/schema.sql dropped that constraint).
   const missingDocs: string[] = [];
   for (const docType of ['driving_license', 'secondary_id'] as const) {
-    const file = formData.get(docType) as File | null;
-    if (!file || file.size === 0) {
+    const files = formData.getAll(docType).filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length === 0) {
       missingDocs.push(SIGNUP_DOC_LABELS[docType]);
       continue;
     }
-    const path = `${userId}/${docType}-${Date.now()}-${file.name}`;
-    const fileBuffer = await file.arrayBuffer();
-    const { error: uploadError } = await admin.storage
-      .from('agent-documents')
-      .upload(path, fileBuffer, { upsert: true, contentType: file.type || 'application/octet-stream' });
-    if (uploadError) return { error: `${SIGNUP_DOC_LABELS[docType]} upload failed: ${uploadError.message}` };
-    const { error: docError } = await admin
-      .from('agent_documents')
-      .upsert({ agent_id: userId, doc_type: docType, file_path: path }, { onConflict: 'agent_id,doc_type' });
-    if (docError) return { error: docError.message };
+    for (const file of files) {
+      const path = `${userId}/${docType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
+      const fileBuffer = await file.arrayBuffer();
+      const { error: uploadError } = await admin.storage
+        .from('agent-documents')
+        .upload(path, fileBuffer, { contentType: file.type || 'application/octet-stream' });
+      if (uploadError) return { error: `${SIGNUP_DOC_LABELS[docType]} upload failed: ${uploadError.message}` };
+      const { error: docError } = await admin.from('agent_documents').insert({ agent_id: userId, doc_type: docType, file_path: path });
+      if (docError) return { error: docError.message };
+    }
   }
 
   // Best-effort welcome WhatsApp — same 'sent'-the-moment-it's-logged

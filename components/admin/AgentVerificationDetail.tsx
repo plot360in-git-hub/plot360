@@ -4,6 +4,8 @@ import { isAgentBanned } from './agent-bans.actions';
 import { profileDisplayName } from './displayName';
 import { hoursSince, formatWait } from '@/lib/adminQueue';
 import { AgentVerificationActions } from './AgentVerificationActions';
+import { AgentVerificationEditableFields } from './AgentVerificationEditableFields';
+import { AgentDocumentManager } from './AgentDocumentManager';
 
 const DOC_LABELS: Record<string, string> = {
   driving_license: 'Driving licence',
@@ -13,18 +15,24 @@ const DOC_LABELS: Record<string, string> = {
 // Redesign 2026-09 — admin console, Agent verification detail screen
 // (design_handoff_plot360_redesign, "Plot360 Admin.dc.html"). Replaces
 // AgentReview.tsx on /admin/agents/[id] (kept intact, unreferenced —
-// see ARCHITECTURE.md). The design mock shows four document cards
-// (licence + Aadhaar, front/back); the real schema only ever collects
-// two (agent_documents.doc_type: driving_license, secondary_id), so
-// this shows two, honestly, rather than fabricating a front/back split
-// that doesn't exist in the data.
+// see ARCHITECTURE.md).
+//
+// Redesign 2026-09 (follow-up) — two Plot requests actioned here: (1)
+// Mobile number/Email/SRO name/SRO number are no longer readOnly — see
+// AgentVerificationEditableFields.tsx; (2) documents now support any
+// number of files per type (front, back, a retake, ...) instead of one —
+// see AgentDocumentManager.tsx and supabase/schema.sql's dropped
+// agent_documents_agent_doctype_key constraint.
 export async function AgentVerificationDetail({ agentId }: { agentId: string }) {
   const [{ agentProfile, documents }, banned] = await Promise.all([getAgentForReview(agentId), isAgentBanned(agentId)]);
   if (!agentProfile) return <p style={{ padding: 24 }}>Agent not found.</p>;
 
-  const docUrls: Record<string, string | null> = {};
-  for (const doc of documents) {
-    docUrls[doc.doc_type] = await getAgentDocumentUrl(doc.file_path);
+  // Redesign 2026-09 (follow-up) — grouped by doc_type instead of one row
+  // per type now that multiple files per type are allowed.
+  const docsByType: Record<string, { id: string; uploadedAt: string; url: string | null }[]> = { driving_license: [], secondary_id: [] };
+  for (const doc of documents as any[]) {
+    const url = await getAgentDocumentUrl(doc.file_path);
+    (docsByType[doc.doc_type] ??= []).push({ id: doc.id, uploadedAt: doc.uploaded_at, url });
   }
   const waitHours = hoursSince(agentProfile.created_at);
 
@@ -46,47 +54,21 @@ export async function AgentVerificationDetail({ agentId }: { agentId: string }) 
       )}
 
       <div style={{ borderTop: '2px solid var(--color-divider)', marginTop: 20, paddingTop: 4 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="field">
-          <label>Mobile number</label>
-          <input className="input" style={{ minHeight: 38 }} value={`${agentProfile.profiles?.phone_country_code ?? ''} ${agentProfile.profiles?.phone_number ?? ''}`} readOnly />
-        </div>
-        <div className="field">
-          <label>Email</label>
-          <input className="input" style={{ minHeight: 38 }} value={agentProfile.profiles?.email ?? ''} readOnly />
-        </div>
-        <div className="field">
-          <label>SRO name</label>
-          <input className="input" style={{ minHeight: 38 }} value={agentProfile.sro_name ?? ''} readOnly />
-        </div>
-        <div className="field">
-          <label>SRO number</label>
-          <input className="input" style={{ minHeight: 38 }} value={agentProfile.sro_code ?? ''} readOnly />
-        </div>
-      </div>
-      <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.5, marginTop: 8 }}>Jobs are matched to this SRO number against the property's SRO.</div>
+      <AgentVerificationEditableFields
+        agentId={agentId}
+        phoneCountryCode={agentProfile.profiles?.phone_country_code ?? ''}
+        phoneNumber={agentProfile.profiles?.phone_number ?? ''}
+        email={agentProfile.profiles?.email ?? ''}
+        sroName={agentProfile.sro_name ?? ''}
+        sroCode={agentProfile.sro_code ?? ''}
+      />
 
       <div style={{ borderTop: '2px solid var(--color-divider)', marginTop: 20, paddingTop: 4 }} />
       <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Documents</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 11 }}>
-        {(['driving_license', 'secondary_id'] as const).map((docType) => {
-          const present = documents.some((d: any) => d.doc_type === docType);
-          const url = docUrls[docType];
-          return (
-            <div key={docType} style={{ border: `1px solid ${present ? 'var(--color-divider)' : 'var(--color-accent)'}`, padding: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600 }}>{DOC_LABELS[docType]}</div>
-                <div style={{ fontSize: 10.5, color: present ? 'var(--p-ink-soft)' : 'var(--p-alert)' }}>{present ? 'Attached' : 'Missing'}</div>
-              </div>
-              <div style={{ height: 78, background: 'var(--color-neutral-300)', marginTop: 9 }} />
-              {url && (
-                <a href={url} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ fontSize: 11, marginTop: 9, display: 'inline-flex' }}>
-                  View full size
-                </a>
-              )}
-            </div>
-          );
-        })}
+        {(['driving_license', 'secondary_id'] as const).map((docType) => (
+          <AgentDocumentManager key={docType} agentId={agentId} docType={docType} label={DOC_LABELS[docType]} files={docsByType[docType] ?? []} />
+        ))}
       </div>
 
       <AgentVerificationActions agentId={agentId} agentName={profileDisplayName(agentProfile.profiles)} banned={banned} />

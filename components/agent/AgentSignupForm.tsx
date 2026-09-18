@@ -169,11 +169,13 @@ export function AgentSignupForm() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Driving licence</label>
-              <input className="input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+              <input className="input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" multiple style={{ fontSize: 11.5 }} />
+              <p style={{ fontSize: 10.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>Front and back — select both at once.</p>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Secondary ID (Aadhaar/PAN)</label>
-              <input className="input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+              <input className="input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" multiple style={{ fontSize: 11.5 }} />
+              <p style={{ fontSize: 10.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>Front and back — select both at once.</p>
             </div>
           </div>
         </div>

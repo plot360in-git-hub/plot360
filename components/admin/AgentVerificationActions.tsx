@@ -6,6 +6,7 @@ import { verifyAgent } from './review-decisions.actions';
 import { requestAgentDocuments } from './agents.actions';
 import { toggleAgentBan } from './agent-bans.actions';
 import { RejectionDialog } from './RejectionDialog';
+import { buildWhatsAppLink } from './whatsapp';
 
 export function AgentVerificationActions({ agentId, agentName, banned }: { agentId: string; agentName: string; banned: boolean }) {
   const router = useRouter();
@@ -42,7 +43,15 @@ export function AgentVerificationActions({ agentId, agentName, banned }: { agent
           reasons={['Driving licence photo is unreadable or missing', 'Second government ID is unreadable or missing', 'SRO name and number are not filled in', 'Mobile number could not be reached']}
           messagePrefix="Plot360: Before we can verify your agent account, we need one more thing. "
           messageSuffix=" Reply here with a photo and we will add it for you."
-          onSubmit={(reasonText) => requestAgentDocuments(agentId, reasonText)}
+          onSubmit={async (reasonText) => {
+            // Redesign 2026-09 (follow-up) — requestAgentDocuments only
+            // logs the message; this builds the real wa.me link from the
+            // phone/message it hands back so RejectionDialog can open it,
+            // same as every other "actually send this" WhatsApp button.
+            const result = await requestAgentDocuments(agentId, reasonText);
+            if ('error' in result) return result;
+            return { success: true, whatsappLink: buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message) };
+          }}
         />
 
         <button

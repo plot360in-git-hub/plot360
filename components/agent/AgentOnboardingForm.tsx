@@ -94,13 +94,13 @@ export function AgentOnboardingForm({
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
                   Driving licence {hasDL && <span style={{ color: 'var(--p-ink-soft)', fontWeight: 400 }}>(on file)</span>}
                 </label>
-                <input className="input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+                <input className="input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" multiple style={{ fontSize: 11.5 }} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
                   Secondary ID {hasSecondaryId && <span style={{ color: 'var(--p-ink-soft)', fontWeight: 400 }}>(on file)</span>}
                 </label>
-                <input className="input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+                <input className="input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" multiple style={{ fontSize: 11.5 }} />
               </div>
             </div>
           </div>

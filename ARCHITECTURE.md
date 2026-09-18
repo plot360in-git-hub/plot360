@@ -1987,3 +1987,135 @@ kept, intact, just no longer imported anywhere.
   even though not visible in the cropped mock screenshot (likely below
   the fold) — an admin reviewing a new agent needs a name, and a real
   password account needs confirmation.
+
+## 36. Redesign 2026-09 (round 22 follow-up) — five bugs/requests from
+##     first feedback on the Field Agent redesign
+
+Plot's first feedback on round 22's Field Agent redesign, five items,
+all addressed:
+
+**1. `/agent` 404'd.** `app/agent/` only ever had subdirectories
+(`dashboard`, `jobs`, `login`, `onboarding`, `profile`, `signup`,
+`auth`) — no root `page.tsx`, so both `localhost:3000/agent` and
+`https://uat.plot360.in/agent` 404'd. Added `app/agent/page.tsx`,
+redirects to `/agent/login`.
+
+**2. "Account created. Verification takes a day." restyled.** Plot:
+"black color message style is old, update and match with new design."
+`AgentUnderReview.tsx`'s header was a flat `var(--color-text)`
+full-bleed block — the actual "new design" treatment used elsewhere for
+a prominent welcome/status card is the hero-card pattern (customer home,
+marketing hero): `background: var(--gradient-hero)` +
+`border-radius: var(--radius-lg)`, inset in a rounded card rather than
+full-bleed black. Swapped to that.
+
+**3. Agent verification fields are now editable.** Plot: "In Agent
+verification page all fields should be editable to admin and reviewer."
+Mobile number/Email/SRO name/SRO number in `AgentVerificationDetail.tsx`
+were `readOnly` with no save path. Pulled into a new client component,
+`AgentVerificationEditableFields.tsx`, with its own Save button calling
+a new action, `updateAgentVerificationFields` (`agents.actions.ts`).
+Needed a new RLS policy — `profiles` had no admin-update policy at all
+before this (only `agent_profiles` did):
+
+```sql
+create policy "profiles_update_admin" on profiles for update using (is_admin());
+```
+
+Note: editing "Email" here only updates the `profiles` row (what the
+team sees, what WhatsApp/notifications use) — it does not change the
+agent's Supabase Auth login credential, which would need the
+service-role admin API and its own confirmation step. Flagged in the UI
+copy itself, not just here.
+
+**4. Multiple files per document type — agent and admin side.** Plot:
+"Driving License and Second Government ID filed should allow to upload
+multiple files as user needs to send front side as well as back side,
+so multi files should be allowed ... at the time of registration as
+well for Admin and reviwer when verifying it." The schema only ever had
+two document *types* (`driving_license`, `secondary_id`), not
+front/back as separate fields, and a unique `(agent_id, doc_type)`
+constraint meant every upload silently replaced the previous file for
+that type. Honest substitution made here: rather than inventing
+front/back columns the mock never showed either, `agent_documents` now
+simply allows any number of files per type —
+
+```sql
+alter table agent_documents drop constraint if exists agent_documents_agent_doctype_key;
+```
+
+— so an agent (or admin) attaches as many photos per document as
+needed (front, back, a retake, etc), each its own row. Every upload
+path switched from `.upsert(..., {onConflict: 'agent_id,doc_type'})` to
+a plain `.insert(...)` with a unique `file_path`
+(`<agentId>/<docType>-<timestamp>-<random>-<filename>`):
+`agentSignUpAndRegister` (agent-auth.actions.ts), `completeAgentRegistration`
+and `updateAgentContactInfo` (onboarding.actions.ts, both renamed
+`uploadDoc` → `uploadDocs`, now loop `formData.getAll(field)` instead of
+`formData.get(field)`). All three agent-facing file inputs
+(`AgentSignupForm.tsx`, `AgentOnboardingForm.tsx`,
+`AgentProfileEditForm.tsx`) got the `multiple` attribute.
+
+New: agents can remove their own bad upload
+(`deleteAgentDocument`, onboarding.actions.ts — `AgentProfileEditForm.tsx`'s
+document rows now list every file with its own Remove, immediate, not
+gated on the Save button) and admin/reviewer can add or remove a file
+directly from the verification screen (`uploadAgentDocumentAsAdmin` /
+`deleteAgentDocumentAsAdmin`, `agents.actions.ts`, rendered via new
+`AgentDocumentManager.tsx`, replacing the old static two-card grid in
+`AgentVerificationDetail.tsx`). Needed RLS to actually allow admin
+inserts/deletes/updates (before this round admin only had `select` on
+`agent_documents`, and no policy at all on the storage bucket beyond
+read):
+
+```sql
+create policy "agent_documents_delete_own" on agent_documents for delete
+  using (agent_id = auth.uid());
+create policy "agent_documents_admin_all" on agent_documents for all
+  using (is_admin()) with check (is_admin());
+-- storage.objects:
+create policy "agent_documents_admin_all" on storage.objects for all
+  using (bucket_id = 'agent-documents' and is_admin())
+  with check (bucket_id = 'agent-documents' and is_admin());
+```
+
+**5. "Request missing documents" now actually opens WhatsApp.** Plot:
+"When clicked request missing document button ... should send a
+whatsapp message ... and that is not happening ... If this is not sent,
+the agent will never know Admin or Reviwer is waiting for his
+response." Root cause: `requestAgentDocuments` (`agents.actions.ts`)
+only ever logged the message to the `whatsapp_messages` outbox — it
+never returned the phone/message, and `RejectionDialog.tsx` (the shared
+dialog `AgentVerificationActions.tsx` renders as "Request missing
+documents") never opened a `wa.me` link on its own; it only calls
+whatever `onSubmit` the parent passed. Nothing ever opened WhatsApp, so
+the admin clicking "Send request" appeared to do nothing and the agent
+was never actually messaged — same class of bug the round-21
+`SendInfoRequestButton.tsx` already fixed for properties, just not
+applied here.
+
+Fixed by: `requestAgentDocuments` now returns
+`{ phoneCountryCode, phoneNumber, message }` (and errors if the agent
+has no phone on file, instead of silently no-op'ing); `RejectionDialog`'s
+`onSubmit` type gained an optional `whatsappLink` on its result, and
+opens it (`window.open`) right after a successful submit — additive, the
+other three `RejectionDialog` contexts (property reject, submission
+reject-and-reassign, payment mismatch) are unaffected since they don't
+pass one back; `AgentVerificationActions.tsx`'s `onSubmit` now builds
+the link with `buildWhatsAppLink` and hands it back. Same click-to-open
+pattern as `ResendWhatsAppButton.tsx` / `SendInfoRequestButton.tsx`
+throughout the rest of the app.
+
+**⚠️ Action needed in Supabase** — three new/changed statements in
+`supabase/schema.sql`, on top of round 22's still-pending
+`whatsapp_messages_select_own_agent` policy, must be run against the
+live database:
+- `alter table agent_documents drop constraint if exists agent_documents_agent_doctype_key;`
+- `create policy "profiles_update_admin" on profiles for update using (is_admin());`
+- `agent_documents_delete_own` / `agent_documents_admin_all` (table) and
+  `agent_documents_admin_all` (storage.objects) above.
+
+Until these run: admin's Save on the verification screen will fail with
+an RLS error, a second document upload for the same type will still
+silently overwrite the first (old constraint still in place), and admin
+document upload/remove will fail with an RLS error.

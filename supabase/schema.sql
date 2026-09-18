@@ -212,9 +212,15 @@ create table if not exists agent_documents (
 );
 
 create index if not exists idx_agent_documents_agent on agent_documents(agent_id);
-do $$ begin
-  alter table agent_documents add constraint agent_documents_agent_doctype_key unique (agent_id, doc_type);
-exception when duplicate_object or duplicate_table then null; end $$;
+
+-- Redesign 2026-09 (follow-up) — Plot's request: agents need to send more
+-- than one file per document type (e.g. front and back of the same ID),
+-- and admin/reviewer need to be able to add files too. The old unique
+-- constraint only ever allowed one row per (agent_id, doc_type), so every
+-- upload silently replaced the previous file. Dropped here so a doc_type
+-- can hold any number of files; every upload path below now INSERTs a new
+-- row with a unique file_path instead of upserting over the old one.
+alter table agent_documents drop constraint if exists agent_documents_agent_doctype_key;
 
 -- ---------- monitoring_jobs (twice-yearly physical verification) ----------
 create table if not exists monitoring_jobs (
@@ -340,6 +346,13 @@ drop policy if exists "profiles_insert_own" on profiles;
 create policy "profiles_insert_own" on profiles for insert with check (auth.uid() = id);
 drop policy if exists "profiles_update_own" on profiles;
 create policy "profiles_update_own" on profiles for update using (auth.uid() = id);
+-- Redesign 2026-09 (follow-up) — lets admin/reviewer correct an agent's
+-- mobile number or email on the Agent verification screen. Note: this
+-- only updates the profiles row (what the team and WhatsApp sends use);
+-- it does not touch the agent's Supabase Auth login credential, which
+-- would need the service-role admin API and its own confirmation flow.
+drop policy if exists "profiles_update_admin" on profiles;
+create policy "profiles_update_admin" on profiles for update using (is_admin());
 
 -- properties: owner-only
 drop policy if exists "properties_select_own" on properties;
@@ -530,7 +543,10 @@ create policy "agent_profiles_select_admin" on agent_profiles for select using (
 drop policy if exists "agent_profiles_update_admin" on agent_profiles;
 create policy "agent_profiles_update_admin" on agent_profiles for update using (is_admin());
 
--- agent_documents: owner agent can manage their own; admin can view all.
+-- agent_documents: owner agent can manage their own; admin/reviewer has
+-- full access too (Redesign 2026-09 follow-up — admin can now add or
+-- remove an agent's documents from the verification screen, e.g. when a
+-- missing document arrives back over WhatsApp).
 drop policy if exists "agent_documents_select_own" on agent_documents;
 create policy "agent_documents_select_own" on agent_documents for select
   using (agent_id = auth.uid());
@@ -541,8 +557,13 @@ drop policy if exists "agent_documents_update_own" on agent_documents;
 create policy "agent_documents_update_own" on agent_documents for update
   using (agent_id = auth.uid())
   with check (agent_id = auth.uid());
+drop policy if exists "agent_documents_delete_own" on agent_documents;
+create policy "agent_documents_delete_own" on agent_documents for delete
+  using (agent_id = auth.uid());
 drop policy if exists "agent_documents_select_admin" on agent_documents;
-create policy "agent_documents_select_admin" on agent_documents for select using (is_admin());
+drop policy if exists "agent_documents_admin_all" on agent_documents;
+create policy "agent_documents_admin_all" on agent_documents for all
+  using (is_admin()) with check (is_admin());
 
 -- monitoring_jobs: the assigned agent can see/update their own jobs;
 -- the property owner (customer) can view read-only; admin has full access.
@@ -703,9 +724,13 @@ create policy "agent_documents_owner_rw" on storage.objects for all
   using (bucket_id = 'agent-documents' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'agent-documents' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Redesign 2026-09 (follow-up) — admin/reviewer can now add/remove
+-- agent documents (multi-file support), not just view them.
 drop policy if exists "agent_documents_admin_read" on storage.objects;
-create policy "agent_documents_admin_read" on storage.objects for select
-  using (bucket_id = 'agent-documents' and is_admin());
+drop policy if exists "agent_documents_admin_all" on storage.objects;
+create policy "agent_documents_admin_all" on storage.objects for all
+  using (bucket_id = 'agent-documents' and is_admin())
+  with check (bucket_id = 'agent-documents' and is_admin());
 
 -- monitoring-media: path is {job_id}/filename -> only the assigned agent can write; agent/owner/admin can read
 drop policy if exists "monitoring_media_agent_rw" on storage.objects;

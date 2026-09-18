@@ -57,44 +57,34 @@ export async function completeAgentRegistration(formData: FormData) {
   });
   if (agentError) return { error: agentError.message };
 
-  async function uploadDoc(field: string, docType: 'driving_license' | 'secondary_id') {
-    const file = formData.get(field) as File | null;
-    if (!file || file.size === 0) return;
+  // Redesign 2026-09 (follow-up) — Plot: "multi files should be allowed
+  // for Agent ... front side as well as back side." formData.getAll picks
+  // up every file the <input multiple> selected; each becomes its own
+  // agent_documents row (INSERT, not upsert — the old one-file-per-type
+  // unique constraint is gone, see supabase/schema.sql), so uploading a
+  // second file no longer silently replaces the first.
+  async function uploadDocs(field: string, docType: 'driving_license' | 'secondary_id') {
+    const files = formData.getAll(field).filter((f): f is File => f instanceof File && f.size > 0);
+    for (const file of files) {
+      const path = `${userData.user!.id}/${docType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
+      const fileBuffer = await file.arrayBuffer();
+      const { error: uploadError } = await supabase.storage
+        .from('agent-documents')
+        .upload(path, fileBuffer, { contentType: file.type || 'application/octet-stream' });
+      if (uploadError) throw new Error(uploadError.message);
 
-    const { data: existing } = await supabase
-      .from('agent_documents')
-      .select('file_path')
-      .eq('agent_id', userData.user!.id)
-      .eq('doc_type', docType)
-      .maybeSingle();
-
-    const path = `${userData.user!.id}/${docType}-${Date.now()}-${file.name}`;
-    const fileBuffer = await file.arrayBuffer();
-    const { error: uploadError } = await supabase.storage
-      .from('agent-documents')
-      .upload(path, fileBuffer, { upsert: true, contentType: file.type || 'application/octet-stream' });
-    if (uploadError) throw new Error(uploadError.message);
-
-    const { error: docError } = await supabase
-      .from('agent_documents')
-      .upsert({ agent_id: userData.user!.id, doc_type: docType, file_path: path }, { onConflict: 'agent_id,doc_type' });
-    if (docError) throw new Error(docError.message);
-
-    // Clean up the old file now that the replacement is safely saved,
-    // so a rejected/re-uploaded document doesn't leave the old one
-    // sitting around for admin to see alongside the new one.
-    if (existing?.file_path && existing.file_path !== path) {
-      await supabase.storage.from('agent-documents').remove([existing.file_path]);
+      const { error: docError } = await supabase.from('agent_documents').insert({ agent_id: userData.user!.id, doc_type: docType, file_path: path });
+      if (docError) throw new Error(docError.message);
     }
   }
 
   // Redesign 2026-09 (follow-up, round 22) — documents are optional at
   // this stage now ("needed before your first job", not before the
-  // account can exist) — uploadDoc itself is already a no-op when a
+  // account can exist) — uploadDocs itself is already a no-op when a
   // field is empty, so there's nothing to require here.
   try {
-    await uploadDoc('driving_license', 'driving_license');
-    await uploadDoc('secondary_id', 'secondary_id');
+    await uploadDocs('driving_license', 'driving_license');
+    await uploadDocs('secondary_id', 'secondary_id');
   } catch (e: any) {
     return { error: e.message };
   }
@@ -149,44 +139,54 @@ export async function updateAgentContactInfo(formData: FormData) {
     .eq('id', userData.user.id);
   if (agentError) return { error: agentError.message };
 
-  // Documents: optional Replace/Attach right from this screen, same
-  // upload-and-clean-up-the-old-file shape as completeAgentRegistration.
-  async function uploadDoc(field: string, docType: 'driving_license' | 'secondary_id') {
-    const file = formData.get(field) as File | null;
-    if (!file || file.size === 0) return;
+  // Documents: optional Attach-more right from this screen. Redesign
+  // 2026-09 (follow-up) — Plot: "multi files should be allowed for Agent
+  // ... at the time of registration as well" — this now ADDS files
+  // (INSERT) rather than replacing whatever was already on file for that
+  // doc_type, same as completeAgentRegistration above. Use
+  // deleteAgentDocument (below) to remove a bad one instead.
+  async function uploadDocs(field: string, docType: 'driving_license' | 'secondary_id') {
+    const files = formData.getAll(field).filter((f): f is File => f instanceof File && f.size > 0);
+    for (const file of files) {
+      const path = `${userData.user!.id}/${docType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
+      const fileBuffer = await file.arrayBuffer();
+      const { error: uploadError } = await supabase.storage
+        .from('agent-documents')
+        .upload(path, fileBuffer, { contentType: file.type || 'application/octet-stream' });
+      if (uploadError) throw new Error(uploadError.message);
 
-    const { data: existing } = await supabase
-      .from('agent_documents')
-      .select('file_path')
-      .eq('agent_id', userData.user!.id)
-      .eq('doc_type', docType)
-      .maybeSingle();
-
-    const path = `${userData.user!.id}/${docType}-${Date.now()}-${file.name}`;
-    const fileBuffer = await file.arrayBuffer();
-    const { error: uploadError } = await supabase.storage
-      .from('agent-documents')
-      .upload(path, fileBuffer, { upsert: true, contentType: file.type || 'application/octet-stream' });
-    if (uploadError) throw new Error(uploadError.message);
-
-    const { error: docError } = await supabase
-      .from('agent_documents')
-      .upsert({ agent_id: userData.user!.id, doc_type: docType, file_path: path }, { onConflict: 'agent_id,doc_type' });
-    if (docError) throw new Error(docError.message);
-
-    if (existing?.file_path && existing.file_path !== path) {
-      await supabase.storage.from('agent-documents').remove([existing.file_path]);
+      const { error: docError } = await supabase.from('agent_documents').insert({ agent_id: userData.user!.id, doc_type: docType, file_path: path });
+      if (docError) throw new Error(docError.message);
     }
   }
 
   try {
-    await uploadDoc('driving_license', 'driving_license');
-    await uploadDoc('secondary_id', 'secondary_id');
+    await uploadDocs('driving_license', 'driving_license');
+    await uploadDocs('secondary_id', 'secondary_id');
   } catch (e: any) {
     return { error: e.message };
   }
 
   return { success: true, emailChangeRequested };
+}
+
+// Redesign 2026-09 (follow-up) — lets an agent remove one of their own
+// files (e.g. a blurry retake) now that multiple files per doc_type are
+// allowed. agent_documents_delete_own (supabase/schema.sql) restricts
+// this to the agent's own rows.
+export async function deleteAgentDocument(documentId: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+
+  const { data: doc } = await supabase.from('agent_documents').select('file_path, agent_id').eq('id', documentId).single();
+  if (!doc || doc.agent_id !== userData.user.id) return { error: 'Document not found.' };
+
+  await supabase.storage.from('agent-documents').remove([doc.file_path]);
+  const { error } = await supabase.from('agent_documents').delete().eq('id', documentId);
+  if (error) return { error: error.message };
+
+  return { success: true as const };
 }
 
 export async function getMyAgentDocumentUrl(filePath: string) {
@@ -204,7 +204,7 @@ export async function getMyAgentProfile() {
   const [{ data: profile }, { data: agentProfile }, { data: documents }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userData.user.id).single(),
     supabase.from('agent_profiles').select('*').eq('id', userData.user.id).maybeSingle(),
-    supabase.from('agent_documents').select('doc_type, file_path, uploaded_at').eq('agent_id', userData.user.id),
+    supabase.from('agent_documents').select('id, doc_type, file_path, uploaded_at').eq('agent_id', userData.user.id).order('uploaded_at', { ascending: true }),
   ]);
 
   return { profile, agentProfile, documents: documents ?? [] };

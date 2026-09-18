@@ -30,13 +30,31 @@ export async function AgentUnderReview({
 
   return (
     <div className="p360" style={{ minHeight: '100vh' }}>
-      <div style={{ background: 'var(--color-text)', color: 'var(--color-bg)', padding: '26px 22px 24px' }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8 }}>Under review</p>
-        <h1 style={{ fontSize: 24, marginTop: 12 }}>Account created. Verification takes a day.</h1>
-        <p style={{ fontSize: 13, lineHeight: 1.55, marginTop: 11 }}>
-          A reviewer checks your mobile number and documents. If anything is missing we message you on WhatsApp and
-          you can add it from your profile.
-        </p>
+      {/* Redesign 2026-09 (follow-up) — Plot: "black color message style
+          is old, update and match with new design." Swapped the flat
+          var(--color-text) block for the app's actual "new design" hero
+          card treatment (var(--gradient-hero) + var(--radius-lg)), the
+          same one the customer home screen and the marketing hero use for
+          a prominent welcome/status card — instead of the old plain black
+          full-bleed banner. */}
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 20px 0' }}>
+        <div
+          style={{
+            background: 'var(--gradient-hero)',
+            color: 'var(--color-text)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px 22px 22px',
+          }}
+        >
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-accent-800)', fontWeight: 700 }}>
+            Under review
+          </p>
+          <h1 style={{ fontSize: 24, marginTop: 12 }}>Account created. Verification takes a day.</h1>
+          <p style={{ fontSize: 13, lineHeight: 1.55, marginTop: 11 }}>
+            A reviewer checks your mobile number and documents. If anything is missing we message you on WhatsApp and
+            you can add it from your profile.
+          </p>
+        </div>
       </div>
 
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px' }}>
