@@ -1863,3 +1863,127 @@ chooses to send right now, not a side effect of a status change, so the
 admin still taps Send inside WhatsApp themselves and it shows up in the
 same "WhatsApp outbox" panel (`TimelineOutboxPanel`) as everything
 else sent for that property.
+
+## 35. Redesign 2026-09 (round 22) — Field Agent redesign: signup,
+##     onboarding, "Account under review", "Profile & SRO"
+
+Plot supplied six design_handoff_plot360_redesign "Plot360 Field Agent"
+mock screens. Two of the six (My jobs — `AgentJobsHome.tsx` — and
+Capture & submit / Submitted — `AgentCaptureScreen.tsx`) were already
+redesigned in earlier rounds. This round covers the other two named
+screens (Agent signup, Profile & SRO), a real enhancement to a third
+that only partly matched (Account under review), and Agent login, which
+wasn't one of the six but sits in the same auth surface and was still
+fully pre-redesign.
+
+**Scope decision, asked and confirmed with Plot first**: the signup mock
+shows a materially different flow from the old one — OAuth or
+username/password, a mobile number, and documents marked optional
+("needed before your first job") — versus the old flow's mandatory
+full home address, SRO, and both ID documents before an agent account
+could even be submitted for review. Plot chose to actually match the
+mock's flow, not just reskin the old one, so this is a real behavior
+change, not only a visual pass.
+
+**New signup flow**: `AgentSignupForm.tsx` is now one combined screen —
+Google/Facebook OAuth, or email + password + mobile + name, with
+Driving licence / Secondary ID uploads optional. It submits to a new
+`agentSignUpAndRegister` (`agent-auth.actions.ts`), which creates the
+Supabase Auth user AND the profile/agent_profiles/document rows in one
+call — using the service-role admin client (same "legitimately
+privileged write after manual authorization" pattern as
+`purchaseVisitCredits`'s UPI branch) since Supabase may not return a
+session immediately after `signUp()` (email confirmation, if the
+project has it on, still applies unchanged — same "check your email"
+interstitial as before in that case). The old `agentSignUp` function is
+kept, intact, just no longer called.
+
+**SRO and home address moved / dropped.** SRO now lives only on the
+Profile & SRO screen (`updateAgentContactInfo`), settable any time
+before an agent needs matching to jobs — not required at signup.
+Home address is no longer collected anywhere in the agent flow at all
+— neither the new mocks nor admin's own agent review screen
+(`AgentVerificationDetail.tsx`, from an earlier round) ever showed it.
+Both `completeAgentRegistration` and `updateAgentContactInfo` had their
+address/SRO-required checks removed accordingly; a profile photo
+upload was dropped from both for the same reason (mock never shows
+one). Existing agents with `current_address` already stored keep that
+data untouched — no columns were dropped, just stopped collecting into
+them from the agent side.
+
+**OAuth agents**: `signInWithOAuth` now redirects to a new
+`/agent/auth/callback` (mirrors `/auth/callback`), which checks whether
+`agent_profiles` exists yet — if not (first-time OAuth signup, no form
+round-trip to have collected name/mobile), sends them to
+`/agent/onboarding`. That form (`AgentOnboardingForm.tsx`) is now a
+short "a couple more details" step — name, mobile, optional documents
+only — reusing (heavily trimmed) `completeAgentRegistration`. A
+returning OAuth agent goes straight to `/agent/dashboard`.
+
+**Account under review, enhanced.** Pulled the pending-block out of
+`app/agent/dashboard/page.tsx` into `AgentUnderReview.tsx`, now showing
+Agent ID, masked mobile, a document count, status, the actual welcome
+WhatsApp logged at signup, and a "Go to my jobs" button — matching the
+mock instead of just the black header text it had before. Two honest
+simplifications, both documented at the call site: Agent ID
+(`agentDisplay.ts`'s `agentDisplayId`) is a display shorthand, not a
+real sequential ID — same substitution as properties' `P-<id>` code;
+and the document count reads "of 2", not "of 4" — the schema only
+ever tracks two document types (`driving_license`, `secondary_id`),
+same simplification `AgentVerificationDetail.tsx` already made on the
+admin side.
+
+**Profile & SRO, rebuilt.** `AgentProfileEditForm.tsx` now matches the
+mock: name/Agent ID/masked mobile/completed-visits header, a status
+pill, "Where you work" SRO fields, and a Documents list with inline
+Replace/Attach (uploading immediately queues into the same Save
+submission — `updateAgentContactInfo` gained document-upload handling
+it didn't have before). Two document rows, not four, same reasoning as
+above; "Verified `<date>`" in the mock becomes "Uploaded `<date>`" —
+there's no per-document verification timestamp, only the agent's
+overall status shown in the header pill. Saving still sends the account
+back to `'pending'` for admin reverification, unchanged behavior.
+
+**Welcome WhatsApp — real infra, not a fake UI element.** The mock's
+"WhatsApp sent to ⋯" box is rendered from an actually-logged
+`whatsapp_messages` row (`agent_profile` entity type, already in the
+enum), written via the admin client at signup — not simulated. Reading
+it back needed a new RLS policy, since `whatsapp_messages` was select-
+admin-only before this round:
+
+```sql
+create policy "whatsapp_messages_select_own_agent" on whatsapp_messages for select
+  using (related_entity_type = 'agent_profile' and related_entity_id = auth.uid());
+```
+
+**⚠️ Action needed in Supabase**: this policy (added to
+`supabase/schema.sql`, just above the pre-existing admin-only policy)
+must be run against the live database — the "WhatsApp sent to ⋯" box on
+Account under review and Profile & SRO will silently show nothing until
+it is (RLS blocks the read, not an error).
+
+**Old shared `AgentHeader` removed from every agent layout.** Every
+agent screen (My jobs, Capture/Submit, Under review, Onboarding,
+Profile) already owns its own full `.p360` header or back button — the
+four agent layouts (`dashboard`, `jobs`, `profile`, `onboarding`) were
+still wrapping all of them in the old pre-redesign `AgentHeader`,
+showing a duplicate top nav bar above the new design. This was the same
+bug already caught and fixed for the customer dashboard in round 2 —
+just not yet applied to the agent side. `AgentHeader.tsx` itself is
+kept, intact, just no longer imported anywhere.
+
+**Not changed / known follow-ups:**
+- `AgentJobList.tsx`, `AgentJobDetail.tsx`, `AgentReview.tsx` (admin's
+  legacy agent detail) all remain kept-but-unreferenced, as before.
+- A real WhatsApp Business API still doesn't exist (see round 21's
+  `whatsapp-log.actions.ts` note) — the welcome message is logged the
+  same "marked sent the instant it's written" way every other automatic
+  status message already is; nothing about this round changes that.
+- The signup mock's "Username" field is the real Email field, styled to
+  match — this app authenticates by email, not a separate username
+  system (the schema does have an unrelated `profiles.username` display
+  field, used elsewhere only as a display-name fallback).
+- First/Last name and Confirm password were added to the signup screen
+  even though not visible in the cropped mock screenshot (likely below
+  the fold) — an admin reviewing a new agent needs a name, and a real
+  password account needs confirmation.

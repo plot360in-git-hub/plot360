@@ -1160,6 +1160,17 @@ alter table whatsapp_messages enable row level security;
 drop policy if exists "whatsapp_messages_all_admin" on whatsapp_messages;
 create policy "whatsapp_messages_all_admin" on whatsapp_messages for all using (is_admin()) with check (is_admin());
 
+-- Redesign 2026-09 (follow-up, round 22) — the new Agent "Account under
+-- review" / "Profile & SRO" screens (AgentUnderReview.tsx,
+-- AgentProfileEditForm.tsx) show an agent their own welcome/status
+-- WhatsApp messages, same idea as the customer-visible milestone
+-- messages elsewhere. Select-only, and scoped to messages logged against
+-- that agent's own agent_profiles row — an agent still can't see
+-- anyone else's outbox, or any property/payment/job message.
+drop policy if exists "whatsapp_messages_select_own_agent" on whatsapp_messages;
+create policy "whatsapp_messages_select_own_agent" on whatsapp_messages for select
+  using (related_entity_type = 'agent_profile' and related_entity_id = auth.uid());
+
 -- ---------- admin_actions: internal-only timeline, never shown to customers ----------
 create table if not exists admin_actions (
   id uuid primary key default gen_random_uuid(),

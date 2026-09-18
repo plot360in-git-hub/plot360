@@ -4,26 +4,25 @@ import { useState, useTransition } from 'react';
 import { completeAgentRegistration } from './onboarding.actions';
 import type { Profile, AgentProfile } from '@/types/database.types';
 
-function Required() {
-  return <span style={{ color: 'var(--color-danger)' }}> *</span>;
-}
-
-const SRO_HELP_URL = 'https://registration.telangana.gov.in/jusrisdictionSro.htm';
-
+// Redesign 2026-09 (follow-up, round 22) — now only reached by a
+// first-time OAuth agent (no form round-trip exists to collect name/
+// mobile during the OAuth redirect itself — see agentSignUpAndRegister's
+// comment, agent-auth.actions.ts) finishing the same minimal signup an
+// email/password agent already completed in one step, or as a fallback
+// for any pending/rejected agent somehow missing a name or mobile. SRO,
+// home address and a profile photo are no longer collected here — SRO
+// lives on Profile & SRO now (AgentProfileEditForm.tsx), the other two
+// aren't collected anywhere in the agent flow at all.
 export function AgentOnboardingForm({
   profile,
   agentProfile,
   hasDL,
   hasSecondaryId,
-  dlDoc,
-  secondaryIdDoc,
 }: {
   profile: Profile | null;
   agentProfile: AgentProfile | null;
   hasDL: boolean;
   hasSecondaryId: boolean;
-  dlDoc?: { name: string; url: string | null } | null;
-  secondaryIdDoc?: { name: string; url: string | null } | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -36,148 +35,83 @@ export function AgentOnboardingForm({
     });
   }
 
-  const address = profile?.current_address ?? {};
-
   return (
-    <form action={handleSubmit} className="card" style={{ maxWidth: 640, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 8 }}>Agent Registration</h2>
-      {agentProfile?.status === 'rejected' && (
-        <div className="card section-alt" style={{ marginBottom: 20, borderColor: 'var(--color-danger)' }}>
-          <p style={{ fontSize: 14 }}>
-            Your previous submission was rejected{agentProfile.admin_notes ? `: ${agentProfile.admin_notes}` : '.'}{' '}
-            Please update the details below and resubmit.
-          </p>
+    <div className="p360" style={{ minHeight: '100vh' }}>
+      <div style={{ maxWidth: 440, margin: '0 auto', padding: '32px 20px 60px' }}>
+        <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>
+          PLOT<span style={{ color: 'var(--color-accent)' }}>360</span>{' '}
+          <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--p-ink-soft)' }}>Field Agent</span>
         </div>
-      )}
-      <p style={{ color: 'var(--color-text-muted)', marginBottom: 24 }}>
-        Provide your details and ID proofs. An admin will review and verify your registration
-        before you can accept property monitoring jobs.
-      </p>
+        <h1 style={{ fontSize: 22, marginTop: 22 }}>A couple more details</h1>
+        <p style={{ fontSize: 13, color: 'var(--p-ink-soft)', lineHeight: 1.5, marginTop: 8 }}>
+          Signed in with {profile?.email} — just your name and mobile number, and you're set.
+        </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
-        <div>
-          <label className="field-label">First name<Required /></label>
-          <input className="field-input" name="first_name" required defaultValue={profile?.first_name ?? ''} />
-        </div>
-        <div>
-          <label className="field-label">Middle name</label>
-          <input className="field-input" name="middle_name" defaultValue={profile?.middle_name ?? ''} />
-        </div>
-        <div>
-          <label className="field-label">Last name<Required /></label>
-          <input className="field-input" name="last_name" required defaultValue={profile?.last_name ?? ''} />
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label className="field-label">Email<Required /></label>
-        <input className="field-input" type="email" name="email" required defaultValue={profile?.email ?? ''} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 12, marginBottom: 24 }}>
-        <div>
-          <label className="field-label">Country code</label>
-          <input className="field-input" name="phone_country_code" placeholder="+91" defaultValue={profile?.phone_country_code ?? ''} />
-        </div>
-        <div>
-          <label className="field-label">Phone number<Required /></label>
-          <input className="field-input" name="phone_number" required defaultValue={profile?.phone_number ?? ''} />
-        </div>
-      </div>
-
-      <h4 style={{ marginBottom: 12 }}>Home Address</h4>
-      <div style={{ marginBottom: 12 }}>
-        <label className="field-label">Street Address<Required /></label>
-        <input className="field-input" name="street" required defaultValue={(address as any).street ?? ''} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-        <div>
-          <label className="field-label">City<Required /></label>
-          <input className="field-input" name="city" required defaultValue={(address as any).city ?? ''} />
-        </div>
-        <div>
-          <label className="field-label">District<Required /></label>
-          <input className="field-input" name="district" required defaultValue={(address as any).district ?? ''} />
-        </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-        <div>
-          <label className="field-label">State<Required /></label>
-          <input className="field-input" name="state" required defaultValue={(address as any).state ?? ''} />
-        </div>
-        <div>
-          <label className="field-label">Zip / Postal Code<Required /></label>
-          <input className="field-input" name="zip" required defaultValue={(address as any).zip ?? ''} />
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <label className="field-label">Agent residing closest SRO Name<Required /></label>
-            <input className="field-input" name="sro_name" required defaultValue={agentProfile?.sro_name ?? ''} />
+        {agentProfile?.status === 'rejected' && (
+          <div style={{ background: 'var(--p-tint)', borderLeft: '3px solid var(--color-accent)', padding: '11px 12px', marginTop: 16 }}>
+            <p style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+              Your previous submission was rejected{agentProfile.admin_notes ? `: ${agentProfile.admin_notes}` : '.'} Please update the details below and resubmit.
+            </p>
           </div>
-          <div>
-            <label className="field-label">SRO Code<Required /></label>
-            <input className="field-input" name="sro_code" required defaultValue={agentProfile?.sro_code ?? ''} />
+        )}
+
+        <form action={handleSubmit} style={{ marginTop: 22 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div className="field">
+              <label>First name</label>
+              <input className="input" name="first_name" required defaultValue={profile?.first_name ?? ''} />
+            </div>
+            <div className="field">
+              <label>Last name</label>
+              <input className="input" name="last_name" required defaultValue={profile?.last_name ?? ''} />
+            </div>
           </div>
-        </div>
-        <a href={SRO_HELP_URL} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--color-link)' }}>
-          Find SRO?
-        </a>
-      </div>
 
-      <div style={{ marginBottom: 24 }}>
-        <label className="field-label">Photo of agent (JPG or PNG)<Required /></label>
-        <input className="field-input" type="file" name="profile_picture" accept="image/jpeg,image/png" required={!profile?.profile_picture_url} />
-        {profile?.profile_picture_url && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-            Currently uploaded:{' '}
-            <a href={profile.profile_picture_url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>
-              view photo
-            </a>
-            {' — choose a file only to replace it.'}
-          </p>
-        )}
-      </div>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Email</label>
+            <input className="input" type="email" name="email" required defaultValue={profile?.email ?? ''} />
+          </div>
 
-      <h4 style={{ marginBottom: 12 }}>ID Proofs</h4>
-      <div style={{ marginBottom: 12 }}>
-        <label className="field-label">Driving License (JPG, PNG, or PDF)<Required /></label>
-        <input className="field-input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" required={!hasDL} />
-        {hasDL && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-            Currently uploaded:{' '}
-            {dlDoc?.url ? (
-              <a href={dlDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{dlDoc.name}</a>
-            ) : (
-              dlDoc?.name ?? 'file on record'
-            )}
-            {' — choose a file only to replace it.'}
-          </p>
-        )}
-      </div>
-      <div style={{ marginBottom: 24 }}>
-        <label className="field-label">Second Govt ID — Aadhar / PAN / other (JPG, PNG, or PDF)<Required /></label>
-        <input className="field-input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" required={!hasSecondaryId} />
-        {hasSecondaryId && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-            Currently uploaded:{' '}
-            {secondaryIdDoc?.url ? (
-              <a href={secondaryIdDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-link)' }}>{secondaryIdDoc.name}</a>
-            ) : (
-              secondaryIdDoc?.name ?? 'file on record'
-            )}
-            {' — choose a file only to replace it.'}
-          </p>
-        )}
-      </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 10, marginBottom: 22 }}>
+            <div className="field">
+              <label>Code</label>
+              <input className="input" name="phone_country_code" placeholder="+91" defaultValue={profile?.phone_country_code ?? '+91'} />
+            </div>
+            <div className="field">
+              <label>
+                Mobile number <span style={{ color: 'var(--color-accent)' }}>*</span>
+              </label>
+              <input className="input" name="phone_number" required defaultValue={profile?.phone_number ?? ''} />
+            </div>
+          </div>
 
-      {error && <p style={{ color: 'var(--color-danger)', marginBottom: 16 }}>{error}</p>}
+          <div style={{ borderTop: '1px solid var(--color-divider)', paddingTop: 16, marginBottom: 22 }}>
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--p-ink-soft)' }}>
+              Documents — optional now, needed before your first job
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                  Driving licence {hasDL && <span style={{ color: 'var(--p-ink-soft)', fontWeight: 400 }}>(on file)</span>}
+                </label>
+                <input className="input" type="file" name="driving_license" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                  Secondary ID {hasSecondaryId && <span style={{ color: 'var(--p-ink-soft)', fontWeight: 400 }}>(on file)</span>}
+                </label>
+                <input className="input" type="file" name="secondary_id" accept="image/jpeg,image/png,.pdf" style={{ fontSize: 11.5 }} />
+              </div>
+            </div>
+          </div>
 
-      <button className="btn-primary" type="submit" disabled={isPending}>
-        {isPending ? 'Submitting…' : 'Submit for verification'}
-      </button>
-    </form>
+          {error && <p style={{ color: 'var(--p-alert)', fontSize: 12.5, marginBottom: 14 }}>{error}</p>}
+
+          <button className="btn btn-primary btn-block" type="submit" disabled={isPending}>
+            {isPending ? 'Submitting…' : 'Finish sign up'}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
