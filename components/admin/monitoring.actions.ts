@@ -198,6 +198,24 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
   const { data: credits } = await supabase.from('visit_credits').select('*').eq('property_id', propertyId).order('expires_at', { ascending: true });
   const credit = creditToConsume(credits ?? []);
 
+  // Redesign 2026-09 (follow-up) — Plot: the customer Home screen showed
+  // "Visit 1 · Unused" for a property whose first visit was actually done
+  // and had a report — right next to "3 of 4 visit credits left", which
+  // was correct (a credit really had been consumed). Root cause: this,
+  // the "legacy" assignment path, never set visit_number on the job it
+  // created — only the visit_request path (assignAgentToTarget, below)
+  // did. CustomerHome.tsx's visitChips() matches a job to a chip strictly
+  // by visit_number, so a job with none could never be found and always
+  // fell back to "Unused" no matter its real status. Numbering it the
+  // same way the visit_request path already does (this property's own
+  // running count of monitoring_jobs, oldest first) fixes the display —
+  // and doesn't touch anything else, since nothing before this ever
+  // relied on this being null.
+  const { count: priorVisits } = await supabase
+    .from('monitoring_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('property_id', propertyId);
+
   const { data, error } = await supabase
     .from('monitoring_jobs')
     .insert({
@@ -206,6 +224,7 @@ export async function assignAgentToProperty(propertyId: string, agentId: string)
       assigned_by: userData.user?.id,
       status: 'assigned',
       visit_credit_id: credit?.id ?? null,
+      visit_number: (priorVisits ?? 0) + 1,
     })
     .select('id')
     .single();

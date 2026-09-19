@@ -16,7 +16,12 @@ type PropertyRow = {
   rejection_reason: string | null;
 };
 
-type JobRow = { id: string; status: string; visit_number: number | null };
+type JobRow = { id: string; status: string; visit_number: number | null; decided_at?: string | null };
+
+function formatChipDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 // Redesign 2026-09 (follow-up) — design_handoff_plot360_redesign,
 // "Plot360 Customer.dc.html", "New user — empty" screen.
@@ -37,16 +42,16 @@ const HOW_IT_WORKS = [
 // design_handoff_plot360_redesign, "Plot360 Customer.dc.html", visits()),
 // but Plot asked for it directly and it maps naturally onto data we
 // already have per visit.
-type VisitChip = { state: 'Done' | 'Set' | 'Unused'; jobId: string | null };
+type VisitChip = { state: 'Done' | 'Set' | 'Unused'; jobId: string | null; doneAt: string | null };
 
 function visitChips(totalPurchased: number, jobs: JobRow[]): VisitChip[] {
   const count = Math.min(Math.max(totalPurchased, 0), 8);
   const chips: VisitChip[] = [];
   for (let i = 1; i <= count; i++) {
     const job = jobs.find((j) => j.visit_number === i);
-    if (job && ['approved', 'ec_pending'].includes(job.status)) chips.push({ state: 'Done', jobId: job.id });
-    else if (job && ['assigned', 'accepted', 'submitted', 'rejected'].includes(job.status)) chips.push({ state: 'Set', jobId: null });
-    else chips.push({ state: 'Unused', jobId: null });
+    if (job && ['approved', 'ec_pending'].includes(job.status)) chips.push({ state: 'Done', jobId: job.id, doneAt: job.decided_at ?? null });
+    else if (job && ['assigned', 'accepted', 'submitted', 'rejected'].includes(job.status)) chips.push({ state: 'Set', jobId: null, doneAt: null });
+    else chips.push({ state: 'Unused', jobId: null, doneAt: null });
   }
   return chips;
 }
@@ -416,7 +421,7 @@ export function CustomerHome({
                                 className="tag"
                                 style={{ background: 'var(--color-accent)', color: 'var(--color-bg)', textDecoration: 'none' }}
                               >
-                                Visit {i + 1} · Done
+                                Visit {i + 1} · Done{chip.doneAt ? ` · ${formatChipDate(chip.doneAt)}` : ''}
                               </Link>
                             ) : (
                               <span

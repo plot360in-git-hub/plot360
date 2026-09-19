@@ -19,22 +19,36 @@ import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions'
 // Typography: the design's Archivo font isn't available to embed here
 // (no font file in the design bundle, and fetching Google Fonts from
 // this sandbox isn't reliable) — Helvetica/Helvetica-Bold are used
-// instead. Colour tokens, layout, rules and content structure otherwise
-// follow the design mock page-for-page.
+// instead. Layout, rules and content structure otherwise follow the
+// design mock page-for-page.
+//
+// Redesign 2026-09 (follow-up, round 24) — Plot: the report still showed
+// the ORIGINAL design mock's red masthead/accent — this PDF was built
+// (round "Report-A-Record.dc.html", see above) reading that mock's own
+// colour table directly, before the rest of the app moved to the teal
+// redesign (styles/plot360-redesign.css). Every colour below is now
+// pulled from that live stylesheet's `.p360` tokens instead, the same
+// tokens every other screen in the app uses — so this PDF stays in sync
+// with the app's actual palette going forward instead of a frozen mock.
+// One deliberate exception: a "concerning answer"/flagged item now uses
+// --p-alert (a real, fixed red) rather than the brand accent — matching
+// the app's own convention (see plot360-redesign.css's note on
+// `.p360 a:hover`) of reserving red for genuine alerts, not branding,
+// now that the brand accent itself is teal rather than red.
 
 const PAGE_W = 595.28; // A4 at 72dpi
 const PAGE_H = 841.89;
 const MARGIN_X = 46;
 
-// ---------- design tokens (hex → 0-1, matching the handoff's table) ----------
+// ---------- design tokens (hex → 0-1, matching styles/plot360-redesign.css) ----------
 const hex = (h: number, h2: number, h3: number) => [h / 255, h2 / 255, h3 / 255] as const;
-const ACCENT = rgb(...hex(0xec, 0x30, 0x13));
-const ACCENT_700 = rgb(...hex(0xae, 0x18, 0x00));
-const TEXT = rgb(...hex(0x20, 0x1e, 0x1d));
-const SURFACE = rgb(...hex(0xea, 0xe9, 0xe9));
+const ACCENT = rgb(...hex(0x14, 0xb8, 0xa6)); // --color-accent
+const ALERT = rgb(...hex(0xdc, 0x26, 0x26)); // --p-alert — flagged/concerning items only, never branding
+const TEXT = rgb(...hex(0x20, 0x1e, 0x1d)); // --color-text
+const SURFACE = rgb(...hex(0xea, 0xe9, 0xe9)); // --color-surface
 const WHITE = rgb(1, 1, 1);
-const NEUTRAL_300 = rgb(...hex(0xda, 0xd8, 0xd7));
-const NEUTRAL_400 = rgb(...hex(0xc4, 0xc1, 0xc0));
+const NEUTRAL_300 = rgb(...hex(0xd7, 0xd3, 0xd3)); // --color-neutral-300
+const NEUTRAL_400 = rgb(...hex(0xba, 0xb6, 0xb6)); // --color-neutral-400
 
 function mixWhite([r, g, b]: readonly [number, number, number], alpha: number): Color {
   return rgb(r * alpha + (1 - alpha), g * alpha + (1 - alpha), b * alpha + (1 - alpha));
@@ -299,7 +313,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
   const evidenceText = `${data.photos.length} photo${data.photos.length === 1 ? '' : 's'}${data.videoCount ? ` · ${data.videoCount} video${data.videoCount === 1 ? '' : 's'}` : ''}`;
   const threeUp: [string, string, Color][] = [
     ['Visited', visitedDate, TEXT],
-    ['Verdict', verdictText, concerningCount > 0 ? ACCENT_700 : TEXT],
+    ['Verdict', verdictText, concerningCount > 0 ? ALERT : TEXT],
     ['Evidence', evidenceText, TEXT],
   ];
   drawRule(page1, MARGIN_X, PAGE_W - MARGIN_X, topRuleY, 1.4, DIVIDER);
@@ -386,7 +400,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     const rowLines = Math.max(labelLines.length, valueLines.length);
     const rowH = rowLines * 12 + 6;
     labelLines.forEach((line, i) => page2.drawText(line, { x: MARGIN_X, y: y - 9 - i * 12, size: 9.5, font: fonts.regular, color: TEXT }));
-    valueLines.forEach((line, i) => page2.drawText(line, { x: answerColX, y: y - 9 - i * 12, size: 9.5, font: fonts.bold, color: concerning ? ACCENT_700 : TEXT }));
+    valueLines.forEach((line, i) => page2.drawText(line, { x: answerColX, y: y - 9 - i * 12, size: 9.5, font: fonts.bold, color: concerning ? ALERT : TEXT }));
     y -= rowH;
     drawRule(page2, MARGIN_X, PAGE_W - MARGIN_X, y, 0.7, DIVIDER);
   }

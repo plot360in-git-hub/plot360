@@ -2415,3 +2415,77 @@ message text sent to the agent (`assignAgentToTarget`,
 be baked into the real outgoing message too, not just shown on screen.
 
 No SQL for this round.
+
+## 42. Redesign 2026-09 (round 25) — visit chip said "Unused" for a
+##     completed, reported visit; visit report PDF recolored to the
+##     live teal redesign
+
+**"Visit 1 · Unused" next to "3 of 4 visit credits left" on the customer
+Home screen**, for a property whose first visit was actually done and
+already had a report. The credits count was right (a credit really had
+been consumed); the chip was wrong. Root cause: `assignAgentToProperty`
+(`components/admin/monitoring.actions.ts`) — the "legacy" Job assignment
+path, which is what round 19 wired up to auto-surface a visit-credits
+property's first visit, i.e. the common case now — never set
+`visit_number` on the `monitoring_jobs` row it created. Only the other
+assignment path (`assignAgentToTarget`'s `visit_request` branch,
+`assignment.actions.ts`) ever did. `CustomerHome.tsx`'s `visitChips()`
+matches a job to a chip strictly by `visit_number`, so a job with none
+could never be matched and always fell back to "Unused" regardless of
+its real status. Fixed by numbering it the same way the other path
+already does — this property's own running count of `monitoring_jobs`,
+oldest first. Also added the date onto a "Done" chip ("Visit 1 · Done ·
+19 Sep 2026") — `decided_at` was already being fetched
+(`components/customer/home.data.ts`) but never threaded through to the
+chip.
+
+This is a code-only fix for jobs created from now on. Any monitoring job
+already sitting in the database with `visit_number is null` from before
+this fix needs a one-time backfill — see below.
+
+**The visit report PDF's masthead/verdict colour was still the ORIGINAL
+design mock's red** (`lib/pdf/visitReportPdf.ts`), never updated when
+the rest of the app moved to the teal redesign
+(`styles/plot360-redesign.css`). Every colour token in that file is now
+pulled from that live stylesheet instead of the old mock's colour table:
+`--color-accent` (teal) for the masthead band and wordmark/accent bar
+(matching `.btn-primary`'s own teal-background/light-text pairing used
+everywhere else in the app), and a new `--p-alert` red reserved
+specifically for a genuinely concerning/flagged answer — not for
+branding, matching the app's own convention that red means "something's
+wrong," not "this is Plot360." `--color-surface`/`--color-neutral-300`/
+`--color-neutral-400` were also nudged to the stylesheet's exact values
+(they were already very close). Since this PDF is generated with
+`pdf-lib` rather than rendered from the app's actual CSS (see this
+file's own top comment for why), it can't literally "read" the
+stylesheet at request time — this keeps it in sync by hand instead, the
+same way it was originally built from the design mock's own colour
+table.
+
+### Backfilling missing visit_number values
+
+Preview affected jobs first:
+
+```sql
+select id, property_id, status, assigned_at, decided_at
+from monitoring_jobs
+where visit_number is null
+order by property_id, assigned_at;
+```
+
+Then backfill, numbering each property's jobs 1, 2, 3… in the order they
+were assigned — this only ever fills in a *missing* number, so it can't
+disturb a job that already has one:
+
+```sql
+with numbered as (
+  select id, property_id,
+         row_number() over (partition by property_id order by coalesce(assigned_at, created_at)) as rn
+  from monitoring_jobs
+)
+update monitoring_jobs mj
+set visit_number = numbered.rn
+from numbered
+where mj.id = numbered.id
+  and mj.visit_number is null;
+```
