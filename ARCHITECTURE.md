@@ -2284,3 +2284,84 @@ checked too and left alone — that one reads back an actually-logged row
 (`getOutboxForEntity`), so it's honest.
 
 No SQL for this round.
+
+## 40. Redesign 2026-09 (round 22 follow-up 5) — verifying a property no
+##     longer pre-creates an empty "ghost" payment row
+
+Plot flagged the admin Payment detail screen (`PaymentDetail.tsx`)
+showing "Plan: —" and "Amount claimed: —" — with "Reference: Not
+provided yet" — for a bank-transfer payment ("check 1560") the customer
+was believed to have already paid, next to a working example
+("NewProp") that correctly showed "4 Visits · ₹7,497".
+
+Root cause: `setPropertyStatus` (`components/admin/admin.actions.ts`) —
+the action behind Property verification's "Approve" button — used to
+call `createPendingPayment(propertyId, 'initial')` the instant a
+property was verified, pre-creating a `payments` row with no `plan_id`,
+no `amount`, no `transaction_reference`. That was a holdover from the
+pre-redesign flow: the old `SubscribeForm`/`submitSubscriptionPayment`
+(`components/properties/subscribe`) was built to find and fill in
+exactly that pre-created row. The redesigned customer payment screen
+(`ChoosePlanAndPay.tsx` → `purchaseVisitCredits`,
+`components/payments/visitCredits.actions.ts`) knows nothing about that
+row — it always inserts its own new, fully-populated row (plan, amount,
+reference all set) the moment the customer actually picks a plan and
+pays. `getPaymentsQueue`/`getPaymentDetail`
+(`components/admin/queues.actions.ts`,
+`components/payments/payments.actions.ts`) show any `status='pending'`
+payments row unconditionally, so that empty placeholder showed up in
+the admin's Payments queue — and inflated the Payments badge count on
+the admin dashboard (`getAdminPendingCounts`) — immediately on
+verification, before the customer had done anything, looking exactly
+like a submitted-but-unconfirmed bank transfer with blank fields. It
+also silently mislabeled the customer's real first purchase as a
+"renewal" rather than "initial", since `purchaseVisitCredits` decides
+that by counting *all* prior `payments` rows for the property,
+ghost row included.
+
+Fix: `setPropertyStatus` no longer pre-creates that row. Verifying a
+property doesn't need one — a real, fully-populated payment row (from
+`purchaseVisitCredits`) only ever appears once the customer actually
+pays, exactly as it already worked for every plan purchase made through
+the redesigned "Choose a plan" screen.
+
+No SQL for this round. This is a code-only fix, but it leaves any
+*already-created* ghost rows in the live database untouched — see
+below to find and clear them.
+
+### Cleaning up existing ghost payment rows
+
+A ghost row is a `payments` row with `status='pending'` and every one
+of `plan_id`, `amount`, `transaction_reference` and `mismatch_reason`
+null — i.e. one nothing has ever been written to since
+`setPropertyStatus` created it. Preview them first:
+
+```sql
+select p.id, pr.property_name, p.payment_type, p.created_at
+from payments p
+join properties pr on pr.id = p.property_id
+where p.status = 'pending'
+  and p.plan_id is null
+  and p.amount is null
+  and p.transaction_reference is null
+  and p.mismatch_reason is null;
+```
+
+For each one: if the customer hasn't actually paid yet, it's safe to
+delete — they'll get a fresh, correctly-filled-in row automatically the
+next time they go through "Choose a plan" / "Buy visit credits":
+
+```sql
+delete from payments
+where status = 'pending'
+  and plan_id is null
+  and amount is null
+  and transaction_reference is null
+  and mismatch_reason is null;
+```
+
+If a customer says they *did* already transfer money for one of these,
+don't delete it — instead confirm with them which plan and amount, then
+fill it in from the admin Payment detail screen before confirming (or
+ask them to submit it properly via "Choose a plan" if they haven't
+actually gone through that screen yet).

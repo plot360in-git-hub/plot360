@@ -2,7 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { createPendingPayment } from '@/components/payments/payments.actions';
 import { sendPropertyStatusEmail } from '@/components/properties/registration/email';
 
 export async function getAdminPendingCounts() {
@@ -109,12 +108,29 @@ export async function setPropertyStatus(propertyId: string, status: 'verified' |
     .single();
   if (error) return { error: error.message };
 
-  // Approving content doesn't activate the property on its own anymore —
-  // it now needs a completed payment. Create the pending payment record
-  // the admin will confirm from the Payments page once payment comes in.
-  if (status === 'verified') {
-    await createPendingPayment(propertyId, 'initial');
-  }
+  // Redesign 2026-09 (follow-up) — Plot: the admin Payments queue/detail
+  // screen (PaymentDetail.tsx) was showing "Plan: —" and "Amount claimed: —"
+  // for a payment the customer had supposedly already made. Root cause:
+  // this used to pre-create an empty `payments` row (no plan_id, no
+  // amount, no transaction_reference) the instant a property was verified
+  // — a holdover from the pre-redesign flow, where the old SubscribeForm/
+  // submitSubscriptionPayment (components/properties/subscribe) was built
+  // to find and fill in exactly that pre-created row. The redesigned
+  // customer payment screen (ChoosePlanAndPay.tsx -> purchaseVisitCredits,
+  // components/payments/visitCredits.actions.ts) knows nothing about this
+  // row — it always inserts its OWN new, fully-populated one the moment
+  // the customer actually picks a plan and pays. Because getPaymentsQueue/
+  // getPaymentDetail (components/admin/queues.actions.ts,
+  // components/payments/payments.actions.ts) show any 'pending' payments
+  // row unconditionally, that leftover empty placeholder appeared in the
+  // queue immediately on verification — before the customer had done
+  // anything — looking exactly like an unconfirmed bank transfer with
+  // blank fields. It also silently mislabeled the customer's real first
+  // purchase as a 'renewal' (purchaseVisitCredits counts *all* prior
+  // payments rows, ghost included, to decide 'initial' vs 'renewal').
+  // Approving a property no longer needs to pre-create anything — the
+  // real payment row (with plan, amount and reference already filled in)
+  // now only ever appears once the customer actually pays.
 
   // Best-effort — a failed email shouldn't undo an already-successful
   // status decision, so this never returns an error to the admin.
