@@ -135,6 +135,14 @@ export async function getJobAssignmentQueue(opts: { query?: string; sort?: Queue
 
   const legacyRows = legacy.map((t: any) => {
     const dueHours = t.dueDate ? hoursSince(t.dueDate) : 0;
+    // Redesign 2026-09 (follow-up) — Plot: "Oldest waiting" and "Paid but
+    // unassigned" looked like they did nothing for this queue, because
+    // every first-visit row (no due date — see
+    // getEligiblePropertiesForAssignment) fell back to waitHours=0 no
+    // matter how long it had actually been sitting unassigned, so both
+    // sorts tied and produced the same order. eligibleSince (the payment
+    // that made the property eligible) gives those rows a real wait time.
+    const waitHours = t.dueDate ? dueHours : hoursSince(t.eligibleSince);
     return {
       id: t.id,
       name: t.propertyName,
@@ -142,7 +150,7 @@ export async function getJobAssignmentQueue(opts: { query?: string; sort?: Queue
       state: 'Verified · unassigned',
       urgent: !!t.dueDate && dueHours > 0,
       window: t.dueDate ? `due ${String(t.dueDate).slice(5)}` : 'not set',
-      waitHours: dueHours,
+      waitHours,
       href: `/admin/assign/legacy/${t.id}`,
     };
   });

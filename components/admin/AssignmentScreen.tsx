@@ -69,7 +69,6 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
         <div style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 7 }}>
           Plot360: New visit job. Property: {target.propertyName}. Location: {target.address}. {target.window ? `Window: ${target.window}. ` : ''}Upload link: (sent on assignment, closes on submit or in 7 days).
         </div>
-        <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 8 }}>No owner name, phone or document is included.</div>
       </div>
     </div>
   );

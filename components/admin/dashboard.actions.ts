@@ -18,8 +18,22 @@ export type DashboardTile = {
   href: string;
 };
 
+// Redesign 2026-09 (follow-up) — this used to only ever be called from
+// server components already behind app/admin/layout.tsx's own admin
+// gate (getCurrentAdminContext). Now that AdminShell (a client component)
+// calls it directly to keep the sidebar's badge counts fresh across
+// navigation, it's bundled as its own reachable Server Action endpoint —
+// callable by anyone, not just from an admin-gated page. The underlying
+// per-table RLS policies already restrict what a non-admin caller's own
+// session can see, but checking admin status explicitly here (same
+// pattern as every other admin action in this codebase) keeps this
+// action's own authorization from depending entirely on RLS.
 export async function getDashboardTiles(): Promise<DashboardTile[]> {
   const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return [];
+  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).single();
+  if (!profile?.is_admin) return [];
 
   const [{ data: pendingProps }, legacyTargets, visitRequestTargets, stuckTargets, { data: submittedJobs }, { data: pendingAgents }, { data: openRequests }, { data: pendingPayments }] =
     await Promise.all([

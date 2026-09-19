@@ -2365,3 +2365,53 @@ don't delete it — instead confirm with them which plan and amount, then
 fill it in from the admin Payment detail screen before confirming (or
 ask them to submit it properly via "Choose a plan" if they haven't
 actually gone through that screen yet).
+
+## 41. Redesign 2026-09 (round 23) — sidebar badges stuck stale, dead
+##     "Oldest waiting" sort, and a leftover disclaimer line in the
+##     agent's WhatsApp message
+
+Four small ones Plot reported together from the admin console:
+
+**1. Sidebar badge counts (and, separately, a queue looking "done" while
+its badge still shows a leftover number) didn't update while clicking
+between admin pages — only a full logout/login refreshed them.** Root
+cause: `app/admin/layout.tsx` fetches `tiles` (the counts behind every
+sidebar badge and the Dashboard's "Waiting on you" cards) once, and
+Next's App Router deliberately does NOT re-run a shared layout's server
+component when navigating between sibling pages under it — that's what
+lets a layout preserve state (scroll position, open menus, etc.) across
+nested navigation. So a count fetched when the layout first mounted just
+never refreshed from moving around inside `/admin`; a full reload (which
+a fresh login triggers) was the only thing that re-ran it.
+`AdminShell.tsx` now keeps its own `tiles` state and refetches
+`getDashboardTiles()` itself whenever the pathname changes, independent
+of the layout's one-time render — this fixes both the general staleness
+and the specific "Agent submissions still shows 1 after clearing the
+queue" case, which was the same bug, not a separate counting error.
+Since this makes `getDashboardTiles` reachable as an ordinary Server
+Action from a client component (rather than only ever called from a
+page already behind the admin gate), it now checks `is_admin` itself
+too, matching every other admin action in this codebase.
+
+**2. "Paid but unassigned" / "Oldest waiting" on the Job assignment
+queue looked like clicking did nothing.** For a first-visit property
+(the common case now — see round 19/`purchaseVisitCredits`, which
+deliberately leaves `next_monitoring_due_date` null for any plan-based
+payment), `getLegacyAssignmentTargets` had no due date to report a wait
+time from, so every such row's `waitHours` was hardcoded to 0 — both
+sorts tied and left every row in the same (fetch) order, regardless of
+how long any of them had actually been waiting. `getEligiblePropertiesForAssignment`
+now threads through `eligible_since` (the payment's `valid_from` — when
+the property's plan/credits actually activated) for first-visit rows,
+and `getJobAssignmentQueue`'s legacy-row mapping uses it as a real wait
+time when there's no due date. Both sort buttons now actually reorder
+these rows.
+
+**3. Removed the "No owner name, phone or document is included." line**
+— both from the Assign-a-visit screen's on-screen WhatsApp preview
+(`AssignmentScreen.tsx`) and, more importantly, from the *actual*
+message text sent to the agent (`assignAgentToTarget`,
+`assignment.actions.ts`) — Plot asked for it gone and it turned out to
+be baked into the real outgoing message too, not just shown on screen.
+
+No SQL for this round.

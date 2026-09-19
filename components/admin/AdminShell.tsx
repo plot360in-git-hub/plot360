@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
-import type { DashboardTile } from './dashboard.actions';
+import { useEffect, useState, type ReactNode } from 'react';
+import { getDashboardTiles, type DashboardTile } from './dashboard.actions';
 import type { AdminRole } from './admin-role.actions';
 import { logOut } from '@/components/auth/auth.actions';
 
@@ -42,7 +42,7 @@ const TILE_BADGE: Record<string, string> = {
 export function AdminShell({
   role,
   name,
-  tiles,
+  tiles: initialTiles,
   children,
 }: {
   role: AdminRole;
@@ -51,6 +51,32 @@ export function AdminShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const [tiles, setTiles] = useState(initialTiles);
+
+  // Redesign 2026-09 (follow-up) — Plot: the sidebar's badge counts (and
+  // the "Waiting on you" tiles, since both read from the same `tiles`
+  // prop passed down from app/admin/layout.tsx) went stale while
+  // clicking between admin pages — Property verification showing 0 left
+  // to review while the sidebar still showed a leftover count from
+  // earlier — and only caught up after a full logout/login. That's
+  // App Router's shared-layout behavior working as designed: navigating
+  // between sibling pages under the same layout does NOT re-run that
+  // layout's server component (this is what lets a layout keep state
+  // across nested navigation), so a value the layout fetched once on
+  // first load — these tiles — never refreshes just from moving around
+  // inside /admin. Refetching here, keyed on the pathname, gets fresh
+  // counts on every page the admin actually visits, without needing a
+  // full reload.
+  useEffect(() => {
+    let cancelled = false;
+    getDashboardTiles().then((fresh) => {
+      if (!cancelled) setTiles(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
   const tileById: Record<string, DashboardTile> = {};
   for (const t of tiles) tileById[t.id] = t;
 

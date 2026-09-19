@@ -82,6 +82,10 @@ export async function getLegacyAssignmentTargets() {
     sroCode: p.sro_code,
     window: null,
     dueDate: p.next_monitoring_due_date,
+    // See getEligiblePropertiesForAssignment (monitoring.actions.ts) —
+    // the real "waiting since" timestamp for a first-visit target, which
+    // has no due date to measure lateness/wait against otherwise.
+    eligibleSince: p.eligible_since ?? null,
   }));
 }
 
@@ -216,7 +220,7 @@ export async function getAllAgentsForOverride(sroCode: string | null, query?: st
 
 // Dispatches to the right assignment path and, either way, logs the
 // internal timeline entry + WhatsApp outbox row the design's Assign
-// screen shows ("No owner name, phone or document is included").
+// screen shows.
 export async function assignAgentToTarget(kind: 'legacy' | 'visit_request' | 'stuck', id: string, agentId: string) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
@@ -306,7 +310,7 @@ export async function assignAgentToTarget(kind: 'legacy' | 'visit_request' | 'st
   if (property && !('error' in tokenResult) && phone) {
     const uploadLink = `${process.env.NEXT_PUBLIC_SITE_URL}/m/${tokenResult.token}`;
     const address = addressOf(property);
-    message = `Plot360: New visit job. Property: ${property.property_name}. Location: ${address}. Pin: ${property.plot_gps_coordinate || `${property.google_map_lat}, ${property.google_map_lng}`}. Upload link: ${uploadLink} (closes on submit or in 7 days). No owner name, phone or document is included.`;
+    message = `Plot360: New visit job. Property: ${property.property_name}. Location: ${address}. Pin: ${property.plot_gps_coordinate || `${property.google_map_lat}, ${property.google_map_lng}`}. Upload link: ${uploadLink} (closes on submit or in 7 days).`;
     await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
 

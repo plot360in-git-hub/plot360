@@ -99,19 +99,39 @@ export async function getEligiblePropertiesForAssignment() {
 
   const today = new Date();
 
-  return paidCandidates.filter((p) => {
-    const visitsDone = visitCountByProperty[p.id] ?? 0;
-    const maxVisits = maxVisitsForPlan(latestPaymentByProperty[p.id]?.validityMonths);
-    if (visitsDone >= maxVisits) return false;
+  // Redesign 2026-09 (follow-up) — Plot: the Job assignment queue's
+  // "Oldest waiting" sort had nothing to sort by for a first-visit
+  // property — getLegacyAssignmentTargets only ever exposed
+  // next_monitoring_due_date as "how long has this been waiting", and
+  // that column is only ever set for the SECOND+ visit window (see
+  // recordPayment/purchaseVisitCredits — deliberately left null for a
+  // plan-based first payment, which is now nearly every payment). So
+  // every first-visit row reported waitHours=0 no matter how long it had
+  // actually been sitting unassigned, and both sort buttons produced the
+  // same (tied, insertion-order) result. eligibleSince gives a first-visit
+  // row a real timestamp to sort by: the payment that made it eligible
+  // (its valid_from, i.e. when the plan/credits activated).
+  return paidCandidates
+    .filter((p) => {
+      const visitsDone = visitCountByProperty[p.id] ?? 0;
+      const maxVisits = maxVisitsForPlan(latestPaymentByProperty[p.id]?.validityMonths);
+      if (visitsDone >= maxVisits) return false;
 
-    // First visit: always immediately eligible, no due-date window.
-    if (visitsDone === 0) return true;
+      // First visit: always immediately eligible, no due-date window.
+      if (visitsDone === 0) return true;
 
-    // Second (and only) subsequent visit: apply the 15-day-before-due window.
-    if (!p.next_monitoring_due_date) return false;
-    const daysUntilDue = Math.ceil((new Date(p.next_monitoring_due_date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilDue <= DUE_WINDOW_DAYS;
-  });
+      // Second (and only) subsequent visit: apply the 15-day-before-due window.
+      if (!p.next_monitoring_due_date) return false;
+      const daysUntilDue = Math.ceil((new Date(p.next_monitoring_due_date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return daysUntilDue <= DUE_WINDOW_DAYS;
+    })
+    .map((p) => {
+      const visitsDone = visitCountByProperty[p.id] ?? 0;
+      return {
+        ...p,
+        eligible_since: visitsDone === 0 ? latestPaymentByProperty[p.id]?.valid_from ?? null : null,
+      };
+    });
 }
 
 export async function getVerifiedAgentsList() {
