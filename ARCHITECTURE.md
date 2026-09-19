@@ -2489,3 +2489,47 @@ from numbered
 where mj.id = numbered.id
   and mj.visit_number is null;
 ```
+
+## 43. Redesign 2026-09 (round 26) — visit report now opens an in-app
+##     details screen instead of the old print page; visit chips are no
+##     longer clickable; property visit-history "photo" placeholder now
+##     shows a real photo
+
+**"Visit 1" chip and "Open visit 1 report" both opened the old,
+pre-redesign print-formatted page** (`/properties/[id]/visit-report/[jobId]`).
+Per the mock (`design_handoff_plot360_redesign`, "Plot360 Customer.dc.html",
+"Visit report" screen), the chip itself is a plain non-clickable status
+badge — visit history's own chips have never been interactive in the mock —
+and "Open visit report" should open an in-app details screen (photos, the
+agent's on-site checks, any note from Plot360) with a "Download report PDF"
+button at the bottom, not a direct jump into a raw document.
+
+Fixed by adding a new screen and route, `VisitReportView.tsx` /
+`/properties/[id]/visit-report/[jobId]/view`, rather than rewriting the old
+print page — that page is kept intact (it's what the "Download report PDF"
+button and the PDF route itself still use internally), matching this
+redesign's own "add beside, repoint links, don't remove" pattern used
+everywhere else (`PropertyView.tsx`, `PaymentsOverview.tsx`,
+`SubscribeForm.tsx`, `AdminHeader.tsx`, `MonitoringStatus.tsx`).
+`CustomerHome.tsx`'s "Done" chip changed from a `<Link>` back to a plain
+`<span>`, and its "Open visit N report" button, plus
+`PropertyVisitHistory.tsx`'s own "Open visit N report" link, both now point
+at the new `/view` route. `getVisitReportData()`
+(`components/properties/monitoring/monitoring.actions.ts`) was extended
+(additively — the old print page still destructures only `{ job, media }`)
+to also return `siblingVisits`, so the new screen can show a Visit 1/2/3/4
+tab row letting a customer jump between a property's own completed reports
+without a separate round trip back to Home.
+
+**Property Visit History's "picture is not loading"** turned out to be a
+placeholder that was never wired to a real photo in the first place — its
+own original comment said as much ("no real photo field on properties
+yet"). For a property with a completed visit and real uploaded photos, that
+block just permanently showed a plain grey rectangle, which reasonably read
+as "the picture failed to load." Fixed by having it show the first approved
+photo from the property's most recently completed visit
+(`monitoring_media`, `media_type = 'photo'`, oldest upload first, signed URL
+via the same `getMonitoringMediaDownloadUrl` helper the report screens
+already use) when one exists, and only falling back to the plain
+placeholder when no visit photo exists yet (a brand-new property with no
+completed visit, for instance).

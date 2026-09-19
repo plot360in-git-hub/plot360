@@ -47,17 +47,31 @@ export async function getVisitReportData(jobId: string) {
   const supabase = await createClient();
   const { data: job } = await supabase
     .from('monitoring_jobs')
-    .select('*, properties(property_name, street_address, village_town, district, state, plot_size, plot_size_unit)')
+    .select(
+      '*, properties(property_name, street_address, village_town, district, state, plot_size, plot_size_unit, plot_gps_coordinate, google_map_lat, google_map_lng, sro_name, sro_code)'
+    )
     .eq('id', jobId)
     .single();
   if (!job) return null;
 
-  const media = await getApprovedMonitoringMedia(jobId);
+  const [media, { data: siblingVisits }] = await Promise.all([
+    getApprovedMonitoringMedia(jobId),
+    // Redesign 2026-09 (follow-up, round 26) — feeds the redesigned
+    // in-app report view's Visit 1/2/3/4 tab row (VisitReportView.tsx),
+    // so it can link between a property's own completed reports without
+    // a separate round trip. Not used by the old print-HTML page above,
+    // which destructures only { job, media }.
+    supabase
+      .from('monitoring_jobs')
+      .select('id, visit_number, status')
+      .eq('property_id', job.property_id)
+      .order('visit_number', { ascending: true }),
+  ]);
   const mediaWithUrls = await Promise.all(
     media.map(async (m) => ({ ...m, url: await getMonitoringMediaDownloadUrl(m.file_path) }))
   );
 
-  return { job, media: mediaWithUrls };
+  return { job, media: mediaWithUrls, siblingVisits: siblingVisits ?? [] };
 }
 
 // Redesign 2026-09 — everything the visit report PDF needs in one read

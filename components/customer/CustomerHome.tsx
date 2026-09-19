@@ -33,15 +33,19 @@ const HOW_IT_WORKS = [
 ];
 
 // Redesign 2026-09 (follow-up, round 6) — Plot flagged the expanded
-// property card on Home: clicking a completed visit's chip should open
-// that visit's own report, and the card was missing any way to reach a
-// report at all. Chips now carry the underlying job (state + id) instead
-// of just a display label, so a "Done" chip can link straight to
-// `/properties/[id]/visit-report/[jobId]` — a real interaction the mock
-// itself doesn't have (its chips are static, non-clickable demo data;
-// design_handoff_plot360_redesign, "Plot360 Customer.dc.html", visits()),
-// but Plot asked for it directly and it maps naturally onto data we
-// already have per visit.
+// property card on Home: the card was missing any way to reach a report
+// at all, so chips were made to carry the underlying job (state + id)
+// and a "Done" one linked straight to the report.
+//
+// Redesign 2026-09 (follow-up, round 26) — Plot caught up with the mock
+// on this: its chips are static, non-clickable demo data (design_handoff_
+// plot360_redesign, "Plot360 Customer.dc.html", visits()) — only "Open
+// visit N report" below is meant to be interactive. The chip's link also
+// pointed at the pre-redesign print-formatted page, never updated to the
+// new in-app report screen. Chips are plain status badges again now;
+// `jobId` stays on VisitChip since `latestReport` below still needs a
+// job id to link "Open visit N report" to
+// `/properties/[id]/visit-report/[jobId]/view` (VisitReportView.tsx).
 type VisitChip = { state: 'Done' | 'Set' | 'Unused'; jobId: string | null; doneAt: string | null };
 
 function visitChips(totalPurchased: number, jobs: JobRow[]): VisitChip[] {
@@ -414,15 +418,20 @@ export function CustomerHome({
                       {totalPurchased > 0 && (
                         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
                           {visitChips(totalPurchased, jobs).map((chip, i) =>
-                            chip.state === 'Done' && chip.jobId ? (
-                              <Link
+                            chip.state === 'Done' ? (
+                              // Redesign 2026-09 (follow-up, round 26) — Plot: per the
+                              // mock, this chip is a plain status badge, not a link —
+                              // "Open visit N report" below is the one interactive way
+                              // to reach the report. This used to link straight to the
+                              // pre-redesign print page (kept intact but not meant to
+                              // be customer-facing again); see VisitReportView.tsx.
+                              <span
                                 key={i}
-                                href={`/properties/${p.id}/visit-report/${chip.jobId}`}
                                 className="tag"
-                                style={{ background: 'var(--color-accent)', color: 'var(--color-bg)', textDecoration: 'none' }}
+                                style={{ background: 'var(--color-accent)', color: 'var(--color-bg)' }}
                               >
                                 Visit {i + 1} · Done{chip.doneAt ? ` · ${formatChipDate(chip.doneAt)}` : ''}
-                              </Link>
+                              </span>
                             ) : (
                               <span
                                 key={i}
@@ -443,7 +452,7 @@ export function CustomerHome({
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {latestReport && (
                           <Link
-                            href={`/properties/${p.id}/visit-report/${latestReport.id}`}
+                            href={`/properties/${p.id}/visit-report/${latestReport.id}/view`}
                             className="btn btn-primary btn-block"
                             style={{ textDecoration: 'none' }}
                           >

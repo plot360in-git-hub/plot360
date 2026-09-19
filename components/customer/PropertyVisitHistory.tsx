@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getVisitCreditsForProperty, getReservedCreditCounts } from '@/components/payments/visitCredits.actions';
 import { totalRemainingCredits, nearestExpiry, canScheduleVisit, milestoneStage, MILESTONES } from '@/lib/visitCredits';
+import { getMonitoringMediaDownloadUrl } from '@/components/properties/monitoring/monitoring.actions';
 
 const VISIT_STATUS_LABEL: Record<string, string> = {
   assigned: 'Agent assigned',
@@ -18,9 +19,12 @@ const VISIT_STATUS_LABEL: Record<string, string> = {
 // milestone track, no dotted timeline) and that simplification was never
 // actually flagged to Plot as a deviation the way it should have been.
 // Plot caught it by screenshot next to the phone mockup — this rebuilds it
-// to match: back-button header, a site-photo placeholder block (the mock
-// itself is a plain grey rectangle here — there's no real property photo
-// field in the schema to fill it with), the location/size line, the
+// to match: back-button header, a site-photo block (the mock itself is a
+// plain grey rectangle — there's no real property-level photo field in the
+// schema — so this shows the first approved photo from the property's most
+// recently completed visit when one exists, per round 27's follow-up below,
+// and falls back to the plain placeholder only when no visit photo exists
+// yet), the location/size line, the
 // REGISTERED/VERIFIED/VISIT SET/REPORT track (shared with CustomerHome.tsx
 // via lib/visitCredits.ts, milestoneStage/MILESTONES), the visit-credits
 // row, and a dotted visit-history timeline. Still deliberately does NOT
@@ -36,6 +40,14 @@ const VISIT_STATUS_LABEL: Record<string, string> = {
 //    real content coming from the agent's own submitted
 //    monitoring_jobs.observations for a completed visit, or
 //    admin_feedback for one sent back — not invented.
+//
+// Redesign 2026-09 (follow-up, round 27) — Plot: "the picture is not
+// loading" on this screen turned out to be this exact placeholder — it was
+// never wired to a real photo (see the comment above), so for a property
+// with completed visits and real uploaded photos it just permanently shows
+// grey. Now pulls the first approved photo from the property's latest
+// completed visit (monitoring_media, same signed-URL helper the report
+// screens use) and shows the plain placeholder only when none exists.
 export async function PropertyVisitHistory({ propertyId }: { propertyId: string }) {
   const supabase = await createClient();
   const [{ data: property }, credits, { data: jobs }, reservedCounts] = await Promise.all([
@@ -62,6 +74,25 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
   const latestVisitNumber = allJobs[0]?.visit_number ?? null;
   const shortCode = `P-${propertyId.slice(0, 4).toUpperCase()}`;
 
+  // allJobs is already ordered newest-first (by assigned_at), so the first
+  // one with a completed status is the latest visit that has real photos.
+  const latestCompletedJob = allJobs.find((j) => ['approved', 'ec_pending'].includes(j.status)) ?? null;
+  let sitePhotoUrl: string | null = null;
+  if (latestCompletedJob) {
+    const { data: photoRow } = await supabase
+      .from('monitoring_media')
+      .select('file_path')
+      .eq('job_id', latestCompletedJob.id)
+      .eq('media_type', 'photo')
+      .order('uploaded_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (photoRow) {
+      sitePhotoUrl = await getMonitoringMediaDownloadUrl(photoRow.file_path);
+    }
+  }
+  const sitePhotoVisitNumber = latestCompletedJob?.visit_number ?? latestVisitNumber;
+
   const locationParts = [property.village_town || property.district, property.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null, shortCode].filter(
     Boolean
   );
@@ -76,12 +107,30 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
         <h1 style={{ fontSize: 17 }}>{property.property_name}</h1>
       </div>
 
-      {/* Site photo placeholder — no real photo field on properties yet */}
-      <div style={{ height: 160, background: 'var(--color-neutral-300)', display: 'flex', alignItems: 'flex-end', padding: 12 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--color-text)' }}>
-          Site photo{latestVisitNumber ? ` · Visit ${latestVisitNumber}` : ''}
-        </span>
-      </div>
+      {/* Site photo — real photo from the latest completed visit when one
+          exists; plain placeholder (no real property-level photo field in
+          the schema) otherwise */}
+      {sitePhotoUrl ? (
+        <div style={{ height: 160, position: 'relative', background: 'var(--color-neutral-300)' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={sitePhotoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <span
+            style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12,
+              fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
+              color: 'var(--color-bg)', background: 'rgba(32,30,29,.55)',
+            }}
+          >
+            Site photo{sitePhotoVisitNumber ? ` · Visit ${sitePhotoVisitNumber}` : ''}
+          </span>
+        </div>
+      ) : (
+        <div style={{ height: 160, background: 'var(--color-neutral-300)', display: 'flex', alignItems: 'flex-end', padding: 12 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--color-text)' }}>
+            Site photo{latestVisitNumber ? ` · Visit ${latestVisitNumber}` : ''}
+          </span>
+        </div>
+      )}
 
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '18px 20px 0' }}>
         {locationParts.length > 0 && <p style={{ fontSize: 13, color: 'var(--p-ink-soft)' }}>{locationParts.join(' · ')}</p>}
@@ -170,9 +219,14 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
                     </div>
                     {note && <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.45, marginTop: 2 }}>{note}</div>}
                     {isReport && (
-                      <a href={`/properties/${propertyId}/visit-report/${j.id}/pdf`} target="_blank" rel="noreferrer" className="nav-link" style={{ fontSize: 12, display: 'inline-block', marginTop: 4 }}>
+                      // Redesign 2026-09 (follow-up, round 26) — Plot: per the mock,
+                      // "open visit report" shows the report's own details screen
+                      // (photos, on-site checks, any note from Plot360) with a
+                      // "Download report PDF" button at the bottom — not a jump
+                      // straight into the raw PDF. See VisitReportView.tsx.
+                      <Link href={`/properties/${propertyId}/visit-report/${j.id}/view`} className="nav-link" style={{ fontSize: 12, display: 'inline-block', marginTop: 4 }}>
                         Open visit {j.visit_number ?? ''} report
-                      </a>
+                      </Link>
                     )}
                   </div>
                   <div style={{ width: 8, height: 8, background: isReport ? 'var(--color-accent)' : 'var(--color-text)', flex: 'none', marginTop: 6 }} />
