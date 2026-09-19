@@ -2480,7 +2480,7 @@ disturb a job that already has one:
 ```sql
 with numbered as (
   select id, property_id,
-         row_number() over (partition by property_id order by coalesce(assigned_at, created_at)) as rn
+         row_number() over (partition by property_id order by assigned_at) as rn
   from monitoring_jobs
 )
 update monitoring_jobs mj
