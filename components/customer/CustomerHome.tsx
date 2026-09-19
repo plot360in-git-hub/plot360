@@ -48,7 +48,19 @@ const HOW_IT_WORKS = [
 // `/properties/[id]/visit-report/[jobId]/view` (VisitReportView.tsx).
 type VisitChip = { state: 'Done' | 'Set' | 'Unused'; jobId: string | null; doneAt: string | null };
 
-function visitChips(totalPurchased: number, jobs: JobRow[]): VisitChip[] {
+const CHIP_STATE_LABEL: Record<VisitChip['state'], string> = { Done: 'Done', Set: 'Scheduled', Unused: 'Unused' };
+
+// Redesign 2026-09 (follow-up, round 29) — Plot: a visit the customer had
+// already scheduled still showed its chip as "Unused". Root cause: a
+// freshly scheduled visit is only a `visit_requests` row (requestVisit,
+// visitCredits.actions.ts) until an admin assigns an agent to it — that's
+// the point a real `monitoring_jobs` row (with a `visit_number`) exists
+// for this function to match against at all. `openRequestCount` (still-
+// open, not-yet-assigned visit_requests for this property — see
+// home.data.ts) fills in that gap: since an open request has no
+// visit_number of its own yet, it's counted against the next `Unused`
+// slot(s) in order, same as buying N credits fills chips left to right.
+function visitChips(totalPurchased: number, jobs: JobRow[], openRequestCount: number): VisitChip[] {
   const count = Math.min(Math.max(totalPurchased, 0), 8);
   const chips: VisitChip[] = [];
   for (let i = 1; i <= count; i++) {
@@ -56,6 +68,14 @@ function visitChips(totalPurchased: number, jobs: JobRow[]): VisitChip[] {
     if (job && ['approved', 'ec_pending'].includes(job.status)) chips.push({ state: 'Done', jobId: job.id, doneAt: job.decided_at ?? null });
     else if (job && ['assigned', 'accepted', 'submitted', 'rejected'].includes(job.status)) chips.push({ state: 'Set', jobId: null, doneAt: null });
     else chips.push({ state: 'Unused', jobId: null, doneAt: null });
+  }
+  let remainingOpenRequests = openRequestCount;
+  for (const chip of chips) {
+    if (remainingOpenRequests <= 0) break;
+    if (chip.state === 'Unused') {
+      chip.state = 'Set';
+      remainingOpenRequests--;
+    }
   }
   return chips;
 }
@@ -88,6 +108,7 @@ export function CustomerHome({
   creditsByProperty,
   reservedByProperty,
   jobsByProperty,
+  openRequestCountByProperty,
 }: {
   firstName: string;
   maskedPhone: string | null;
@@ -95,6 +116,7 @@ export function CustomerHome({
   creditsByProperty: Record<string, VisitCredit[]>;
   reservedByProperty: Record<string, number>;
   jobsByProperty: Record<string, JobRow[]>;
+  openRequestCountByProperty: Record<string, number>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -327,6 +349,7 @@ export function CustomerHome({
             const credits = creditsByProperty[p.id] ?? [];
             const jobs = jobsByProperty[p.id] ?? [];
             const reserved = reservedByProperty[p.id] ?? 0;
+            const openRequestCount = openRequestCountByProperty[p.id] ?? 0;
             const remaining = Math.max(totalRemainingCredits(credits) - reserved, 0);
             const totalPurchased = credits.reduce((sum, c) => sum + c.quantity_purchased, 0);
             const stage = milestoneStage(p, jobs, reserved > 0);
@@ -417,7 +440,7 @@ export function CustomerHome({
                       )}
                       {totalPurchased > 0 && (
                         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-                          {visitChips(totalPurchased, jobs).map((chip, i) =>
+                          {visitChips(totalPurchased, jobs, openRequestCount).map((chip, i) =>
                             chip.state === 'Done' ? (
                               // Redesign 2026-09 (follow-up, round 26) — Plot: per the
                               // mock, this chip is a plain status badge, not a link —
@@ -442,7 +465,7 @@ export function CustomerHome({
                                   color: 'var(--color-bg)',
                                 }}
                               >
-                                Visit {i + 1} · {chip.state}
+                                Visit {i + 1} · {CHIP_STATE_LABEL[chip.state]}
                               </span>
                             )
                           )}

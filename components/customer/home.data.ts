@@ -21,7 +21,7 @@ export async function getCustomerHomeData() {
 
   const propertyIds = (properties ?? []).map((p) => p.id);
 
-  const [creditsByProperty, reservedByProperty, { data: monitoringJobs }] = await Promise.all([
+  const [creditsByProperty, reservedByProperty, { data: monitoringJobs }, { data: openVisitRequests }] = await Promise.all([
     getVisitCreditsForProperties(propertyIds),
     getReservedCreditCounts(propertyIds),
     propertyIds.length > 0
@@ -31,11 +31,28 @@ export async function getCustomerHomeData() {
           .in('property_id', propertyIds)
           .order('assigned_at', { ascending: true })
       : Promise.resolve({ data: [] }),
+    // Redesign 2026-09 (follow-up, round 29) — Plot: a visit the customer
+    // just scheduled showed its chip as "Unused" instead of "Scheduled".
+    // A newly scheduled visit is only a visit_requests row (requestVisit,
+    // visitCredits.actions.ts) until an admin actually assigns an agent —
+    // that's the point it becomes a monitoring_jobs row with a
+    // visit_number, which is all visitChips() below previously had to go
+    // on. This fetches the still-open (not yet assigned) requests per
+    // property so CustomerHome can count them as "Scheduled" too, not
+    // just admin-assigned ones.
+    propertyIds.length > 0
+      ? supabase.from('visit_requests').select('id, property_id').in('property_id', propertyIds).eq('status', 'open')
+      : Promise.resolve({ data: [] }),
   ]);
 
   const jobsByProperty: Record<string, any[]> = {};
   for (const job of monitoringJobs ?? []) {
     (jobsByProperty[job.property_id] ??= []).push(job);
+  }
+
+  const openRequestCountByProperty: Record<string, number> = {};
+  for (const r of openVisitRequests ?? []) {
+    openRequestCountByProperty[r.property_id] = (openRequestCountByProperty[r.property_id] ?? 0) + 1;
   }
 
   return {
@@ -44,6 +61,7 @@ export async function getCustomerHomeData() {
     creditsByProperty,
     reservedByProperty,
     jobsByProperty,
+    openRequestCountByProperty,
   };
 }
 

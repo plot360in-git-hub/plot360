@@ -2606,3 +2606,37 @@ the agent app, the visit-report PDF's "Visit window" row) already just
 reads whatever `requested_window_end` date it's given, so an overdue job
 is now measured against Sunday instead of Friday automatically, with no
 code change of its own required.
+
+## 46. Redesign 2026-09 (round 29) — a freshly scheduled visit's chip said
+##     "Unused" instead of "Scheduled"
+
+Plot: after scheduling a visit (check 1560, screenshot: "2 of 4 visit
+credits left" but "Visit 2 · Unused"), the chip for that visit should read
+as scheduled, not unused.
+
+Root cause: `visitChips()` (`CustomerHome.tsx`) only ever looks at real
+`monitoring_jobs` rows to decide a chip's state — 'Done' for an
+approved/ec_pending job, 'Set' for one assigned/accepted/submitted/
+rejected. But scheduling a visit (`ScheduleVisit.tsx` → `requestVisit`,
+`visitCredits.actions.ts`) only ever creates a `visit_requests` row with
+`status = 'open'` — no `monitoring_jobs` row, and so no `visit_number`,
+exists until an admin actually assigns an agent to it
+(`assignAgentToTarget`'s `visit_request` branch). So a scheduled-but-not-
+yet-assigned visit had nothing for `visitChips()` to match against and
+fell through to 'Unused', even though a visit credit was already reserved
+for it (the "2 of 4 left" figure came from `getReservedCreditCounts`,
+which already knew about the open request — the chip just didn't).
+
+Fixed by fetching each property's still-open (not yet assigned)
+`visit_requests` count in `getCustomerHomeData()`
+(`components/customer/home.data.ts`, new `openRequestCountByProperty`,
+threaded through `app/dashboard/page.tsx` → `CustomerHome.tsx`) and
+having `visitChips()` fill that many of the next `Unused` slots (left to
+right, same order visit numbers get assigned in) with the 'Set' state —
+an open request has no `visit_number` of its own yet to match on
+precisely, but it's always the next slot after whatever's already
+Done/Set from real jobs. Also renamed the chip's own displayed text for
+that state from "Set" to "Scheduled" (`CHIP_STATE_LABEL`) to match what
+Plot called it — the internal state name `'Set'` (and the milestone
+track's own "VISIT SET" stage label, unrelated to this chip) is
+unchanged, only what's rendered on the chip itself.

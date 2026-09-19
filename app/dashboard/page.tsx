@@ -17,6 +17,7 @@ export default async function DashboardPage() {
       creditsByProperty={data.creditsByProperty}
       reservedByProperty={data.reservedByProperty}
       jobsByProperty={data.jobsByProperty}
+      openRequestCountByProperty={data.openRequestCountByProperty}
     />
   );
 }
