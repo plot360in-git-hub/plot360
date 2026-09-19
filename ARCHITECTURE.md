@@ -2255,3 +2255,32 @@ the UI, which already correctly blocks them) — and, separately and more
 urgently, any signed-in user can still self-promote to owner-admin via
 a raw profile update. The self-promotion hole is the one to prioritize
 running first.
+
+## 39. Redesign 2026-09 (round 22 follow-up 4) — removed a fabricated
+##     "WhatsApp sent" claim from the customer payment confirmation screen
+
+Plot flagged the post-payment confirmation screen (both the UPI and
+bank-transfer "done" screens, and the visit-scheduled one): it shows a
+"WHATSAPP SENT TO 9573•••79" box with a message body, right after the
+customer pays — but nothing was ever actually sent, and, worse than
+every other spot audited in rounds 36–37, nothing was even *logged*:
+`components/payments/visitCredits.actions.ts` (the action behind this
+screen) never calls `logWhatsAppMessage` at all. The box in
+`ConfirmationScreen.tsx` computed the message text purely client-side
+and displayed it as a completed fact with zero backing — worse than the
+"logs but doesn't open" bug from rounds 36–37, since there wasn't even
+a log entry an admin could later act on.
+
+Removed the box (and the now-unused `whatsapp` field from each of the
+three variants' content: `reg-upi`, `reg-bank`, `sched`) rather than
+wiring it up to a real send, since nothing about this flow is an admin
+action an admin is sitting there to trigger — it happens the instant an
+unattended customer submits payment. The screen's existing "what
+happens next" copy (the colored header's body text, and the closing
+note above the button) already tells the customer what to expect
+without claiming it already happened, so nothing else needed to
+change. `AgentUnderReview.tsx`'s own "WhatsApp sent to ⋯" box was
+checked too and left alone — that one reads back an actually-logged row
+(`getOutboxForEntity`), so it's honest.
+
+No SQL for this round.

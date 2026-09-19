@@ -10,10 +10,20 @@ import { DISPLAY_PHONE, REPRESENTATIVE_NAME } from '@/lib/contact';
 // this component used to be. Rebuilt from design_handoff_plot360_redesign,
 // "Plot360 Customer.dc.html", doneContent() / the `s.done` screen: a
 // full-bleed colored header (kicker/title/body), a label-value rows
-// table, a "WhatsApp sent to <customer's own number>" preview box, a
-// closing note, and a single "Back to my properties" button — no second
-// "Open WhatsApp" button (the mock doesn't have one; the message is sent
-// automatically by Plot360, not something the customer opens themselves).
+// table, a closing note, and a single "Back to my properties" button.
+//
+// Redesign 2026-09 (follow-up) — Plot: the "WhatsApp sent to <number>"
+// preview box this screen used to show right after payment claimed a
+// message had already been sent, but nothing here ever sent or even
+// logged one — visitCredits.actions.ts (the action behind this screen)
+// never calls logWhatsAppMessage, so the box was showing a completed-
+// action claim with nothing behind it. Every real "WhatsApp sent" in
+// this app is either an admin manually tapping a wa.me link (see
+// ARCHITECTURE.md's WhatsApp outbox notes) or, at minimum, an actual
+// logged outbox row an admin can act on — neither happens here, so
+// showing it to the customer as fact was misleading. Removed; the body/
+// next copy below already tells the customer what happens next without
+// claiming it already did.
 export type ConfirmationVariant =
   | { kind: 'reg-upi'; propertyName: string; planName: string; visitQuantity: number; amount: number; reference: string; expiresAt: string }
   | { kind: 'reg-bank'; propertyName: string; planName: string; amount: number }
@@ -33,7 +43,6 @@ type DoneContent = {
   title: string;
   body: string;
   rows: { k: string; v: string }[];
-  whatsapp: string;
   next: string;
 };
 
@@ -52,7 +61,6 @@ function content(v: ConfirmationVariant): DoneContent {
           { k: 'Reference', v: v.reference },
           { k: 'Visit credits', v: `${v.visitQuantity} · until ${formatDate(v.expiresAt)}` },
         ],
-        whatsapp: `Plot360: Thank you. We have registered ${v.propertyName} and received ${formatRupees(v.amount)} by UPI (ref ${v.reference}). Your ${v.planName} plan is active. ${REPRESENTATIVE_NAME} will contact you within one working day for documents and owner approval.`,
         next: `Nothing is expected from you right now. Watch for a WhatsApp from ${DISPLAY_PHONE}.`,
       };
     case 'reg-bank':
@@ -68,7 +76,6 @@ function content(v: ConfirmationVariant): DoneContent {
           { k: 'Status', v: 'Awaiting confirmation' },
           { k: 'Visit credits', v: 'Activate on confirmation' },
         ],
-        whatsapp: `Plot360: We have registered ${v.propertyName}. Your bank transfer of ${formatRupees(v.amount)} is awaiting confirmation — we will message you as soon as it is credited, usually within one working day.`,
         next: 'You can close the app. Credits and scheduling unlock once the transfer is confirmed.',
       };
     case 'sched':
@@ -86,23 +93,21 @@ function content(v: ConfirmationVariant): DoneContent {
             v: `${v.creditsRemaining} visit credit${v.creditsRemaining === 1 ? '' : 's'} · until ${formatDate(v.expiresAt)}`,
           },
         ],
-        whatsapp: `Plot360: Your site visit for ${v.propertyName} is scheduled between ${v.windowText}. ${v.creditsRemaining} visit credit${v.creditsRemaining === 1 ? '' : 's'} remain on this property, usable until ${formatDate(v.expiresAt)}.`,
         next: 'Nothing needed from you. We will message you when the report is ready.',
       };
   }
 }
 
+// Redesign 2026-09 (follow-up) — maskedPhone used to feed the removed
+// "WhatsApp sent to <number>" box below. Kept as an accepted (ignored)
+// prop rather than removed from every call site, since ChoosePlanAndPay.tsx/
+// ScheduleVisit.tsx passing it is harmless and it's a natural fit if a
+// real per-customer confirmation is ever added here later.
 export function ConfirmationScreen({
   variant,
-  maskedPhone,
   homeHref = '/dashboard',
 }: {
   variant: ConfirmationVariant;
-  // Redesign 2026-09 (follow-up, round 2) — the mock's "WhatsApp sent to
-  // 9848 ••• 21" line is the *customer's own* masked number (same format
-  // as the poster header on Home), not Plot360's support line. Optional
-  // because a couple of call sites don't have the profile loaded yet;
-  // falls back to generic text rather than showing nothing.
   maskedPhone?: string | null;
   homeHref?: string;
 }) {
@@ -179,22 +184,6 @@ export function ConfirmationScreen({
             <div style={{ fontWeight: 600, textAlign: 'right' }}>{r.v}</div>
           </div>
         ))}
-      </div>
-
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 0' }}>
-        <div
-          style={{
-            background: 'var(--color-surface)',
-            padding: 14,
-            borderLeft: '3px solid var(--color-accent)',
-            borderRadius: 'var(--radius-md)',
-          }}
-        >
-          <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--p-ink-soft)' }}>
-            WhatsApp sent to {maskedPhone ?? 'your number'}
-          </div>
-          <div style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 7 }}>{c.whatsapp}</div>
-        </div>
       </div>
 
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 40px' }}>
