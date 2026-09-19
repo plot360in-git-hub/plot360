@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { requestVisit } from '@/components/payments/visitCredits.actions';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
-import { getSelectableWeeks, mondayOfWeekContaining, isWeekend, toDateOnly, formatWindow, type VisitWeek } from '@/lib/scheduling';
+import { getSelectableWeeks, mondayOfWeekContaining, toDateOnly, formatWindow, type VisitWeek } from '@/lib/scheduling';
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEK_COUNT = 4;
@@ -169,7 +169,8 @@ export function ScheduleVisit({
 
         <h3 style={{ fontSize: 14, marginBottom: 4 }}>Pick a week</h3>
         <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 12 }}>
-          An agent visits sometime Monday–Friday in whichever week you choose.
+          An agent visits sometime in whichever week you choose — usually a weekday, though the
+          full week including the weekend is held for them to complete it.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
@@ -186,7 +187,14 @@ export function ScheduleVisit({
             const rowContent = (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%' }}>
                 {row.days.map((d) => {
-                  const weekend = isWeekend(d);
+                  // Redesign 2026-09 (follow-up, round 28) — weekend cells
+                  // used to be styled muted like a disabled day, back when
+                  // the saved window stopped at Friday and Sat/Sun weren't
+                  // really part of it. Now the window runs through Sunday
+                  // (see getSelectableWeeks), so within a selectable row
+                  // weekends get the same normal styling as any other day
+                  // — only the leading, not-yet-selectable "too soon" row
+                  // still reads as muted/disabled.
                   const isToday = toDateOnly(d) === toDateOnly(today);
                   return (
                     <div
@@ -196,7 +204,7 @@ export function ScheduleVisit({
                         padding: '9px 0',
                         fontSize: 12.5,
                         fontWeight: isToday ? 700 : 400,
-                        color: !row.week ? 'var(--p-ink-muted)' : weekend ? 'var(--p-ink-muted)' : 'var(--color-text)',
+                        color: !row.week ? 'var(--p-ink-muted)' : 'var(--color-text)',
                         textDecoration: isToday ? 'underline' : 'none',
                       }}
                     >

@@ -2585,3 +2585,24 @@ this change, so nothing else could have broken by rewriting it.
 
 No database schema change — `visit_requests.requested_window_start`/
 `requested_window_end` were already plain date columns.
+
+## 45. Redesign 2026-09 (round 28 follow-up) — schedule-a-visit window now
+##     runs through Sunday, not Friday
+
+Plot: some agents may prefer to complete a visit over the weekend, and
+extending the window "gives a week's time" rather than cutting it off
+after 5 days. `getSelectableWeeks()` (`lib/scheduling.ts`) now sets each
+selectable week's end date to that week's Sunday instead of its Friday —
+a one-line change (`end.setDate(end.getDate() + 6)` instead of `+ 4`).
+The calendar UI (`ScheduleVisit.tsx`) no longer greys out the weekend
+cells within a selectable week, since Saturday/Sunday are now genuinely
+part of the saved window, not just calendar filler; the intro copy above
+the calendar was reworded to say the full week (including the weekend) is
+held for the agent, while the actual visit is still usually a weekday.
+
+No other file needed a change for this — same reasoning as round 27's
+own note: everything downstream (the admin queue's overdue/"stuck" check,
+the agent app, the visit-report PDF's "Visit window" row) already just
+reads whatever `requested_window_end` date it's given, so an overdue job
+is now measured against Sunday instead of Friday automatically, with no
+code change of its own required.
