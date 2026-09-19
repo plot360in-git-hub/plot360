@@ -2533,3 +2533,55 @@ via the same `getMonitoringMediaDownloadUrl` helper the report screens
 already use) when one exists, and only falling back to the plain
 placeholder when no visit photo exists yet (a brand-new property with no
 completed visit, for instance).
+
+## 44. Redesign 2026-09 (round 27) — "Schedule a visit" replaced with a real
+##     calendar, picking a whole week instead of a start date + window length
+
+**The old flow** ("Schedule a visit", `ScheduleVisit.tsx`) had the customer
+pick one of the next 28 individual weekdays as a start date, then a
+separate "3 days / 5 days / 7 days" button for how long a window to give
+the agent, and `lib/scheduling.ts`'s `endDate()` walked forward that many
+business days to compute the end date. Plot: remove the day-length buttons
+and "directly give calendar" — let the customer pick a whole week (1st
+week, 2nd week, 3rd week, 4th week) instead of assembling a range by hand.
+
+Replaced with an actual calendar grid: a muted, non-clickable row for
+today's own week (too soon to schedule into), followed by four selectable
+rows, each one full Monday–Friday business week. Clicking anywhere in a
+week's row selects that week; the row is labeled "Week 1 · 22–26 Sep" etc.
+so it's unambiguous which calendar dates a "week" means. Weekends are
+still shown (a real calendar has 7 columns) but greyed and not part of the
+saved window, matching every other place in the app where a visit is
+always Monday–Friday.
+
+`lib/scheduling.ts`: `getSelectableWeeks(today, count)` is the new
+calendar-math function (Monday-rounded, respecting the same
+`EARLIEST_START_DAYS` 3-day lead time the old day-picker enforced — see
+that function's own comment for the one deliberate behavior change: a
+lead time that lands mid-week now skips straight to the next full week,
+rather than offering a partial Thu/Fri start the way the old per-day
+picker could). The old `endDate()`/`WINDOW_LENGTHS`/`isSelectable()`
+(day-length math, no longer used by anything) were removed; `isWeekend`,
+`toDateOnly`, `formatWindow` are unchanged and reused as-is.
+
+**Checked everywhere `requested_window_start`/`requested_window_end` are
+used, since this changes how those two dates get chosen:** `requestVisit`
+(`components/payments/visitCredits.actions.ts`) still takes a plain
+`(windowStart, windowEnd)` date-string pair and writes them to
+`visit_requests` exactly like before — the calendar redesign only changes
+*how the customer arrives at* those two strings, not their shape. Every
+downstream reader — `assignAgentToTarget`'s `visit_request` branch
+(copies them onto the new `monitoring_jobs` row), the admin Job assignment
+queue's `window` display and its "stuck/overdue" check
+(`getStuckAssignmentTargets`), the Assign screen's WhatsApp preview text,
+the agent app's job list and capture screen
+(`AgentJobsHome.tsx`/`AgentCapture.tsx`), and the visit report PDF's own
+"Visit window" row (`lib/pdf/visitReportPdf.ts`) — all just read whatever
+two dates land in those columns and format them; none of them assume
+anything about how the window was chosen (a specific length, a specific
+day-of-week start, etc.), so none needed a code change. `lib/scheduling.ts`
+was confirmed to have exactly one importer (`ScheduleVisit.tsx`) before
+this change, so nothing else could have broken by rewriting it.
+
+No database schema change — `visit_requests.requested_window_start`/
+`requested_window_end` were already plain date columns.

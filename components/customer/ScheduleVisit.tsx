@@ -4,16 +4,29 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { requestVisit } from '@/components/payments/visitCredits.actions';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
-import { isSelectable, endDate, toDateOnly, formatWindow } from '@/lib/scheduling';
+import { getSelectableWeeks, mondayOfWeekContaining, isWeekend, toDateOnly, formatWindow, type VisitWeek } from '@/lib/scheduling';
 
-const WINDOW_LENGTHS = [3, 5, 7] as const;
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WEEK_COUNT = 4;
 
-// Redesign 2026-09 — "Schedule a visit" (design_handoff_plot360_redesign,
-// "Plot360 Customer.dc.html"). The design's own prototype hardcoded a
-// September 2026 example month for its calendar math; lib/scheduling.ts
-// generalizes the same weekday/lead-time rules to the real current date.
-// Shows the next 28 days as pickable start dates rather than a full
-// month grid, since a visit window can span a month boundary.
+// Redesign 2026-09 (follow-up, round 27) — Plot: "remove the 3 days/5
+// days/7 days button and directly give calendar ... allow to select a
+// week — 1st week, 2nd week, 3rd week or 4th week — rather [than] a date
+// range." The old flow picked one of the next 28 individual weekdays as a
+// start date, then a 3/5/7-day window length on top of it
+// (lib/scheduling.ts's old endDate()). This replaces both steps with an
+// actual calendar grid: a muted "too soon" row for the current week, then
+// four selectable Monday–Friday weeks, and picking any day in a week's row
+// selects that whole week as the visit window. See getSelectableWeeks
+// (lib/scheduling.ts) for why each option is always a full business week
+// rather than a partial one.
+//
+// This only changes how the customer picks a start/end date — requestVisit
+// below still receives a plain (windowStart, windowEnd) date pair exactly
+// like before, so nothing downstream (visit_requests, the admin Job
+// assignment queue's window display, the agent app, the visit-report PDF)
+// needed any change; they all just read whatever two dates land in
+// monitoring_jobs.requested_window_start/end.
 export function ScheduleVisit({
   propertyId,
   propertyName,
@@ -34,37 +47,48 @@ export function ScheduleVisit({
   maskedPhone?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [windowLength, setWindowLength] = useState<3 | 5 | 7>(3);
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationVariant | null>(null);
 
   const today = useMemo(() => new Date(), []);
-  const days = useMemo(() => {
-    const list: Date[] = [];
-    for (let i = 0; i < 28; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      list.push(d);
+  const weeks = useMemo(() => getSelectableWeeks(today, WEEK_COUNT), [today]);
+  const selectedWeek: VisitWeek | null = selectedWeekIndex != null ? weeks[selectedWeekIndex] : null;
+
+  // Calendar grid: a muted "too soon" row for today's own week, then one
+  // row per selectable week — each row is the Monday..Sunday of that week
+  // (weekends are shown for a real calendar look, greyed out, even though
+  // only the Monday–Friday portion is ever the actual visit window).
+  const gridStart = useMemo(() => mondayOfWeekContaining(today), [today]);
+  const rows = useMemo(() => {
+    const list: { days: Date[]; week: VisitWeek | null }[] = [];
+    for (let r = 0; r < WEEK_COUNT + 1; r++) {
+      const rowStart = new Date(gridStart);
+      rowStart.setDate(rowStart.getDate() + r * 7);
+      const days: Date[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(rowStart);
+        d.setDate(d.getDate() + i);
+        days.push(d);
+      }
+      list.push({ days, week: r === 0 ? null : weeks[r - 1] });
     }
     return list;
-  }, [today]);
-
-  const end = startDate ? endDate(startDate, windowLength) : null;
+  }, [gridStart, weeks]);
 
   function confirm() {
-    if (!startDate || !end) return;
+    if (!selectedWeek) return;
     setError(null);
     startTransition(async () => {
-      const result = await requestVisit(propertyId, toDateOnly(startDate), toDateOnly(end));
+      const result = await requestVisit(propertyId, toDateOnly(selectedWeek.start), toDateOnly(selectedWeek.end));
       if ('error' in result) setError(result.error);
       else {
         setConfirmation({
           kind: 'sched',
           propertyName: result.propertyName,
-          windowText: formatWindow(startDate, end),
+          windowText: formatWindow(selectedWeek.start, selectedWeek.end),
           creditsRemaining: result.remainingAfter,
-          expiresAt: expiresAt ?? toDateOnly(startDate),
+          expiresAt: expiresAt ?? toDateOnly(selectedWeek.start),
         });
       }
     });
@@ -143,61 +167,87 @@ export function ScheduleVisit({
           For <strong>{propertyName}</strong> — {creditsRemaining} visit credit{creditsRemaining === 1 ? '' : 's'} available.
         </p>
 
-        <h3 style={{ fontSize: 14, marginBottom: 10 }}>Earliest start date</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 24 }}>
-          {days.map((d) => {
-            const selectable = isSelectable(d, today);
-            const selected = startDate && toDateOnly(startDate) === toDateOnly(d);
+        <h3 style={{ fontSize: 14, marginBottom: 4 }}>Pick a week</h3>
+        <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 12 }}>
+          An agent visits sometime Monday–Friday in whichever week you choose.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
+          {WEEKDAY_LABELS.map((label) => (
+            <div key={label} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--p-ink-muted)' }}>
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {rows.map((row, r) => {
+            const isSelected = row.week && selectedWeek && row.week.start.getTime() === selectedWeek.start.getTime();
+            const rowContent = (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%' }}>
+                {row.days.map((d) => {
+                  const weekend = isWeekend(d);
+                  const isToday = toDateOnly(d) === toDateOnly(today);
+                  return (
+                    <div
+                      key={d.toISOString()}
+                      style={{
+                        textAlign: 'center',
+                        padding: '9px 0',
+                        fontSize: 12.5,
+                        fontWeight: isToday ? 700 : 400,
+                        color: !row.week ? 'var(--p-ink-muted)' : weekend ? 'var(--p-ink-muted)' : 'var(--color-text)',
+                        textDecoration: isToday ? 'underline' : 'none',
+                      }}
+                    >
+                      {d.getDate()}
+                    </div>
+                  );
+                })}
+              </div>
+            );
             return (
-              <button
-                key={d.toISOString()}
-                type="button"
-                disabled={!selectable}
-                onClick={() => setStartDate(d)}
-                style={{
-                  padding: '8px 0',
-                  fontSize: 12.5,
-                  border: selected ? '2px solid var(--color-accent)' : '1px solid var(--color-divider)',
-                  background: selectable ? 'var(--color-surface)' : 'transparent',
-                  color: selectable ? 'var(--color-text)' : 'var(--p-ink-muted)',
-                  cursor: selectable ? 'pointer' : 'not-allowed',
-                  fontFamily: 'inherit',
-                }}
-              >
-                {d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-              </button>
+              <div key={r}>
+                {row.week && (
+                  <p style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--p-ink-soft)', marginBottom: 3 }}>
+                    {row.week.label} · {formatWindow(row.week.start, row.week.end)}
+                  </p>
+                )}
+                {row.week ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWeekIndex(weeks.indexOf(row.week!))}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '4px 6px',
+                      border: isSelected ? '2px solid var(--color-accent)' : '1px solid var(--color-divider)',
+                      background: isSelected ? 'var(--color-accent-100)' : 'var(--color-surface)',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {rowContent}
+                  </button>
+                ) : (
+                  <div style={{ padding: '4px 6px', border: '1px solid var(--color-divider)', background: 'transparent', opacity: 0.55 }}>
+                    {rowContent}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
-        <h3 style={{ fontSize: 14, marginBottom: 10 }}>Visit window</h3>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {WINDOW_LENGTHS.map((len) => (
-            <button
-              key={len}
-              type="button"
-              onClick={() => setWindowLength(len)}
-              className="btn"
-              style={{
-                flex: 1,
-                justifyContent: 'center',
-                border: windowLength === len ? '2px solid var(--color-accent)' : '1px solid var(--color-divider)',
-              }}
-            >
-              {len} days
-            </button>
-          ))}
-        </div>
-
-        {startDate && end && (
+        {selectedWeek && (
           <p style={{ fontSize: 13.5, marginBottom: 20 }}>
-            We’ll aim to visit between <strong>{formatWindow(startDate, end)}</strong>.
+            We’ll aim to visit between <strong>{formatWindow(selectedWeek.start, selectedWeek.end)}</strong>.
           </p>
         )}
 
         {error && <p style={{ color: 'var(--p-alert)', marginBottom: 16, fontSize: 13.5 }}>{error}</p>}
 
-        <button className="btn btn-primary btn-block" type="button" disabled={!startDate || isPending} onClick={confirm}>
+        <button className="btn btn-primary btn-block" type="button" disabled={!selectedWeek || isPending} onClick={confirm}>
           {isPending ? 'Scheduling…' : 'Confirm visit'}
         </button>
       </div>

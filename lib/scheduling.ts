@@ -1,4 +1,4 @@
-// Business-day scheduling helpers for the customer app's "Schedule a
+// Business-week scheduling helpers for the customer app's "Schedule a
 // visit" screen (design_handoff_plot360_redesign, "Plot360 Customer.dc.html").
 // The design's own prototype hardcoded a September 2026 example month
 // (`dow(d) => (new Date(2026,8,d).getDay()+6)%7`) — these are the same
@@ -20,28 +20,6 @@ function atMidnight(date: Date): Date {
   return d;
 }
 
-// A calendar day is selectable as a visit-window start when it's a weekday
-// and at least EARLIEST_START_DAYS out from today.
-export function isSelectable(date: Date, today: Date = new Date()): boolean {
-  if (isWeekend(date)) return false;
-  const earliest = atMidnight(today);
-  earliest.setDate(earliest.getDate() + EARLIEST_START_DAYS);
-  return atMidnight(date) >= earliest;
-}
-
-// Walks forward from `start`, counting only weekdays, and returns the date
-// that completes a window of `lengthDays` working days (3, 5, or 7 per the
-// design's window-length buttons). The start day itself counts as day 1.
-export function endDate(start: Date, lengthDays: number): Date {
-  const d = atMidnight(start);
-  let counted = 1;
-  while (counted < lengthDays) {
-    d.setDate(d.getDate() + 1);
-    if (!isWeekend(d)) counted++;
-  }
-  return d;
-}
-
 export function toDateOnly(date: Date): string {
   return atMidnight(date).toISOString().slice(0, 10);
 }
@@ -49,4 +27,58 @@ export function toDateOnly(date: Date): string {
 export function formatWindow(start: Date, end: Date): string {
   const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+// Monday on or after `date` (Monday itself if `date` already is one).
+function mondayOnOrAfter(date: Date): Date {
+  const d = atMidnight(date);
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  const daysToMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
+  d.setDate(d.getDate() + daysToMonday);
+  return d;
+}
+
+// Monday of the calendar week containing `date` (on or BEFORE it) — used
+// to lay out the calendar grid's leading "too soon" row, which always
+// starts on the Monday of today's own week regardless of the lead time.
+export function mondayOfWeekContaining(date: Date): Date {
+  const d = atMidnight(date);
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+export type VisitWeek = { start: Date; end: Date; label: string };
+
+// Redesign 2026-09 (follow-up, round 27) — Plot: replace the old "pick any
+// weekday, then a 3/5/7-day window length" flow with a real calendar the
+// customer picks a whole week from ("1st week", "2nd week", ...) instead of
+// a free date range. A week here is always the Monday–Friday of a calendar
+// week (weekends are never a visit day anywhere else in the app either —
+// see isWeekend above), and the first one offered is the
+// earliest whole Mon–Fri week that starts at or after the same
+// EARLIEST_START_DAYS lead time the old day-picker enforced. That's a
+// small, deliberate simplification versus the old per-day picker: if
+// today's lead time lands mid-week (e.g. the 3-day minimum falls on a
+// Thursday), the remaining Thu/Fri of that week is no longer offered on
+// its own — the customer picks the next full week instead. Nothing
+// downstream (requestVisit, monitoring_jobs.requested_window_start/end,
+// the admin Job assignment queue, the agent app, the visit-report PDF)
+// cares how a start/end date pair was chosen, only what the two dates are,
+// so this is a UI-only change.
+export function getSelectableWeeks(today: Date = new Date(), count = 4): VisitWeek[] {
+  const earliest = atMidnight(today);
+  earliest.setDate(earliest.getDate() + EARLIEST_START_DAYS);
+  const firstMonday = mondayOnOrAfter(earliest);
+
+  const weeks: VisitWeek[] = [];
+  for (let i = 0; i < count; i++) {
+    const start = new Date(firstMonday);
+    start.setDate(start.getDate() + i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 4); // Friday of the same week
+    weeks.push({ start, end, label: `Week ${i + 1}` });
+  }
+  return weeks;
 }
