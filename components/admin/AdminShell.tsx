@@ -18,20 +18,30 @@ import { logOut } from '@/components/auth/auth.actions';
 // dead code now — see app/admin/layout.tsx). Added a "Log out" button to
 // the top-right corner, reusing the same logOut server action and
 // `.p360` btn-secondary styling as CustomerHeader.tsx's logout button.
-const NAV: { id: string; label: string; href: string; ownerOnly?: boolean }[] = [
-  { id: 'dash', label: 'Dashboard', href: '/admin' },
-  { id: 'qProperty', label: 'Property verification', href: '/admin/queue/property-verification' },
-  { id: 'qAssign', label: 'Job assignment', href: '/admin/queue/job-assignment' },
-  { id: 'qAgentSub', label: 'Agent submissions', href: '/admin/queue/agent-submissions' },
-  { id: 'qAgentVerify', label: 'Agent verification', href: '/admin/queue/agent-verification' },
-  { id: 'qService', label: 'Service requests', href: '/admin/queue/service-requests' },
-  { id: 'qPayments', label: 'Payments', href: '/admin/queue/payments' },
-  { id: 'plans', label: 'Plans & pricing', href: '/admin/plans', ownerOnly: true },
-  { id: 'users', label: 'Users', href: '/admin/users', ownerOnly: true },
+// Redesign 2026-09 (round 34) — "Implementation Change List" item 9:
+// grouped into sections (Queues / Owner) rather than one flat list, per
+// the change list's own grouping suggestion — its exact example groups
+// ("Verification / Renewals / Payments together, Agents / Monitoring /
+// Users together") named links from the OLD, already-dead
+// components/layout/AdminHeader.tsx, not this shell's real nav, so the
+// groups below use this shell's actual destinations instead: every
+// day-to-day queue together, then the three owner-only screens
+// together. `group: null` (Dashboard alone) renders with no section
+// header — a one-item group doesn't need a label over it.
+const NAV: { id: string; label: string; href: string; ownerOnly?: boolean; group: string | null }[] = [
+  { id: 'dash', label: 'Dashboard', href: '/admin', group: null },
+  { id: 'qProperty', label: 'Property verification', href: '/admin/queue/property-verification', group: 'Queues' },
+  { id: 'qAssign', label: 'Job assignment', href: '/admin/queue/job-assignment', group: 'Queues' },
+  { id: 'qAgentSub', label: 'Agent submissions', href: '/admin/queue/agent-submissions', group: 'Queues' },
+  { id: 'qAgentVerify', label: 'Agent verification', href: '/admin/queue/agent-verification', group: 'Queues' },
+  { id: 'qService', label: 'Service requests', href: '/admin/queue/service-requests', group: 'Queues' },
+  { id: 'qPayments', label: 'Payments', href: '/admin/queue/payments', group: 'Queues' },
+  { id: 'plans', label: 'Plans & pricing', href: '/admin/plans', ownerOnly: true, group: 'Owner' },
+  { id: 'users', label: 'Users', href: '/admin/users', ownerOnly: true, group: 'Owner' },
   // Redesign 2026-09 (round 32) — payments-received ledger + agent-payout
   // bookkeeping, see app/admin/accounting/page.tsx. Owner-only like Plans
   // & pricing and Users — this is internal financial data.
-  { id: 'accounting', label: 'Accounting', href: '/admin/accounting', ownerOnly: true },
+  { id: 'accounting', label: 'Accounting', href: '/admin/accounting', ownerOnly: true, group: 'Owner' },
 ];
 
 const TILE_BADGE: Record<string, string> = {
@@ -104,51 +114,71 @@ export function AdminShell({
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         <div style={{ width: 216, flex: 'none', borderRight: '2px solid var(--color-divider)', display: 'flex', flexDirection: 'column' }}>
-          {NAV.filter((n) => !n.ownerOnly || role === 'owner').map((n) => {
-            const active = n.href === '/admin' ? pathname === '/admin' : pathname?.startsWith(n.href);
-            const tile = tileById[TILE_BADGE[n.id]];
-            return (
-              <Link
-                key={n.id}
-                href={n.href}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  width: '100%',
-                  textAlign: 'left',
-                  borderBottom: '1px solid var(--color-divider)',
-                  background: active ? 'var(--color-text)' : 'transparent',
-                  color: active ? 'var(--color-bg)' : 'var(--color-text)',
-                  fontSize: 12.5,
-                  padding: '11px 14px',
-                  textDecoration: 'none',
-                }}
-              >
-                <span style={{ flex: 1 }}>{n.label}</span>
-                {tile && tile.count > 0 && (
-                  <span
+          {(() => {
+            const visible = NAV.filter((n) => !n.ownerOnly || role === 'owner');
+            let lastGroup: string | null | undefined;
+            return visible.map((n) => {
+              const active = n.href === '/admin' ? pathname === '/admin' : pathname?.startsWith(n.href);
+              const tile = tileById[TILE_BADGE[n.id]];
+              const showHeader = n.group && n.group !== lastGroup;
+              lastGroup = n.group;
+              return (
+                <div key={n.id}>
+                  {showHeader && (
+                    <div
+                      style={{
+                        padding: '12px 14px 5px',
+                        fontSize: 9.5,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        color: 'var(--p-ink-soft)',
+                      }}
+                    >
+                      {n.group}
+                    </div>
+                  )}
+                  <Link
+                    href={n.href}
                     style={{
-                      flex: 'none',
-                      minWidth: 20,
-                      textAlign: 'center',
-                      background: tile.late > 4 ? 'var(--color-accent)' : active ? 'var(--color-bg)' : 'var(--color-text)',
-                      color: tile.late > 4 ? 'var(--color-bg)' : active ? 'var(--color-text)' : 'var(--color-bg)',
-                      fontFamily: 'var(--font-heading)',
-                      fontWeight: 800,
-                      fontSize: 10.5,
-                      padding: '2px 5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 9,
+                      width: '100%',
+                      textAlign: 'left',
+                      borderBottom: '1px solid var(--color-divider)',
+                      background: active ? 'var(--color-text)' : 'transparent',
+                      color: active ? 'var(--color-bg)' : 'var(--color-text)',
+                      fontSize: 12.5,
+                      padding: '11px 14px',
+                      textDecoration: 'none',
                     }}
                   >
-                    {tile.count}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+                    <span style={{ flex: 1 }}>{n.label}</span>
+                    {tile && tile.count > 0 && (
+                      <span
+                        style={{
+                          flex: 'none',
+                          minWidth: 20,
+                          textAlign: 'center',
+                          background: tile.late > 4 ? 'var(--color-accent)' : active ? 'var(--color-bg)' : 'var(--color-text)',
+                          color: tile.late > 4 ? 'var(--color-bg)' : active ? 'var(--color-text)' : 'var(--color-bg)',
+                          fontFamily: 'var(--font-heading)',
+                          fontWeight: 800,
+                          fontSize: 10.5,
+                          padding: '2px 5px',
+                        }}
+                      >
+                        {tile.count}
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              );
+            });
+          })()}
           <div style={{ flex: 1 }} />
           <div style={{ padding: '13px 14px', fontSize: 10.5, color: 'var(--p-ink-soft)', lineHeight: 1.5, borderTop: '1px solid var(--color-divider)' }}>
-            Operations sees queues and assignment. Owner also sees plans, pricing and users.
+            Operations sees queues and assignment. Owner also sees plans, pricing, users and accounting.
           </div>
         </div>
 

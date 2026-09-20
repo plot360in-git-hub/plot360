@@ -35,6 +35,17 @@ import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions'
 // the app's own convention (see plot360-redesign.css's note on
 // `.p360 a:hover`) of reserving red for genuine alerts, not branding,
 // now that the brand accent itself is teal rather than red.
+//
+// Redesign 2026-09 (round 34) — "Implementation Change List" item 1: the
+// live accent moved from teal to Deep Navy (Option C) in
+// styles/plot360-redesign.css. Since this file can't literally import
+// that CSS (pdf-lib draws its own vector text/shapes — see the note
+// above), ACCENT below is manually kept in sync with --color-accent by
+// hand, same as round 24 did for the teal→this-file handoff. Font stays
+// Helvetica/HelveticaBold — embedding real Archivo here (item 4's ask,
+// for the web app only) would need a TTF/OTF font file this sandbox has
+// no reliable way to fetch, per the note at the top of this file; that
+// deviation is unchanged and still flagged, only the colour moved.
 
 const PAGE_W = 595.28; // A4 at 72dpi
 const PAGE_H = 841.89;
@@ -42,7 +53,7 @@ const MARGIN_X = 46;
 
 // ---------- design tokens (hex → 0-1, matching styles/plot360-redesign.css) ----------
 const hex = (h: number, h2: number, h3: number) => [h / 255, h2 / 255, h3 / 255] as const;
-const ACCENT = rgb(...hex(0x14, 0xb8, 0xa6)); // --color-accent
+const ACCENT = rgb(...hex(0x1e, 0x3a, 0x5f)); // --color-accent (round 34 — Deep Navy)
 const ALERT = rgb(...hex(0xdc, 0x26, 0x26)); // --p-alert — flagged/concerning items only, never branding
 const TEXT = rgb(...hex(0x20, 0x1e, 0x1d)); // --color-text
 const SURFACE = rgb(...hex(0xea, 0xe9, 0xe9)); // --color-surface

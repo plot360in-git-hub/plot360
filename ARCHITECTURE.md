@@ -2880,3 +2880,52 @@ accident, per the change list's own ask.
 Phase 3 (item 9, an Admin sidebar) was explicitly flagged in the source
 doc as "decide before building" and, per Plot, is deliberately deferred
 — not part of this round.
+
+## 51. Redesign 2026-09 (round 34) — Phase 3 Admin sidebar (item 9), and
+##     the visit report PDF's colour brought in line with Deep Navy
+
+**Admin sidebar (item 9).** On closer look, `components/admin/AdminShell.tsx`
+already *is* a persistent left sidebar (216px, badge counts, sticky
+against a top bar) — it has been since the admin console phase, well
+before this change list existed. The change list's own description of
+this item ("8 flat links... wrapping in a top bar") describes the OLD,
+already-dead `components/layout/AdminHeader.tsx` (see round 33 §50),
+not this shell. So the only real gap was the "grouped" part — the
+sidebar's `NAV` array was one flat list with no section structure. Added
+a `group` field to each entry and a small uppercase section header
+before each group's first item: `Dashboard` alone (no header — a
+one-item group doesn't need a label), then a **Queues** section
+(Property verification / Job assignment / Agent submissions / Agent
+verification / Service requests / Payments), then an **Owner** section
+(Plans & pricing / Users / Accounting). The change list's example
+groups named links from the dead `AdminHeader.tsx` ("Verification /
+Renewals / Payments", "Agents / Monitoring / Users") that don't exist
+as this shell's actual destinations any more, so the grouping uses the
+shell's real nav instead. Left "keep the top bar for search + account
+only" alone — there's no cross-entity admin search anywhere in the app
+today (each queue page has its own local filter box, `QueueControls.tsx`)
+so there was nothing to relocate, and inventing a new global-search
+feature wasn't part of what was asked.
+
+**Visit report PDF (Plot's separate report — the PDF still showed the
+old teal).** `lib/pdf/visitReportPdf.ts` builds the report with pdf-lib
+(vector drawing, not HTML/CSS — see that file's own top-of-file note for
+why), so it can't read `styles/plot360-redesign.css` directly; its
+`ACCENT` constant is a hand-kept-in-sync copy of `--color-accent`, same
+as round 24 did the first time the app moved off its original red. That
+copy was never updated when round 33 moved the token to Deep Navy —
+`ACCENT` still pointed at the old teal (`#14b8a6`), which is why the
+masthead banner, the "360" wordmark, and the summary block's accent bar
+on page 1 were the one surface still showing the old colour after round
+33 shipped. Updated to `#1e3a5f` to match. Font is unchanged — real
+Archivo still isn't embedded here (would need a TTF/OTF file this
+sandbox has no reliable way to fetch; Helvetica/HelveticaBold stand in,
+same documented deviation from round "Report-A-Record.dc.html" as
+before) since that was never part of what the change list asked for the
+PDF specifically.
+
+The in-app report view (`components/customer/VisitReportView.tsx`,
+`/visit-report/[jobId]/view`) needed no change at all — it's a normal
+`.p360` React component that reads `var(--color-accent)` like everything
+else, so it picked up Deep Navy automatically the moment round 33
+shipped.
