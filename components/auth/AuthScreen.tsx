@@ -6,6 +6,7 @@ import { logIn, signUp, sendPhoneOtp, verifyPhoneOtp } from './auth.actions';
 import { createClient } from '@/lib/supabase/client';
 import { TurnstileWidget } from './TurnstileWidget';
 import { ConfirmEmailScreen } from './ConfirmEmailScreen';
+import { GoogleIcon, FacebookIcon, WhatsAppIcon } from './OAuthIcons';
 
 type Tab = 'login' | 'signup';
 
@@ -179,29 +180,29 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
             <button
               type="button"
               className="btn btn-secondary"
-              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
+              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }}
               onClick={() => handleOAuth('google')}
             >
-              Continue with Google
+              <GoogleIcon /> Continue with Google
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
+              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }}
               onClick={() => handleOAuth('facebook')}
             >
-              Continue with Facebook
+              <FacebookIcon /> Continue with Facebook
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }}
+              style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }}
               onClick={() => {
                 setWaError(null);
                 setWaStep(waStep === 'closed' ? 'phone' : 'closed');
               }}
             >
-              Continue with WhatsApp OTP
+              <WhatsAppIcon /> Continue with WhatsApp OTP
             </button>
           </div>
           {oauthError && <p style={{ fontSize: 12, color: 'var(--p-alert)', marginTop: 10 }}>{oauthError}</p>}

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { agentLogIn } from './agent-auth.actions';
 import { createClient } from '@/lib/supabase/client';
+import { GoogleIcon, FacebookIcon } from '@/components/auth/OAuthIcons';
 
 // Redesign 2026-09 (follow-up, round 22) — visually matched to the new
 // Agent signup screen (same PLOT360 Field Agent header, OAuth buttons,
@@ -44,11 +45,11 @@ export function AgentLoginForm() {
         <h1 style={{ fontSize: 24, marginTop: 22 }}>Agent sign in</h1>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 }}>
-          <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }} onClick={() => handleOAuth('google')}>
-            Continue with Google
+          <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }} onClick={() => handleOAuth('google')}>
+            <GoogleIcon /> Continue with Google
           </button>
-          <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }} onClick={() => handleOAuth('facebook')}>
-            Continue with Facebook
+          <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }} onClick={() => handleOAuth('facebook')}>
+            <FacebookIcon /> Continue with Facebook
           </button>
         </div>
         {oauthError && <p style={{ fontSize: 12, color: 'var(--p-alert)', marginTop: 10 }}>{oauthError}</p>}

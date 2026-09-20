@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { agentSignUpAndRegister } from './agent-auth.actions';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { createClient } from '@/lib/supabase/client';
+import { GoogleIcon, FacebookIcon } from '@/components/auth/OAuthIcons';
 
 const REDIRECT_SECONDS = 4;
 
@@ -109,11 +110,11 @@ export function AgentSignupForm() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 24 }}>
-        <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }} onClick={() => handleOAuth('google')}>
-          Continue with Google
+        <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }} onClick={() => handleOAuth('google')}>
+          <GoogleIcon /> Continue with Google
         </button>
-        <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13 }} onClick={() => handleOAuth('facebook')}>
-          Continue with Facebook
+        <button type="button" className="btn btn-secondary" style={{ justifyContent: 'flex-start', minHeight: 46, fontSize: 13, gap: 10 }} onClick={() => handleOAuth('facebook')}>
+          <FacebookIcon /> Continue with Facebook
         </button>
       </div>
       {oauthError && <p style={{ fontSize: 12, color: 'var(--p-alert)', marginTop: 10 }}>{oauthError}</p>}

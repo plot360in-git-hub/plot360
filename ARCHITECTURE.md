@@ -3008,3 +3008,34 @@ in `app/admin/[id]/ownership/page.tsx` about `/admin/[id]/edit`
 specifically), so per this redesign's own "don't rewrite without
 asking, leave superseded pages as unreferenced legacy" convention they
 were left as-is rather than restyled.
+
+## 54. Redesign 2026-09 (round 37) — Log in/Sign up tab color question,
+##     and provider icons on the OAuth buttons
+
+Plot asked whether the black Log in/Sign up tab on the customer auth
+screen (`AuthScreen.tsx`) was an oversight from the Deep Navy recolor.
+**It's deliberate, not a miss** — that tab's active state has always
+read `var(--color-text)` (the app's near-black ink color), never
+`var(--color-accent)`, in both the teal and Deep Navy eras; it never
+changed because it was never wired to the accent token in the first
+place. This matches a convention already used elsewhere in the app —
+`AdminShell.tsx`'s active sidebar link does the exact same thing
+(`background: active ? 'var(--color-text)' : 'transparent'`) — of
+reserving the accent color for primary buttons, links and branding, and
+using plain ink-black for a pressed/selected tab or nav state. So
+nothing needed changing here; noted so it's a confirmed decision rather
+than an open question.
+
+**Provider icons.** Every "Continue with Google/Facebook/WhatsApp OTP"
+button in the app (`AuthScreen.tsx` for customers, `AgentLoginForm.tsx`
+and `AgentSignupForm.tsx` for agents — three separate files, same three
+buttons) was plain text with no mark, unlike the reference Plot shared.
+Added a small shared `components/auth/OAuthIcons.tsx` (`GoogleIcon`,
+`FacebookIcon`, `WhatsAppIcon` — inline SVGs, each provider's own
+standard multi-color brand mark, left uncolored by the app's own accent
+token since these are third-party logos, not this app's UI chrome) and
+dropped one into each button ahead of its label. `.btn` is already a
+flex row (`styles/plot360-redesign.css`), so this was just adding the
+icon element and a `gap: 10` — no layout rework needed. WhatsApp only
+appears on the customer screen (agents don't have a WhatsApp OTP
+option), so only `AuthScreen.tsx` imports that one icon.
