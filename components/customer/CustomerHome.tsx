@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { WA_LINK, TEL_LINK, DISPLAY_PHONE } from '@/lib/contact';
 import { totalRemainingCredits, isExpiringSoon, nearestExpiry, daysUntil, milestoneStage, MILESTONES } from '@/lib/visitCredits';
 import { logOut } from '@/components/auth/auth.actions';
@@ -118,6 +119,7 @@ export function CustomerHome({
   jobsByProperty: Record<string, JobRow[]>;
   openRequestCountByProperty: Record<string, number>;
 }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const allCredits = Object.values(creditsByProperty).flat();
@@ -359,7 +361,31 @@ export function CustomerHome({
               <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <button
                   type="button"
-                  onClick={() => setExpanded(isOpen ? null : p.id)}
+                  onClick={() => {
+                    // Redesign 2026-09 (follow-up, round 30) — Plot: property
+                    // data on this Home screen didn't update until a full
+                    // browser reload. Root cause: everything here (status,
+                    // credits, visit chips, jobs) is fetched ONCE by the
+                    // server component that renders this page
+                    // (app/dashboard/page.tsx's getCustomerHomeData()) and
+                    // handed down as props; expanding a card is pure local
+                    // state (`expanded`), not a navigation, so it never asked
+                    // the server for anything new. That's fine right after
+                    // the customer's own action (every mutation already
+                    // calls revalidatePath('/dashboard')) but leaves the
+                    // screen stale for changes someone else made — an admin
+                    // verifying the property, an agent finishing a visit —
+                    // while this tab just sat open. router.refresh() re-runs
+                    // the server component and merges in fresh props without
+                    // losing this component's own state, so `expanded`
+                    // itself doesn't need to change; only fire it when
+                    // OPENING a card (not on every collapse) since that's
+                    // the moment the customer is actually about to read this
+                    // property's current status.
+                    const opening = !isOpen;
+                    setExpanded(opening ? p.id : null);
+                    if (opening) router.refresh();
+                  }}
                   style={{
                     width: '100%',
                     textAlign: 'left',

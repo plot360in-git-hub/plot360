@@ -2640,3 +2640,36 @@ that state from "Set" to "Scheduled" (`CHIP_STATE_LABEL`) to match what
 Plot called it — the internal state name `'Set'` (and the milestone
 track's own "VISIT SET" stage label, unrelated to this chip) is
 unchanged, only what's rendered on the chip itself.
+
+## 47. Redesign 2026-09 (round 30) — customer dashboard property data went
+##     stale until a full browser reload
+
+Plot: "Properties data is not getting updated until user reload dashboard
+but it should fetch latest data whenever user click and open any
+property."
+
+Root cause: everything shown on the Home screen's property cards (status,
+visit chips, credits, jobs) is fetched once by the server component that
+renders `/dashboard` (`app/dashboard/page.tsx` → `getCustomerHomeData()`)
+and handed down as props to `CustomerHome.tsx`, a client component.
+Expanding a property card to view its details is pure local state
+(`useState` `expanded`), not a navigation — it never asked the server for
+anything, so anything that changed after the page first loaded (an admin
+verifying the property, an agent finishing a visit, a report becoming
+ready) stayed invisible until the customer did a full browser reload.
+This didn't affect the customer's own actions (scheduling a visit, buying
+credits, etc.) — every one of those mutations already calls
+`revalidatePath('/dashboard')`, so the NEXT full navigation to the
+dashboard picks up the change; the gap was specifically "leave this tab
+open, someone else changes something, click to open a property here."
+
+Fixed by calling `router.refresh()` (`next/navigation`) the moment a
+property card is opened (not on every collapse) — `CustomerHome.tsx`'s
+expand button now does `setExpanded(...)` and, only when opening, also
+`router.refresh()`, which re-runs `getCustomerHomeData()` server-side and
+merges fresh props back into the same component instance without
+resetting `expanded` or any other client state. The dashboard route was
+already dynamic (`createClient()` reads cookies, which already opts a
+route out of the Full Route Cache), so this is a client Router Cache
+problem only — `router.refresh()` is the documented way to force a fresh
+server request for the current route.
