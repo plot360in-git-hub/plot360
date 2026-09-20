@@ -1,4 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type Color } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import { existsSync, readFileSync } from 'fs';
+import path from 'path';
 import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions';
 
 // Redesign 2026-09 — the 4-page A4 visit report (design_handoff_
@@ -21,6 +24,20 @@ import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions'
 // this sandbox isn't reliable) — Helvetica/Helvetica-Bold are used
 // instead. Layout, rules and content structure otherwise follow the
 // design mock page-for-page.
+//
+// Redesign 2026-09 (round 35) — Plot asked for real Archivo here too.
+// pdf-lib can embed any TrueType/OpenType font, but only with the
+// `@pdf-lib/fontkit` package registered (now added to package.json) and
+// an actual font file — and every external host this sandbox tried
+// (fonts.googleapis.com, fonts.gstatic.com, GitHub's raw content, the
+// npm and PyPI registries) came back blocked, so the two Archivo .ttf
+// files couldn't be fetched or committed from here. loadArchivoFonts()
+// below instead looks for them at public/fonts/Archivo-Regular.ttf and
+// Archivo-ExtraBold.ttf — see public/fonts/README.md for exactly what
+// to download and where to put it (one manual step, done once, from a
+// machine that actually has internet access). Until those files exist
+// this still transparently falls back to Helvetica/HelveticaBold, so
+// nothing breaks either way.
 //
 // Redesign 2026-09 (follow-up, round 24) — Plot: the report still showed
 // the ORIGINAL design mock's red masthead/accent — this PDF was built
@@ -230,6 +247,47 @@ interface Fonts {
   bold: PDFFont;
 }
 
+// ---------- Archivo font files (round 35) ----------
+// See the top-of-file note and public/fonts/README.md — these two
+// files are a manual, one-time addition (this sandbox has no network
+// path to fetch them itself). `regular` (400) plays the same role
+// Helvetica did; `extrabold` (800) plays the same role HelveticaBold
+// did, matching the weight the web app's .p360 headings use
+// (--font-heading-weight: 800 in styles/plot360-redesign.css) rather
+// than a plain 700 "bold".
+const FONT_DIR = path.join(process.cwd(), 'public', 'fonts');
+const ARCHIVO_REGULAR_PATH = path.join(FONT_DIR, 'Archivo-Regular.ttf');
+const ARCHIVO_EXTRABOLD_PATH = path.join(FONT_DIR, 'Archivo-ExtraBold.ttf');
+
+function loadArchivoBytes(): { regular: Buffer; extrabold: Buffer } | null {
+  try {
+    if (!existsSync(ARCHIVO_REGULAR_PATH) || !existsSync(ARCHIVO_EXTRABOLD_PATH)) return null;
+    return { regular: readFileSync(ARCHIVO_REGULAR_PATH), extrabold: readFileSync(ARCHIVO_EXTRABOLD_PATH) };
+  } catch {
+    return null;
+  }
+}
+
+async function embedFonts(pdfDoc: PDFDocument): Promise<Fonts> {
+  const archivo = loadArchivoBytes();
+  if (archivo) {
+    try {
+      pdfDoc.registerFontkit(fontkit);
+      return {
+        regular: await pdfDoc.embedFont(archivo.regular, { subset: true }),
+        bold: await pdfDoc.embedFont(archivo.extrabold, { subset: true }),
+      };
+    } catch {
+      // Malformed/corrupt font file, or fontkit failed to parse it —
+      // fall through to Helvetica below rather than fail the whole report.
+    }
+  }
+  return {
+    regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
+    bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold),
+  };
+}
+
 // ---------- image embedding ----------
 async function fetchBytes(url: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   try {
@@ -274,10 +332,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
   const pdfDoc = await PDFDocument.create();
   pdfDoc.setTitle(`Plot360 site visit record — ${property.property_name ?? ''} — Visit ${job.visit_number ?? ''}`);
   pdfDoc.setProducer('Plot360');
-  const fonts: Fonts = {
-    regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
-    bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold),
-  };
+  const fonts: Fonts = await embedFonts(pdfDoc);
 
   // Whether page 4 (EC annexure) is included, and whether we can embed a
   // real EC (image inline, or PDF pages copied in as received) or only a

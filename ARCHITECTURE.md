@@ -2929,3 +2929,39 @@ The in-app report view (`components/customer/VisitReportView.tsx`,
 `.p360` React component that reads `var(--color-accent)` like everything
 else, so it picked up Deep Navy automatically the moment round 33
 shipped.
+
+## 52. Redesign 2026-09 (round 35) — real Archivo in the visit report PDF
+
+Plot asked to actually embed Archivo in the PDF rather than leave the
+Helvetica fallback from round 34's note. pdf-lib can embed any
+TrueType/OpenType font, but two things are needed beyond what this
+sandbox has: the `@pdf-lib/fontkit` package (pdf-lib's own peer
+dependency for embedding a custom font — added to `package.json`), and
+an actual Archivo `.ttf` file. Tried fetching one from every plausible
+source — `fonts.googleapis.com`, `fonts.gstatic.com`, GitHub's raw
+content (`raw.githubusercontent.com`, `codeload.github.com`), the npm
+registry, PyPI — every one came back blocked (403) from this sandbox's
+network. So the font file itself can't be committed from here.
+
+Instead, `lib/pdf/visitReportPdf.ts`'s new `embedFonts()` looks for two
+files at request time — `public/fonts/Archivo-Regular.ttf` and
+`public/fonts/Archivo-ExtraBold.ttf` (ExtraBold/800 to match
+`--font-heading-weight: 800`, the weight the web app's `.p360` headings
+actually use, rather than a plain 700 "bold") — and embeds them via
+`pdfDoc.registerFontkit(fontkit)` + `pdfDoc.embedFont(bytes, { subset:
+true })` when both are present. If either file is missing, or embedding
+throws for any reason (corrupt/unreadable file), it transparently falls
+back to Helvetica/HelveticaBold exactly as before — nothing breaks
+either way, the PDF just keeps looking like it did.
+
+**One manual step still needed, on a machine with real internet
+access** — full instructions are in `public/fonts/README.md`:
+1. Download the Archivo family from
+   <https://fonts.google.com/specimen/Archivo> ("Download family").
+2. Copy `Archivo-Regular.ttf` and `Archivo-ExtraBold.ttf` from the
+   zip's `static` folder into `plot360/public/fonts/`.
+3. Run `npm install` once, to pull in the new `@pdf-lib/fontkit`
+   dependency.
+
+No further code change needed after that — the next visit report
+generated will pick the files up automatically.
