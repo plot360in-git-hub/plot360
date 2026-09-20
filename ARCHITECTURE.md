@@ -2673,3 +2673,50 @@ already dynamic (`createClient()` reads cookies, which already opts a
 route out of the Full Route Cache), so this is a client Router Cache
 problem only — `router.refresh()` is the documented way to force a fresh
 server request for the current route.
+
+## 48. Redesign 2026-09 (round 31) — a bank-transfer payment showed no
+##     "awaiting confirmation" status on the customer's property card
+
+Plot: after a customer pays, their property card gives no indication that
+the payment is submitted and waiting on confirmation.
+
+Root cause: `purchaseVisitCredits`'s bank-transfer branch
+(`components/payments/visitCredits.actions.ts`) inserts a `payments` row
+with `status = 'pending'` and does NOT create a `visit_credits` row or
+touch `properties.expiration_date` — by design, since only an admin
+confirming the transfer should grant real credits (the same trust
+boundary `payments_update_own`'s RLS policy enforces: a customer can
+insert or touch their own payment row but only while it stays 'pending').
+So right after submitting a bank-transfer payment, a property correctly
+shows 0 new credits — but `propertyStatusLine()` (`CustomerHome.tsx`) had
+no branch at all for "payment submitted, awaiting confirmation," so the
+card just looked unchanged, as if nothing had happened.
+
+Fixed by fetching each property's latest still-pending payment in
+`getCustomerHomeData()` (`components/customer/home.data.ts`, new
+`pendingPaymentByProperty`, threaded through `app/dashboard/page.tsx` →
+`CustomerHome.tsx`) and showing it as its own highlighted line — "₹X via
+Bank transfer is awaiting confirmation — usually within a working day" —
+above the existing status line, since a property can legitimately be both
+"representative collecting documents" and "payment awaiting confirmation"
+at once.
+
+**On the second half of the report** ("2 payments done for 2 properties
+... none is showing up in payment confirmation page for admin"): checked
+the admin queue query (`getPaymentsQueue`, `queues.actions.ts`) — it's a
+plain `status = 'pending'` filter with no other conditions, the same
+`payments_select_admin` RLS policy (unconditional for an admin) that
+already correctly surfaces the pre-existing "Chandanagar" row in the same
+queue, and there's no DB trigger that could grant credits on insert
+(confirmed against `supabase/schema.sql` — the only trigger on
+`payments` just touches `updated_at`). The only two ways a
+`visit_credits` row can exist at all are the UPI branch of
+`purchaseVisitCredits` (marks `status = 'completed'` immediately — "UPI
+payments confirm themselves," per the Payments queue's own subtitle and
+`ChoosePlanAndPay.tsx`'s own UPI option copy, "credits activate
+immediately") or an admin's confirmation action. Since both test
+properties already show visit credits with nothing pending admin
+confirmation, this points to both test payments having gone through UPI
+rather than bank transfer — working as intended, not a bug — but flagged
+back to Plot to confirm which method was actually used, since I can't
+inspect the live database directly from here.

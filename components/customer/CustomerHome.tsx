@@ -110,6 +110,7 @@ export function CustomerHome({
   reservedByProperty,
   jobsByProperty,
   openRequestCountByProperty,
+  pendingPaymentByProperty,
 }: {
   firstName: string;
   maskedPhone: string | null;
@@ -118,6 +119,7 @@ export function CustomerHome({
   reservedByProperty: Record<string, number>;
   jobsByProperty: Record<string, JobRow[]>;
   openRequestCountByProperty: Record<string, number>;
+  pendingPaymentByProperty: Record<string, { amount: number | null; method: string | null; createdAt: string }>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -352,6 +354,7 @@ export function CustomerHome({
             const jobs = jobsByProperty[p.id] ?? [];
             const reserved = reservedByProperty[p.id] ?? 0;
             const openRequestCount = openRequestCountByProperty[p.id] ?? 0;
+            const pendingPayment = pendingPaymentByProperty[p.id] ?? null;
             const remaining = Math.max(totalRemainingCredits(credits) - reserved, 0);
             const totalPurchased = credits.reduce((sum, c) => sum + c.quantity_purchased, 0);
             const stage = milestoneStage(p, jobs, reserved > 0);
@@ -455,6 +458,37 @@ export function CustomerHome({
 
                   return (
                     <div style={{ background: 'var(--color-neutral-900)', color: 'var(--color-bg)', padding: 16 }}>
+                      {/* Redesign 2026-09 (follow-up, round 31) — Plot: a
+                          customer who paid by bank transfer had nothing on
+                          this card telling them the payment even went
+                          through — no credits yet (correct, since none
+                          exist until an admin confirms it — see
+                          home.data.ts) but also no acknowledgement, so it
+                          just looked like the payment vanished. UPI never
+                          reaches here (it completes immediately). Shown
+                          above the regular status line since it's separate,
+                          often-simultaneous information (a new property can
+                          be both "representative collecting documents" AND
+                          "payment awaiting confirmation" at once). */}
+                      {pendingPayment && (
+                        <div
+                          style={{
+                            background: 'rgba(255,255,255,.08)',
+                            border: '1px solid rgba(255,255,255,.25)',
+                            padding: '10px 12px',
+                            marginBottom: 12,
+                          }}
+                        >
+                          <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.7, marginBottom: 3 }}>
+                            Payment submitted
+                          </p>
+                          <p style={{ fontSize: 12.5 }}>
+                            {pendingPayment.amount ? `₹${Number(pendingPayment.amount).toLocaleString('en-IN')}` : 'Your payment'}
+                            {pendingPayment.method ? ` via ${pendingPayment.method}` : ''} is awaiting confirmation — usually within a
+                            working day.
+                          </p>
+                        </div>
+                      )}
                       {p.status === 'rejected' && p.rejection_reason ? (
                         <p style={{ fontSize: 12.5, marginBottom: 12, color: '#ffb3a3' }}>{p.rejection_reason}</p>
                       ) : (

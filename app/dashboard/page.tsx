@@ -18,6 +18,7 @@ export default async function DashboardPage() {
       reservedByProperty={data.reservedByProperty}
       jobsByProperty={data.jobsByProperty}
       openRequestCountByProperty={data.openRequestCountByProperty}
+      pendingPaymentByProperty={data.pendingPaymentByProperty}
     />
   );
 }
