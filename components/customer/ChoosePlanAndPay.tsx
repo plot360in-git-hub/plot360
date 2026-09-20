@@ -70,7 +70,7 @@ export function ChoosePlanAndPay({
         setOpening(false);
         startTransition(async () => {
           const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', transactionId);
-          if ('error' in result) setError(result.error);
+          if ('error' in result) setError(result.error ?? null);
           else
             setConfirmation({
               kind: 'reg-upi',
@@ -78,8 +78,8 @@ export function ChoosePlanAndPay({
               amount: result.amount,
               planName: result.planName,
               visitQuantity: result.visitQuantity,
-              reference: result.reference,
-              expiresAt: result.expiresAt,
+              reference: result.reference ?? '',
+              expiresAt: result.expiresAt ?? '',
             });
         });
       }, 1400);
@@ -88,7 +88,7 @@ export function ChoosePlanAndPay({
 
     startTransition(async () => {
       const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank', transactionId);
-      if ('error' in result) setError(result.error);
+      if ('error' in result) setError(result.error ?? null);
       else setConfirmation({ kind: 'reg-bank', propertyName: result.propertyName, amount: result.amount, planName: result.planName });
     });
   }

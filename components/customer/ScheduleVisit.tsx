@@ -81,7 +81,7 @@ export function ScheduleVisit({
     setError(null);
     startTransition(async () => {
       const result = await requestVisit(propertyId, toDateOnly(selectedWeek.start), toDateOnly(selectedWeek.end));
-      if ('error' in result) setError(result.error);
+      if ('error' in result) setError(result.error ?? null);
       else {
         setConfirmation({
           kind: 'sched',

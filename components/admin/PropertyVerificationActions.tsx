@@ -73,8 +73,8 @@ export function PropertyVerificationActions({
             startTransition(async () => {
               setError(null);
               const result = await verifyProperty(propertyId);
-              if ('error' in result) setError(result.error);
-              else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
+              if ('error' in result) setError(result.error ?? null);
+              else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message ?? ''));
               else router.push('/admin/queue/property-verification');
             })
           }

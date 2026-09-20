@@ -63,7 +63,7 @@ export function SubmissionReviewActions({ jobId, propertyId, propertyName }: { j
             startTransition(async () => {
               setError(null);
               const result = await approveSubmission(jobId, propertyId, remarks);
-              if ('error' in result) setError(result.error);
+              if ('error' in result) setError(result.error ?? null);
               else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
               else router.push('/admin/queue/agent-submissions');
             })

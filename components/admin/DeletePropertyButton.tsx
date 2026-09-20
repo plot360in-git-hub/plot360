@@ -39,7 +39,7 @@ export function DeletePropertyButton({ propertyId }: { propertyId: string }) {
             startTransition(async () => {
               setError(null);
               const result = await deleteProperty(propertyId);
-              if (result && 'error' in result) setError(result.error);
+              if (result && 'error' in result) setError(result.error ?? null);
               else router.push('/admin/queue/property-verification');
             })
           }

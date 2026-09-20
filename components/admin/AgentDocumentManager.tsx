@@ -40,7 +40,7 @@ export function AgentDocumentManager({
       const fd = new FormData();
       fd.set('file', file);
       const result = await uploadAgentDocumentAsAdmin(agentId, docType, fd);
-      if ('error' in result) setError(result.error);
+      if ('error' in result) setError(result.error ?? null);
       else router.refresh();
       if (inputRef.current) inputRef.current.value = '';
     });
@@ -51,7 +51,7 @@ export function AgentDocumentManager({
     setError(null);
     startTransition(async () => {
       const result = await deleteAgentDocumentAsAdmin(documentId, agentId);
-      if ('error' in result) setError(result.error);
+      if ('error' in result) setError(result.error ?? null);
       else router.refresh();
     });
   }

@@ -122,7 +122,7 @@ export function PlansTable({ plans }: { plans: any[] }) {
                   formData.set('display_order', String(draft.display_order ?? 0));
                   formData.set('visit_quantity', String(draft.visit_quantity));
                   const result = await upsertPlan(formData);
-                  if (result && 'error' in result) setError(result.error);
+                  if (result && 'error' in result) setError(result.error ?? null);
                   else {
                     setEditingId(null);
                     setDraft(null);

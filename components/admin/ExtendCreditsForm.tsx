@@ -39,7 +39,7 @@ export function ExtendCreditsForm({ propertyId, disabled }: { propertyId: string
           startTransition(async () => {
             setMessage(null);
             const result = await extendVisitCredits(propertyId, days!, reason);
-            if ('error' in result) setMessage(result.error);
+            if ('error' in result) setMessage(result.error ?? null);
             else setMessage('Extended ✓');
           })
         }

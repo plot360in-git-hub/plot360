@@ -17,7 +17,7 @@ export function ServiceRequestReplyForm({ requestId }: { requestId: string }) {
       formData.set('message', message);
       const result = await postServiceRequestMessage(requestId, formData);
       if (result && 'error' in result) {
-        setError(result.error);
+        setError(result.error ?? null);
         return;
       }
       if (alsoClose) await closeServiceRequest(requestId);

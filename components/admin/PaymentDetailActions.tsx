@@ -75,7 +75,7 @@ export function PaymentDetailActions({
               formData.set('amount', amount);
               formData.set('transaction_reference', reference);
               const result = await confirmPaymentWithLog(paymentId, propertyId, formData);
-              if ('error' in result) setError(result.error);
+              if ('error' in result) setError(result.error ?? null);
               else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
               else router.push('/admin/queue/payments');
             })

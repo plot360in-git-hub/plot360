@@ -38,7 +38,7 @@ export function AgentVerificationEditableFields({
     setError(null);
     startTransition(async () => {
       const result = await updateAgentVerificationFields(agentId, values);
-      if ('error' in result) setError(result.error);
+      if ('error' in result) setError(result.error ?? null);
       else setSaved(true);
     });
   }

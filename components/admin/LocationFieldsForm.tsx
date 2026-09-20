@@ -38,7 +38,7 @@ export function LocationFieldsForm({ property }: { property: any }) {
         startTransition(async () => {
           setError(null);
           const result = await updatePropertyLocationFields(property.id, formData);
-          if (result && 'error' in result) setError(result.error);
+          if (result && 'error' in result) setError(result.error ?? null);
           else {
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);

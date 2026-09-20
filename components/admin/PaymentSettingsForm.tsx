@@ -93,7 +93,7 @@ export function PaymentSettingsForm({ settings, qrUrl }: { settings: any; qrUrl:
               for (const [k, v] of Object.entries(draft)) formData.set(k, v as string);
               if (fileRef.current?.files?.[0]) formData.set('qr_code_image', fileRef.current.files[0]);
               const result = await updatePaymentSettings(formData);
-              if (result && 'error' in result) setError(result.error);
+              if (result && 'error' in result) setError(result.error ?? null);
               else {
                 setSavedAt(new Date().toLocaleString('en-IN'));
                 setQrPicked(false);

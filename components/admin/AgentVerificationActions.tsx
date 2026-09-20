@@ -25,7 +25,7 @@ export function AgentVerificationActions({ agentId, agentName, banned }: { agent
             startTransition(async () => {
               setError(null);
               const result = await verifyAgent(agentId);
-              if ('error' in result) setError(result.error);
+              if ('error' in result) setError(result.error ?? null);
               else router.push('/admin/queue/agent-verification');
             })
           }
@@ -65,7 +65,7 @@ export function AgentVerificationActions({ agentId, agentName, banned }: { agent
               const reason = banned ? undefined : window.prompt('Reason for disabling this agent (shown internally only):') || '';
               if (!banned && reason === null) return;
               const result = await toggleAgentBan(agentId, !banned, reason);
-              if ('error' in result) setError(result.error);
+              if ('error' in result) setError(result.error ?? null);
               else router.refresh();
             })
           }

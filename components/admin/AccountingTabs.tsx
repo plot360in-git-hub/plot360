@@ -299,12 +299,12 @@ function PayoutForm({ agent, defaultRate, onDone }: { agent: AgentRow; defaultRa
           rate,
           formData
         );
-        if (result && 'error' in result) return setError(result.error);
+        if (result && 'error' in result) return setError(result.error ?? null);
       } else {
         if (!singleJobId) return setError('Choose a visit.');
         formData.set('amount', amount);
         const result = await recordAgentPayout(agent.agentId, singleJobId, formData);
-        if (result && 'error' in result) return setError(result.error);
+        if (result && 'error' in result) return setError(result.error ?? null);
       }
       onDone();
       router.refresh();

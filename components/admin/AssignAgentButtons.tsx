@@ -61,8 +61,8 @@ export function AssignAgentButtons({
           startTransition(async () => {
             setError(null);
             const result = await assignAgentToTarget(kind, targetId, agentId);
-            if ('error' in result) setError(result.error);
-            else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
+            if ('error' in result) setError(result.error ?? null);
+            else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message ?? ''));
             else router.push('/admin/queue/job-assignment');
           })
         }
