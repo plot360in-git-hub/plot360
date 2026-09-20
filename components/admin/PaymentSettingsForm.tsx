@@ -10,6 +10,10 @@ export function PaymentSettingsForm({ settings, qrUrl }: { settings: any; qrUrl:
     bank_account_number: settings?.bank_account_number ?? '',
     bank_ifsc: settings?.bank_ifsc ?? '',
     bank_name: settings?.bank_name ?? '',
+    // Redesign 2026-09 (round 32) — Accounting: flat rate paid per
+    // completed agent visit, read by the Agent payouts tab
+    // (AccountingPage.tsx) to work out what's owed.
+    agent_visit_payout_rate: settings?.agent_visit_payout_rate != null ? String(settings.agent_visit_payout_rate) : '',
   };
   const [draft, setDraft] = useState(initial);
   const [qrPicked, setQrPicked] = useState(false);
@@ -55,6 +59,25 @@ export function PaymentSettingsForm({ settings, qrUrl }: { settings: any; qrUrl:
           <label>Bank name</label>
           <input className="input" style={{ minHeight: 38 }} value={draft.bank_name} onChange={(e) => setDraft({ ...draft, bank_name: e.target.value })} />
         </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Agent payouts</div>
+        <div className="field" style={{ marginTop: 10 }}>
+          <label>Rate per completed visit (₹)</label>
+          <input
+            className="input"
+            style={{ minHeight: 38 }}
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Not set"
+            value={draft.agent_visit_payout_rate}
+            onChange={(e) => setDraft({ ...draft, agent_visit_payout_rate: e.target.value })}
+          />
+        </div>
+        <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginTop: 8 }}>
+          Used by the Accounting page to work out what's owed to each agent for their completed visits.
+        </p>
       </div>
 
       <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 14, marginTop: 6 }}>

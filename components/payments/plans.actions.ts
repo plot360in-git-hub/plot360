@@ -126,6 +126,17 @@ export async function updatePaymentSettings(formData: FormData) {
     qrPath = path;
   }
 
+  // Redesign 2026-09 (round 32) — Accounting: the flat rate paid per
+  // completed agent visit, read by getAgentPayoutSummary (accounting.
+  // actions.ts) when totalling what's owed. Blank clears it back to
+  // "not set" rather than 0, so an unset rate reads as "no rate
+  // configured yet" instead of "agents are owed nothing".
+  const payoutRateRaw = String(formData.get('agent_visit_payout_rate') || '').trim();
+  const agentVisitPayoutRate = payoutRateRaw === '' ? null : Number(payoutRateRaw);
+  if (agentVisitPayoutRate !== null && (Number.isNaN(agentVisitPayoutRate) || agentVisitPayoutRate < 0)) {
+    return { error: 'Enter a valid agent payout rate.' };
+  }
+
   const payload = {
     upi_id: String(formData.get('upi_id') || '') || null,
     bank_account_name: String(formData.get('bank_account_name') || '') || null,
@@ -133,6 +144,7 @@ export async function updatePaymentSettings(formData: FormData) {
     bank_ifsc: String(formData.get('bank_ifsc') || '') || null,
     bank_name: String(formData.get('bank_name') || '') || null,
     qr_code_image_path: qrPath,
+    agent_visit_payout_rate: agentVisitPayoutRate,
     updated_at: new Date().toISOString(),
   };
 
@@ -142,5 +154,6 @@ export async function updatePaymentSettings(formData: FormData) {
   if (error) return { error: error.message };
 
   revalidatePath('/admin/plans');
+  revalidatePath('/admin/accounting');
   return { success: true };
 }

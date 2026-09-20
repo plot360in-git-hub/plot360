@@ -2720,3 +2720,94 @@ confirmation, this points to both test payments having gone through UPI
 rather than bank transfer — working as intended, not a bug — but flagged
 back to Plot to confirm which method was actually used, since I can't
 inspect the live database directly from here.
+
+## 49. Redesign 2026-09 (round 32) — new "Accounting" admin section:
+##     payments-received ledger + agent-payout bookkeeping
+
+Plot's question: UPI payments confirm themselves (round 31, above) while
+bank transfers wait on an admin — if a UPI payment is ever wrong (wrong
+amount, duplicate, fraud), how is the admin meant to catch and resolve
+that? And separately, there was no record anywhere of what's owed or
+already paid to agents for their completed visits, even though that's
+exactly the kind of thing the same tally would be useful for.
+
+Scoped with Plot to three decisions before building: an agent's payout is
+a **flat rate per completed (agent-approved) visit** (not tied to
+distance/property size); this is **bookkeeping only** — no real payment
+gateway or agent bank details, the admin still pays the agent outside the
+app (cash, UPI, bank transfer, whatever) and just records that it
+happened; and it lives as **one combined "Accounting" section** in the
+admin nav (owner role only, same as Plans & pricing and Users) with two
+tabs rather than two separate pages.
+
+**Payments received tab** — `getPaymentsLedger()`
+(`components/admin/accounting.actions.ts`) is a new, unfiltered read of
+the `payments` table (every status, either method) joined to
+property/customer, distinct from the existing `getPendingPayments()`/
+`getCompletedPayments()` (`components/payments/payments.actions.ts`,
+each scoped to one status for their own single-purpose screens — the
+Payments queue, the old orphaned `PaymentsOverview.tsx`) and from
+`getPaymentsQueue()` (`queues.actions.ts`, pending-only, for the
+day-to-day "needs action" queue). The ledger shows every row with its
+status as a tag, so an owner can now see a UPI payment that's already
+`completed` sitting right next to a `pending` bank transfer and tally
+both against the properties they belong to — the actual gap Plot was
+pointing at, since nothing before this let an owner see a *self-confirmed*
+UPI payment at all outside a property's own history.
+
+**Agent payouts tab** — new `agent_payouts` table (migration below):
+one row per `(agent_id, job_id)` pair, `job_id unique` so the same
+completed visit can never be marked paid twice. `getAgentPayoutSummary()`
+computes, per agent with at least one `monitoring_jobs.status = 'approved'`
+row: total approved visits, which of those jobs have no matching
+`agent_payouts` row yet ("unpaid"), and what's owed (`unpaid count × rate`)
+using a new `payment_settings.agent_visit_payout_rate` column. The rate
+is edited from the existing Plans & pricing screen
+(`PaymentSettingsForm.tsx` → `updatePaymentSettings`, same owner-gated
+action already used for the UPI/bank details customers see) rather than
+a new settings screen, since it's the same kind of admin-configured
+payment number. `recordAgentPayout` / `recordAgentPayoutBulk` insert the
+payout row(s) — a per-visit "Pay one visit" form, or a "Pay all unpaid"
+form that inserts one row per job (still individually unique/auditable)
+sharing one method/reference/paid-on-date.
+
+New files: `components/admin/accounting.actions.ts`,
+`components/admin/AccountingPage.tsx`, `components/admin/AccountingTabs.tsx`,
+`app/admin/accounting/page.tsx`. Nav entry added to `AdminShell.tsx`'s
+`NAV` (`ownerOnly: true`, same as Plans & pricing/Users). RLS on
+`agent_payouts` is owner-only end to end (`is_owner_admin()`, the same
+function already gating `subscription_plans`/`payment_settings` writes)
+— this is internal financial data, not something an operations-role
+admin or an agent needs to see.
+
+**Migration to run against the live database** (idempotent — safe to run
+even if part of it was already applied):
+
+```sql
+alter table payment_settings add column if not exists agent_visit_payout_rate numeric;
+
+create table if not exists agent_payouts (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid not null references agent_profiles(id),
+  job_id uuid not null references monitoring_jobs(id),
+  amount numeric not null,
+  payment_method text,
+  reference text,
+  notes text,
+  paid_at date not null default current_date,
+  recorded_by uuid references profiles(id),
+  created_at timestamptz not null default now(),
+  unique (job_id)
+);
+
+create index if not exists idx_agent_payouts_agent on agent_payouts(agent_id);
+
+alter table agent_payouts enable row level security;
+
+drop policy if exists "agent_payouts_all_owner" on agent_payouts;
+create policy "agent_payouts_all_owner" on agent_payouts for all using (is_owner_admin()) with check (is_owner_admin());
+```
+
+This is the same block now appended to `supabase/schema.sql` — running it
+directly in the Supabase SQL editor is the fastest path since I have no
+live DB access from here.

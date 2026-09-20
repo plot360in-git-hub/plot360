@@ -28,6 +28,10 @@ const NAV: { id: string; label: string; href: string; ownerOnly?: boolean }[] = 
   { id: 'qPayments', label: 'Payments', href: '/admin/queue/payments' },
   { id: 'plans', label: 'Plans & pricing', href: '/admin/plans', ownerOnly: true },
   { id: 'users', label: 'Users', href: '/admin/users', ownerOnly: true },
+  // Redesign 2026-09 (round 32) — payments-received ledger + agent-payout
+  // bookkeeping, see app/admin/accounting/page.tsx. Owner-only like Plans
+  // & pricing and Users — this is internal financial data.
+  { id: 'accounting', label: 'Accounting', href: '/admin/accounting', ownerOnly: true },
 ];
 
 const TILE_BADGE: Record<string, string> = {

@@ -1425,4 +1425,47 @@ create policy "payment_info_admin_write" on storage.objects for all
 -- 'pending' (still awaiting resolution) but carries a visible reason.
 alter table payments add column if not exists mismatch_reason text;
 alter table payments add column if not exists mismatch_flagged_at timestamptz;
+
+-- ---------- Redesign 2026-09 (round 32) — Accounting ----------
+-- Plot: UPI payments self-confirm (purchaseVisitCredits' 'upi' branch,
+-- visitCredits.actions.ts) while bank transfers wait on an admin
+-- (recordPayment, payments.actions.ts) — if a UPI payment is ever wrong
+-- (wrong amount, duplicate, fraud) there was no single place for the
+-- owner to see every payment (both methods, every status) side by side
+-- to tally against properties, nor any record of what's owed/paid to
+-- agents for their completed visits. This adds a bookkeeping-only
+-- "Accounting" admin section (owner role only, same as Plans & pricing
+-- and Users): a payments-received ledger (reusing the existing
+-- `payments` table — see components/admin/accounting.actions.ts,
+-- getPaymentsLedger) plus a new agent-payouts record. Per Plot's
+-- decision: payout is a flat rate per completed (agent-approved) visit,
+-- this is bookkeeping only (the admin still pays the agent outside the
+-- app — bank transfer, cash, UPI, whatever — and just records it here
+-- with an amount/method/reference), and it's paid per monitoring job so
+-- double-paying the same visit is impossible (job_id is unique below).
+alter table payment_settings add column if not exists agent_visit_payout_rate numeric;
+
+create table if not exists agent_payouts (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid not null references agent_profiles(id),
+  job_id uuid not null references monitoring_jobs(id),
+  amount numeric not null,
+  payment_method text,
+  reference text,
+  notes text,
+  paid_at date not null default current_date,
+  recorded_by uuid references profiles(id),
+  created_at timestamptz not null default now(),
+  unique (job_id)
+);
+
+create index if not exists idx_agent_payouts_agent on agent_payouts(agent_id);
+
+alter table agent_payouts enable row level security;
+
+-- Owner-only end to end (like Plans & pricing / Users) — this is
+-- internal bookkeeping, not something operations-role admins or agents
+-- need to see or touch.
+drop policy if exists "agent_payouts_all_owner" on agent_payouts;
+create policy "agent_payouts_all_owner" on agent_payouts for all using (is_owner_admin()) with check (is_owner_admin());
 alter table payments add column if not exists mismatch_flagged_by uuid references profiles(id);
