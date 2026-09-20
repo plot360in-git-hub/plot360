@@ -3,6 +3,7 @@ import fontkit from '@pdf-lib/fontkit';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions';
+import { DISPLAY_PHONE, SUPPORT_EMAIL } from '@/lib/contact';
 
 // Redesign 2026-09 — the 4-page A4 visit report (design_handoff_
 // plot360_redesign, "Report-A-Record.dc.html"), generated server-side.
@@ -346,7 +347,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
   page1.drawRectangle({ x: 0, y: PAGE_H - mastheadH, width: PAGE_W, height: mastheadH, color: ACCENT });
   page1.drawText('PLOT360', { x: MARGIN_X, y: PAGE_H - 40, size: 21, font: fonts.bold, color: WHITE });
   page1.drawText('SITE VISIT RECORD', { x: MARGIN_X, y: PAGE_H - 55, size: 8, font: fonts.regular, color: WHITE });
-  const contactLines = ['plot360.in', 'WhatsApp +91 90000 36000', 'Phone +91 90000 36000', 'support@plot360.in'];
+  const contactLines = ['plot360.in', `WhatsApp ${DISPLAY_PHONE}`, `Phone ${DISPLAY_PHONE}`, SUPPORT_EMAIL];
   contactLines.forEach((line, i) => {
     const w = fonts.regular.widthOfTextAtSize(line, 7.5);
     page1.drawText(line, { x: PAGE_W - MARGIN_X - w, y: PAGE_H - 32 - i * 10.5, size: 7.5, font: fonts.regular, color: WHITE });
@@ -496,7 +497,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     });
   }
 
-  drawFooter(page2, fonts, 'plot360.in · WhatsApp +91 90000 36000', 2, includeEcPage ? 4 : 3);
+  drawFooter(page2, fonts, `plot360.in · WhatsApp ${DISPLAY_PHONE}`, 2, includeEcPage ? 4 : 3);
 
   // ---------------- Page 3 — photographs ----------------
   const page3 = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -644,7 +645,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
       'Plot360 is not a real estate broker, agent, valuer, surveyor or title-verification authority. This report records what a Plot360 field agent observed on the ground on the date stated, and reproduces the encumbrance certificate as issued; it does not verify ownership, title, encumbrances or the legal status of the property beyond the authorisation documents collected from the customer, and it is not legal advice. Photographs and videos are unedited and timestamped at capture. For an opinion on title or on the entries in the certificate, consult an advocate. Full terms at plot360.in/legal/terms-of-use.';
     drawParagraph(page4, disclaimer, { x: MARGIN_X, y: discTop - 28, size: 7.5, font: fonts.regular, color: INK_SOFT, maxWidth: contentWidth, lineHeight: 10.5 });
 
-    drawFooter(page4, fonts, 'Questions? WhatsApp +91 90000 36000 · plot360.in', 4, 4);
+    drawFooter(page4, fonts, `Questions? WhatsApp ${DISPLAY_PHONE} · plot360.in`, 4, 4);
 
     // Raw appended EC PDF pages (only when the EC was itself a PDF)
     // intentionally carry no Plot360 chrome/footer — they're the
