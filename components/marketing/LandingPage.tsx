@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Archivo } from 'next/font/google';
 import { submitEnquiry } from './enquiries.actions';
 import { WA_LINK, TEL_LINK, DISPLAY_PHONE, SUPPORT_EMAIL } from '@/lib/contact';
 
@@ -13,12 +12,12 @@ import { WA_LINK, TEL_LINK, DISPLAY_PHONE, SUPPORT_EMAIL } from '@/lib/contact';
 // etc.). See ARCHITECTURE.md "Redesign 2026-09" for the mapping notes.
 // Contact placeholders (WhatsApp/phone/email) live in lib/contact.ts —
 // shared with the customer app's confirmation screens.
-const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '600', '800'],
-  variable: '--p360-font-archivo',
-  display: 'swap',
-});
+//
+// Redesign 2026-09 (round 33) — Archivo now loads once, globally, from
+// app/layout.tsx (see that file's note) rather than here — every other
+// `.p360` screen needs it too, not just this page. This page's own
+// wrapper below no longer needs to set the `--p360-font-archivo`
+// variable itself, only the `.p360` class.
 
 // Plot asked for "How it works" to come before "Services", both in the
 // page order and in this top menu, so the two stay in sync.
@@ -165,7 +164,7 @@ export function LandingPage() {
   }
 
   return (
-    <div className={`p360 ${archivo.variable}`}>
+    <div className="p360">
       {/* ---------- Header ---------- */}
       <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--color-bg)', borderBottom: '2px solid var(--color-divider)' }}>
         <div style={{ maxWidth: 1180, margin: '0 auto', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minHeight: 56 }}>

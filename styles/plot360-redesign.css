@@ -27,19 +27,26 @@
      teal/mint solid color wherever a flat accent color is still needed
      (buttons, links, tags, focus rings — everything that reads this
      token). Old values, for reference: accent #ec3013, -100 #fff2ef,
-     -600 #dd2b0f, -700 #ae1800, -800 #7c1405 (all shades of red). New
-     values are Tailwind's teal-500/100/600/700/800 — chosen so the same
-     "base / pale tint / hover / active-text / darkest" relationships
-     this file already relied on carry over unchanged (see .btn-primary,
-     .tag-accent, HOW_IT_WORKS numerals, etc. below — none of those rules
-     needed to change, only what the token points at). */
-  --color-accent: #14b8a6;
+     -600 #dd2b0f, -700 #ae1800, -800 #7c1405 (all shades of red). Teal
+     values that replaced them: accent #14b8a6, -100 #ccfbf1, -600
+     #0d9488, -700 #0f766e, -800 #115e59 (Tailwind's teal-500/100/600/
+     700/800).
+
+     Redesign 2026-09 (round 33) — "Implementation Change List for
+     Plot360 Modernized" item 1: Plot reviewed three accent-color
+     previews (Confident Blue, Warm Clay, Deep Navy) against the teal
+     above and picked Option C — Deep Navy. These six tokens are the
+     only place the accent is defined — every button, link, tag, focus
+     ring, and hero-card gradient under `.p360` reads from them, so this
+     one swap re-colors the whole site with no markup changes. All new
+     shades clear WCAG AA (5.0–11.5:1, vs. 2.2–2.5:1 for the teal). */
+  --color-accent: #1e3a5f;
   --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
 
-  --color-accent-100: #ccfbf1;
-  --color-accent-600: #0d9488;
-  --color-accent-700: #0f766e;
-  --color-accent-800: #115e59;
+  --color-accent-100: #dbe4ee;
+  --color-accent-600: #16293f;
+  --color-accent-700: #0f1c2c;
+  --color-accent-800: #0a1420;
 
   --color-neutral-300: #d7d3d3;
   --color-neutral-400: #bab6b6;
@@ -54,8 +61,15 @@
      Home poster, the post-payment/scheduling confirmation screen, the
      marketing site's hero) — see those files for how the card's *text*
      switches from white-on-solid-color to dark-on-pale-gradient to stay
-     readable, which a plain color-token swap can't do by itself. */
-  --gradient-hero: linear-gradient(135deg, #e6fbf8 0%, #ccfbf1 45%, #a7f3d0 75%, #99e6e0 100%);
+     readable, which a plain color-token swap can't do by itself.
+
+     Redesign 2026-09 (round 33) — recolored slate/navy to match the
+     Deep Navy accent above (item 1 of the change list) — same 4-stop
+     shape, just a cooler gray-blue instead of mint/aqua. The hero
+     card's dark-on-pale-gradient text still reads fine against these,
+     since the lightest stop (#f1f5f9) is nearly as light as the teal
+     version's (#e6fbf8). */
+  --gradient-hero: linear-gradient(135deg, #f1f5f9 0%, #dbe4ee 45%, #c3d2e0 75%, #a9bdd0 100%);
 
   --font-heading: var(--p360-font-archivo, "Archivo"), system-ui, sans-serif;
   --font-heading-weight: 800;

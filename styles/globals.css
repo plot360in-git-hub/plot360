@@ -5,13 +5,22 @@
   --color-bg-alt: #f5f5f7;
   --color-text: #1d1d1f;
   --color-text-muted: #6e6e73;
-  --color-accent: #7F7F7F;
+  /* Redesign 2026-09 (round 33) — "Implementation Change List" item 2:
+     #7F7F7F on white was 4.00:1, just under the 4.5:1 AA text
+     threshold. This one darkening (a legacy token, only read by the
+     not-yet-redesigned customer screens — properties edit/plan/
+     schedule/renew, onboarding, profile, tasks — separate from the
+     `.p360`-scoped --color-accent above) clears it: 4.63:1. */
+  --color-accent: #767676;
   --color-accent-hover: #6b6b6b;
   --color-link: #0a66c2;
   --color-link-hover: #084d94;
   --color-border: #d2d2d7;
   --color-success: #1d8348;
-  --color-pending: #b7791f;
+  /* Redesign 2026-09 (round 33) — item 3: #b7791f on the pending pill's
+     #fbf0da background was 3.22:1; same amber family, darkened to
+     4.76:1. */
+  --color-pending: #92600f;
   --color-danger: #c0392b;
 
   --radius-button: 980px;

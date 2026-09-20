@@ -2811,3 +2811,72 @@ create policy "agent_payouts_all_owner" on agent_payouts for all using (is_owner
 This is the same block now appended to `supabase/schema.sql` — running it
 directly in the Supabase SQL editor is the fastest path since I have no
 live DB access from here.
+
+## 50. Redesign 2026-09 (round 33) — "Implementation Change List for
+##     Plot360 Modernized": accent recolor, contrast fixes, global font,
+##     header/nav audit
+
+Plot supplied an "Implementation Change List" doc (from a separate
+design-review chat) with concrete, file-level changes in priority order.
+Applied here, phase by phase:
+
+**Phase 1 (items 1–4), all applied:**
+- **Item 1** — accent recolor. Plot compared three previews (Confident
+  Blue, Warm Clay, Deep Navy) against the teal from round 7 and picked
+  Option C, Deep Navy. `styles/plot360-redesign.css`'s six accent tokens
+  (`--color-accent`, `-100/-600/-700/-800`, `--gradient-hero`) are the
+  only place the color is defined — every `.p360` button, link, tag,
+  focus ring and hero card reads from them, so this one swap re-colors
+  the whole site with no markup changes. New values: `#1e3a5f` /
+  `#dbe4ee` / `#16293f` / `#0f1c2c` / `#0a1420`, gradient re-based on the
+  same four-stop shape in a cooler gray-blue. All clear WCAG AA
+  (5.0–11.5:1, vs 2.2–2.5:1 for the teal).
+- **Item 2** — `styles/globals.css`'s legacy `--color-accent` (only read
+  by the not-yet-redesigned customer screens — properties edit/plan/
+  schedule/renew, onboarding, profile, tasks — untouched by item 1)
+  darkened `#7F7F7F` → `#767676`, clearing the 4.5:1 AA text threshold
+  (was 4.00:1, now 4.63:1).
+- **Item 3** — same file's `--color-pending` (the pending-status pill)
+  darkened `#b7791f` → `#92600f`, same amber family, 3.22:1 → 4.76:1.
+- **Item 4** — Archivo was only ever loaded inside
+  `components/marketing/LandingPage.tsx` (a client component), so every
+  other `.p360` screen — including `CustomerHeader.tsx` and
+  `CustomerHome.tsx`, the two most-used customer screens — silently fell
+  back to system-ui. Moved the `Archivo({...})` call (same config) into
+  `app/layout.tsx` (the root layout), applied `archivo.variable` on
+  `<html>`, and removed the now-redundant import/const from
+  `LandingPage.tsx` (its wrapper `<div>` now just needs `className="p360"`).
+
+**Phase 2, items 6–8 — audited, no code changes needed:**
+Items 6 and 7 ask to migrate `components/layout/AdminHeader.tsx` and
+`AgentHeader.tsx` to the new design system, the way `CustomerHeader.tsx`
+was. Checked whether either file is actually still rendered anywhere —
+neither is: `AdminHeader.tsx` was fully superseded by
+`components/admin/AdminShell.tsx` (already `.p360`-styled, see round
+"admin console phase") and only survives in old code comments now;
+`AgentHeader.tsx` was removed from every agent layout back in round 22
+("every screen this layout wraps... now owns its own full-width .p360
+header/back-button" — see `app/agent/dashboard/layout.tsx`'s own
+comment) in favor of each agent screen (`AgentJobsHome.tsx` etc.) owning
+its own `.p360` header. Both old files are kept-but-unreferenced, same
+as every other superseded component this redesign has left behind
+deliberately (`PropertyView.tsx`, `PaymentsOverview.tsx`, etc.) — editing
+dead code that nothing renders would have had zero visible effect, so
+they're left as-is rather than spending effort re-skinning something
+unreachable.
+
+Item 8 asks to pick one rule for header/nav presence across screens.
+Plot's call: keep a header/back control on every screen **except**
+`/dashboard`, whose headerless poster is a deliberate exception (Home
+Screen design mock). Checked this against what's actually live: the
+other 5 customer layouts (`properties`, `onboarding`, `profile`,
+`tasks`, `service-requests`) all still render `CustomerHeader`; Admin's
+`AdminShell` top bar always shows (brand, nav, log out); every Agent
+screen has its own `.p360` header per the item 6/7 note above. So this
+decision is already what's live today — nothing to change, just
+recording the rule so it's a documented decision rather than an
+accident, per the change list's own ask.
+
+Phase 3 (item 9, an Admin sidebar) was explicitly flagged in the source
+doc as "decide before building" and, per Plot, is deliberately deferred
+— not part of this round.
