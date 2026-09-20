@@ -2965,3 +2965,46 @@ access** — full instructions are in `public/fonts/README.md`:
 
 No further code change needed after that — the next visit report
 generated will pick the files up automatically.
+
+## 53. Redesign 2026-09 (round 36) — /admin/login still showed the old
+##     pre-redesign look
+
+Plot flagged this by screenshot: landing on `/admin/login` dropped back
+into a white card with a grey pill button and system-ui text, unlike
+every other admin screen. Root cause — `app/admin/layout.tsx` only
+wraps children in `AdminShell` (the `.p360`-scoped shell) once there's a
+real signed-in admin; the login page renders while logged out, so it
+never got that wrapper, and `AdminLoginForm.tsx` itself had never been
+migrated off the pre-redesign `.card`/`.field-label`/`.btn-primary`
+classes (from `styles/globals.css`) the way `AgentLoginForm.tsx` (the
+equivalent agent screen) already had been. Rebuilt it on that same
+pattern — `.p360` wrapper, `PLOT360 · Admin` wordmark, `.field`/`.input`/
+`.btn` classes — minus the OAuth buttons and "New agent? Register"
+footer that pattern also has, since admin has neither. Also dropped
+`app/admin/login/page.tsx`'s leftover `container-narrow` wrapper div,
+same fix as round 13 already made to `/admin/[id]/ownership` for the
+same reason (a legacy wrapper fighting the form's own full-page `.p360`
+layout).
+
+**Audited every other admin route while at it, since the report said
+"pages" (plural):** every route actually reachable from the current
+admin nav or from a queue row — the dashboard, all six `/admin/queue/*`
+screens, Plans & pricing, Users, Accounting, and every queue's detail
+screen (`/admin/[id]`, `/admin/assign/[kind]/[id]`,
+`/admin/monitoring/[jobId]`, `/admin/agents/[id]`,
+`/admin/service-requests/[id]`, `/admin/payments/[id]`,
+`/admin/[id]/ownership`) — is already on the new design system; most of
+them don't even need their own `.p360` class since they render inside
+`AdminShell`'s already-`.p360`-scoped wrapper and just read
+`var(--color-...)` tokens directly (see `AdminDashboard.tsx` for the
+pattern). The only other admin pages still in the old style —
+`/admin/payments`, `/admin/agents`, `/admin/monitoring`,
+`/admin/renewals`, `/admin/service-requests` (the plain list, not the
+`[id]` detail screen), and `/admin/[id]/edit` — are all pre-redesign
+pages that were deliberately superseded and left unlinked from any live
+navigation (the dead `AdminHeader.tsx`/`AdminReview.tsx` are the only
+things that still link to them — see round 33 §50 and the standing note
+in `app/admin/[id]/ownership/page.tsx` about `/admin/[id]/edit`
+specifically), so per this redesign's own "don't rewrite without
+asking, leave superseded pages as unreferenced legacy" convention they
+were left as-is rather than restyled.
