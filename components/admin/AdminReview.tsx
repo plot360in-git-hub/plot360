@@ -85,7 +85,17 @@ export async function AdminReview({ propertyId }: { propertyId: string }) {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3>Documents</h3>
-          <Link href={`/admin/${property.id}/documents`} style={{ color: 'var(--color-link)', fontSize: 14 }}>
+          {/* Redesign 2026-09 (2026-09-22) — was `/admin/${property.id}/documents`,
+              a separate Documents step. That screen (and its
+              saveDocumentsAndSubmit action) was retired when saveOwnership
+              became the single final step of registration (see its own
+              comment in registration.actions.ts) — title deed uploads now
+              live on the Ownership screen. The three leftover files for the
+              old screen had never been deleted from disk, so an unrelated
+              git cleanup accidentally resurrected them into a commit and
+              broke the production build (missing saveDocumentsAndSubmit
+              export); removed them and repointed this link here. */}
+          <Link href={`/admin/${property.id}/ownership`} style={{ color: 'var(--color-link)', fontSize: 14 }}>
             Edit documents
           </Link>
         </div>
