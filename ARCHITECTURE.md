@@ -3039,3 +3039,75 @@ flex row (`styles/plot360-redesign.css`), so this was just adding the
 icon element and a `gap: 10` — no layout rework needed. WhatsApp only
 appears on the customer screen (agents don't have a WhatsApp OTP
 option), so only `AuthScreen.tsx` imports that one icon.
+
+## 55. Redesign 2026-09 (2026-09-22) — placeholder support number, and
+##     four customer-app bugs from live UAT screenshots
+
+**Support number.** `lib/contact.ts` held the redesign's own launch
+placeholder (`+91 90000 36000`), explicitly flagged in its own comment
+as "swap before launch." Updated to the real number (`+91 95732
+90679`); also had `lib/pdf/visitReportPdf.ts` import `DISPLAY_PHONE`/
+`SUPPORT_EMAIL` from `lib/contact.ts` instead of duplicating the digits
+as three separate hardcoded strings in the PDF footer — one place to
+change next time.
+
+**Four bugs Plot found testing the live UAT deployment, each traced to
+its actual root cause rather than patched at the symptom:**
+
+1. *Payment/plan screen text running off the edge on mobile.*
+   `ChoosePlanAndPay.tsx`'s plan-card title row (plan name + "% off"
+   tag) was a `display:flex, justifyContent:space-between` row with no
+   `flexWrap` — a nowrap flex row never shrinks below its content's
+   natural width, so a long plan name ("1 Visit + install "Monitored by
+   Plot360" signboard") next to the discount tag forced the row — and
+   with it the whole card — wider than the viewport. Fixed with
+   `flexWrap: 'wrap'` on the row and `minWidth: 0` on the name so it
+   wraps onto its own line instead of overflowing; also made the card's
+   own `width: '100%'`/`boxSizing: 'border-box'` explicit rather than
+   relying on the flex-column stretch default.
+
+2. *"P-C55B"-style property code shown to customers.* This was always
+   cosmetic flavor text standing in for the design mock's "P-1042" —
+   never a real registration number, but it read like one. Plot asked
+   for it gone; dropped from the location line on both
+   `PropertyVisitHistory.tsx` and `VisitReportView.tsx` (same
+   `P-<first 4 of id>` pattern in both).
+
+3. *Dashboard service-request badge stale until a hard refresh.*
+   `createServiceRequest` (`service-requests.actions.ts`) had **no
+   `revalidatePath` call at all** — so after submitting a new request,
+   every cached copy of `CustomerHeader.tsx`'s open-count badge (it's
+   duplicated across six independent top-level layouts — dashboard,
+   tasks, profile, properties, service-requests, onboarding — plus a
+   few property sub-pages that render it directly, rather than one
+   shared layout) kept showing its last-rendered count until something
+   else forced a revalidation. Added `revalidateServiceRequestSurfaces()`,
+   called from both `createServiceRequest` and `closeServiceRequest`,
+   which revalidates all six top-level paths with type `'layout'` (so
+   nested dynamic routes under them are covered too). Separately found
+   and fixed while in there: `getMyOpenServiceRequestCount()` had no
+   `customer_id` filter — despite its name, it was counting every
+   customer's open requests platform-wide, not just the signed-in
+   customer's own.
+
+4. *Blank box beside the property name on the dashboard card.* Two
+   separate causes bundled into one complaint: (a) the 92×68 thumbnail
+   next to each property's name (`CustomerHome.tsx`) was a permanently
+   empty placeholder `<div>`, never wired to a real photo — the same
+   gap round 27 already fixed on `PropertyVisitHistory.tsx`'s larger
+   site-photo header. `home.data.ts` now fetches the first photo from
+   each property's latest completed visit (same `monitoring_media` +
+   signed-URL pattern) and `CustomerHome.tsx` renders it when present —
+   still correctly blank for a property with no completed visits yet,
+   which is a real empty state, not a bug. (b) The address line below
+   the name only ever checked `street_address`, so a property with
+   `village_town`/`district` filled in by an admin during verification
+   but `street_address` still blank kept showing "No address yet" even
+   though real location info existed — `propertyLocationLine()` now
+   falls back through village/district/plot size, matching the same
+   fallback chain `PropertyVisitHistory.tsx` already used. Separately
+   confirmed with the quick-registration flow (`RegisterQuick.tsx`,
+   "Only the name is required... a representative will collect it on
+   WhatsApp") that "No address yet" on a freshly-registered property
+   with genuinely nothing filled in yet is correct, intended behavior —
+   not a bug on its own.

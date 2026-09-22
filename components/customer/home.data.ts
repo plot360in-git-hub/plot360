@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { getVisitCreditsForProperties, getReservedCreditCounts } from '@/components/payments/visitCredits.actions';
+import { getMonitoringMediaDownloadUrl } from '@/components/properties/monitoring/monitoring.actions';
 
 // Redesign 2026-09 — data for the new customer Home screen
 // (components/customer/CustomerHome.tsx). Deliberately a new loader
@@ -14,7 +15,11 @@ export async function getCustomerHomeData() {
     supabase.from('profiles').select('*').eq('id', userData.user.id).single(),
     supabase
       .from('properties')
-      .select('id, property_name, status, registration_date, street_address, expiration_date, rejection_reason')
+      // village_town/district/plot_size added (follow-up, 2026-09-22) — see
+      // the "No address yet" fallback note below.
+      .select(
+        'id, property_name, status, registration_date, street_address, village_town, district, plot_size, plot_size_unit, expiration_date, rejection_reason'
+      )
       .eq('owner_id', userData.user.id)
       .order('created_at', { ascending: false }),
   ]);
@@ -72,6 +77,43 @@ export async function getCustomerHomeData() {
     (jobsByProperty[job.property_id] ??= []).push(job);
   }
 
+  // Redesign 2026-09 (follow-up, 2026-09-22) — Plot: the thumbnail beside
+  // each property's name on this card was a permanently blank grey box —
+  // never wired to a real photo, same issue round 27 already fixed on
+  // PropertyVisitHistory.tsx's larger site-photo header. Same fix here:
+  // pull the first approved photo from each property's latest completed
+  // visit when one exists (monitoringJobs above is ordered oldest-first,
+  // so the last completed entry per property is the most recent).
+  const latestCompletedJobIdByProperty: Record<string, string> = {};
+  for (const [propId, propJobs] of Object.entries(jobsByProperty)) {
+    for (let i = propJobs.length - 1; i >= 0; i--) {
+      if (['approved', 'ec_pending'].includes(propJobs[i].status)) {
+        latestCompletedJobIdByProperty[propId] = propJobs[i].id;
+        break;
+      }
+    }
+  }
+  const completedJobIds = Object.values(latestCompletedJobIdByProperty);
+  const photoUrlByProperty: Record<string, string | null> = {};
+  if (completedJobIds.length > 0) {
+    const { data: photoRows } = await supabase
+      .from('monitoring_media')
+      .select('job_id, file_path')
+      .in('job_id', completedJobIds)
+      .eq('media_type', 'photo')
+      .order('uploaded_at', { ascending: true });
+    const firstPhotoPathByJob: Record<string, string> = {};
+    for (const row of photoRows ?? []) {
+      if (!firstPhotoPathByJob[row.job_id]) firstPhotoPathByJob[row.job_id] = row.file_path;
+    }
+    await Promise.all(
+      Object.entries(latestCompletedJobIdByProperty).map(async ([propId, jobId]) => {
+        const filePath = firstPhotoPathByJob[jobId];
+        photoUrlByProperty[propId] = filePath ? await getMonitoringMediaDownloadUrl(filePath) : null;
+      })
+    );
+  }
+
   const openRequestCountByProperty: Record<string, number> = {};
   for (const r of openVisitRequests ?? []) {
     openRequestCountByProperty[r.property_id] = (openRequestCountByProperty[r.property_id] ?? 0) + 1;
@@ -94,6 +136,7 @@ export async function getCustomerHomeData() {
     jobsByProperty,
     openRequestCountByProperty,
     pendingPaymentByProperty,
+    photoUrlByProperty,
   };
 }
 

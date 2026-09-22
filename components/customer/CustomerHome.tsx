@@ -14,8 +14,28 @@ type PropertyRow = {
   status: 'pending' | 'verified' | 'rejected';
   registration_date: string | null;
   street_address: string | null;
+  village_town?: string | null;
+  district?: string | null;
+  plot_size?: number | null;
+  plot_size_unit?: string | null;
   rejection_reason: string | null;
 };
+
+// Redesign 2026-09 (follow-up, 2026-09-22) — Plot: "why is there blank
+// beside the name" on this card's address line. street_address is only
+// one of several location fields a representative can fill in during
+// verification (see admin's LocationFieldsForm.tsx) — a property with
+// village_town/district filled but street_address still blank was
+// showing "No address yet" even though real location info existed.
+// Falls back through village_town → district → plot size before
+// admitting there's really nothing yet.
+function propertyLocationLine(p: PropertyRow): string {
+  if (p.street_address) return p.street_address;
+  if (p.village_town) return p.village_town;
+  if (p.district) return p.district;
+  if (p.plot_size) return `${p.plot_size} ${p.plot_size_unit || 'sq yd'}`;
+  return 'No address yet';
+}
 
 type JobRow = { id: string; status: string; visit_number: number | null; decided_at?: string | null };
 
@@ -111,6 +131,7 @@ export function CustomerHome({
   jobsByProperty,
   openRequestCountByProperty,
   pendingPaymentByProperty,
+  photoUrlByProperty,
 }: {
   firstName: string;
   maskedPhone: string | null;
@@ -120,6 +141,7 @@ export function CustomerHome({
   jobsByProperty: Record<string, JobRow[]>;
   openRequestCountByProperty: Record<string, number>;
   pendingPaymentByProperty: Record<string, { amount: number | null; method: string | null; createdAt: string }>;
+  photoUrlByProperty?: Record<string, string | null>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -401,11 +423,28 @@ export function CustomerHome({
                   }}
                 >
                   <div style={{ display: 'flex', gap: 12 }}>
-                    <div style={{ width: 92, height: 68, background: 'var(--color-surface)', flexShrink: 0 }} />
+                    {/* Redesign 2026-09 (follow-up, 2026-09-22) — Plot: this
+                        box was a permanently blank placeholder, never wired
+                        to a real photo (same gap round 27 already fixed on
+                        PropertyVisitHistory.tsx). Now shows the first photo
+                        from the property's latest completed visit when one
+                        exists; still a plain empty box for a property with
+                        no completed visits yet — that's a correct empty
+                        state, not a bug, since there's no photo to show. */}
+                    {photoUrlByProperty?.[p.id] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photoUrlByProperty[p.id]!}
+                        alt=""
+                        style={{ width: 92, height: 68, objectFit: 'cover', flexShrink: 0, background: 'var(--color-surface)' }}
+                      />
+                    ) : (
+                      <div style={{ width: 92, height: 68, background: 'var(--color-surface)', flexShrink: 0 }} />
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <h3 style={{ fontSize: 15.5, marginBottom: 4 }}>{p.property_name}</h3>
                       <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginBottom: 10 }}>
-                        {p.street_address || 'No address yet'}
+                        {propertyLocationLine(p)}
                       </p>
                       {/* Redesign 2026-09 (follow-up, round 6) — the mock
                           (design/Plot360 Customer.dc.html, lines ~157-163)

@@ -31,11 +31,7 @@ const VISIT_STATUS_LABEL: Record<string, string> = {
 // re-render the old PropertyView/MonitoringStatus components — those stay
 // kept but unused, per the redesign's "don't remove existing code" rule.
 //
-// Two honest substitutions for data the schema doesn't have:
-//  - The mock's "P-1042" property code is cosmetic flavor text in the mock
-//    itself, not a real field anywhere in this schema — shown here as
-//    P-<first 4 of the property's id>, clearly a display-only shorthand,
-//    not an actual registration number.
+// One honest substitution for data the schema doesn't have:
 //  - The mock's per-visit note ("Boundary intact. Grass overgrown...") is
 //    real content coming from the agent's own submitted
 //    monitoring_jobs.observations for a completed visit, or
@@ -48,6 +44,12 @@ const VISIT_STATUS_LABEL: Record<string, string> = {
 // grey. Now pulls the first approved photo from the property's latest
 // completed visit (monitoring_media, same signed-URL helper the report
 // screens use) and shows the plain placeholder only when none exists.
+//
+// Redesign 2026-09 (2026-09-22) — Plot asked for the "P-<code>" shorthand
+// (e.g. "P-C55B") to not be shown at all — it read like a real
+// registration/reference number rather than the display-only cosmetic
+// stand-in for the mock's "P-1042" it actually was. Dropped from the
+// location line here and on VisitReportView.tsx (same pattern).
 export async function PropertyVisitHistory({ propertyId }: { propertyId: string }) {
   const supabase = await createClient();
   const [{ data: property }, credits, { data: jobs }, reservedCounts] = await Promise.all([
@@ -72,7 +74,6 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
   const stage = milestoneStage(property, allJobs, reserved > 0);
   const completedCount = allJobs.filter((j) => ['approved', 'ec_pending'].includes(j.status)).length;
   const latestVisitNumber = allJobs[0]?.visit_number ?? null;
-  const shortCode = `P-${propertyId.slice(0, 4).toUpperCase()}`;
 
   // allJobs is already ordered newest-first (by assigned_at), so the first
   // one with a completed status is the latest visit that has real photos.
@@ -93,7 +94,7 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
   }
   const sitePhotoVisitNumber = latestCompletedJob?.visit_number ?? latestVisitNumber;
 
-  const locationParts = [property.village_town || property.district, property.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null, shortCode].filter(
+  const locationParts = [property.village_town || property.district, property.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null].filter(
     Boolean
   );
 

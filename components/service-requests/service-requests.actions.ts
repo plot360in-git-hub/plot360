@@ -9,12 +9,40 @@ async function getSenderRole(supabase: any, userId: string) {
   return profile?.is_admin ? 'admin' : 'customer';
 }
 
+// Redesign 2026-09 (follow-up) — Plot: "Customer dashboard auto refresh
+// is not working — showed 1 open request when there were really 2, and
+// only a manual page refresh caught up." CustomerHeader.tsx (the open-
+// request badge) is duplicated across six independent top-level layouts
+// (dashboard, tasks, profile, properties, service-requests, onboarding —
+// plus a few property sub-pages that render it directly), and
+// createServiceRequest below had NO revalidatePath call at all — so
+// every one of those cached layouts kept showing whatever count they'd
+// last rendered until something else (or a hard reload) happened to
+// revalidate them. 'layout' (not the default 'page') so a nested dynamic
+// route under one of these — e.g. /properties/[id]/subscribe — is
+// covered too, not just the top-level route itself.
+function revalidateServiceRequestSurfaces() {
+  for (const p of ['/dashboard', '/tasks', '/profile', '/properties', '/service-requests', '/onboarding']) {
+    revalidatePath(p, 'layout');
+  }
+}
+
 export async function getMyOpenServiceRequestCount() {
   const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return 0;
+  // Redesign 2026-09 (follow-up) — this was missing the customer_id
+  // filter its name promises, so it silently counted every customer's
+  // open requests platform-wide, not just the signed-in customer's own —
+  // not the bug Plot reported (that was a stale-cache issue, fixed above
+  // with revalidateServiceRequestSurfaces), but found nearby while
+  // fixing it, and worth closing before this is used by more than one
+  // real customer.
   const { count } = await supabase
     .from('service_requests')
     .select('id', { count: 'exact', head: true })
-    .eq('status', 'open');
+    .eq('status', 'open')
+    .eq('customer_id', userData.user.id);
   return count ?? 0;
 }
 
@@ -51,6 +79,7 @@ export async function createServiceRequest(formData: FormData) {
     await supabase.from('service_request_attachments').insert({ message_id: message.id, file_path: path });
   }
 
+  revalidateServiceRequestSurfaces();
   return { success: true, requestId: request.id };
 }
 
@@ -163,8 +192,8 @@ export async function closeServiceRequest(requestId: string) {
 
   revalidatePath(`/service-requests/${requestId}`);
   revalidatePath(`/admin/service-requests/${requestId}`);
-  revalidatePath('/service-requests');
   revalidatePath('/admin/service-requests');
+  revalidateServiceRequestSurfaces();
   return { success: true };
 }
 

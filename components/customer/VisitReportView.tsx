@@ -51,8 +51,10 @@ export async function VisitReportView({ propertyId, jobId }: { propertyId: strin
   const photos = media.filter((m) => m.media_type === 'photo' && m.url);
   const videos = media.filter((m) => m.media_type === 'video' && m.url);
   const visitDate = job.decided_at ?? job.submitted_at;
-  const shortCode = `P-${String(propertyId).slice(0, 4).toUpperCase()}`;
-  const locationParts = [property?.village_town || property?.district, property?.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null, shortCode].filter(Boolean);
+  // Redesign 2026-09 (2026-09-22) — the "P-<code>" shorthand (e.g.
+  // "P-C55B") was dropped from customer-facing screens per Plot's
+  // request — see PropertyVisitHistory.tsx for the full explanation.
+  const locationParts = [property?.village_town || property?.district, property?.plot_size ? `${property.plot_size} ${property.plot_size_unit || 'sq yd'}` : null].filter(Boolean);
   const gpsText = property?.plot_gps_coordinate || (property?.google_map_lat && property?.google_map_lng ? `${property.google_map_lat}, ${property.google_map_lng}` : null);
 
   const tabs = (siblingVisits ?? []).filter((v: any) => v.visit_number).slice(0, 8);

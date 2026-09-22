@@ -162,6 +162,8 @@ export function ChoosePlanAndPay({
                 type="button"
                 onClick={() => setSelectedPlanId(plan.id)}
                 style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
                   textAlign: 'left',
                   border: selected ? '2px solid var(--color-accent)' : '1px solid var(--color-divider)',
                   background: 'var(--color-surface)',
@@ -171,10 +173,17 @@ export function ChoosePlanAndPay({
                   color: 'var(--color-text)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                  <strong style={{ fontSize: 16 }}>{plan.name}</strong>
+                {/* Redesign 2026-09 (follow-up) — Plot: on mobile, a long plan
+                    name ("1 Visit + install "Monitored by Plot360" signboard")
+                    next to the "% off" tag pushed this row — and with it the
+                    whole card — wider than the screen, since a nowrap flex row
+                    with space-between never shrinks below its content's
+                    natural width. flexWrap + minWidth: 0 on the name lets it
+                    wrap onto its own line instead of forcing an overflow. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px 8px', marginBottom: 4 }}>
+                  <strong style={{ fontSize: 16, minWidth: 0, overflowWrap: 'break-word' }}>{plan.name}</strong>
                   {plan.discount_percent > 0 && (
-                    <span className="tag tag-accent">{plan.discount_percent}% off</span>
+                    <span className="tag tag-accent" style={{ flex: 'none' }}>{plan.discount_percent}% off</span>
                   )}
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 800 }}>
