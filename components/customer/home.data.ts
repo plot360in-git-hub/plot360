@@ -65,10 +65,12 @@ export async function getCustomerHomeData() {
       // pending-until-admin-confirms path as bank transfer, it shows up
       // here too — this query needed no change, it was always a generic
       // status='pending' filter.
+      // mismatch_reason added (follow-up, 2026-09-23, round 57) — see the
+      // note on pendingPaymentByProperty below.
       propertyIds.length > 0
         ? supabase
             .from('payments')
-            .select('property_id, amount, payment_method, created_at')
+            .select('property_id, amount, payment_method, created_at, mismatch_reason')
             .in('property_id', propertyIds)
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
@@ -124,10 +126,31 @@ export async function getCustomerHomeData() {
 
   // Latest pending payment per property (created_at desc above, so the
   // first one seen per property is the most recent).
-  const pendingPaymentByProperty: Record<string, { amount: number | null; method: string | null; createdAt: string }> = {};
+  //
+  // Redesign 2026-09 (follow-up, 2026-09-23, round 57) — Plot: when an
+  // admin flags a payment as a mismatch (Admin → Payments → payment
+  // detail → "Flag a mismatch" — wrong amount, duplicate, suspected
+  // fraud, etc.; see payments.actions.ts's flagPaymentMismatch and
+  // schema.sql's note on why this is separate columns rather than a new
+  // payments.status value), the payment stays 'pending' by design — but
+  // that meant the customer's Home card kept showing the exact same
+  // "awaiting confirmation — usually within a working day" message
+  // forever, with zero indication anything needed their attention. This
+  // query already saw the row (still status='pending'); it just never
+  // selected mismatch_reason. Passed through now so CustomerHome can
+  // show a distinct message when one is set.
+  const pendingPaymentByProperty: Record<
+    string,
+    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null }
+  > = {};
   for (const p of pendingPayments ?? []) {
     if (!pendingPaymentByProperty[p.property_id]) {
-      pendingPaymentByProperty[p.property_id] = { amount: p.amount, method: p.payment_method, createdAt: p.created_at };
+      pendingPaymentByProperty[p.property_id] = {
+        amount: p.amount,
+        method: p.payment_method,
+        createdAt: p.created_at,
+        mismatchReason: p.mismatch_reason ?? null,
+      };
     }
   }
 

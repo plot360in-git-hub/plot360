@@ -140,7 +140,10 @@ export function CustomerHome({
   reservedByProperty: Record<string, number>;
   jobsByProperty: Record<string, JobRow[]>;
   openRequestCountByProperty: Record<string, number>;
-  pendingPaymentByProperty: Record<string, { amount: number | null; method: string | null; createdAt: string }>;
+  pendingPaymentByProperty: Record<
+    string,
+    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null }
+  >;
   photoUrlByProperty?: Record<string, string | null>;
 }) {
   const router = useRouter();
@@ -509,24 +512,55 @@ export function CustomerHome({
                           often-simultaneous information (a new property can
                           be both "representative collecting documents" AND
                           "payment awaiting confirmation" at once). */}
-                      {pendingPayment && (
+                      {/* Redesign 2026-09 (follow-up, 2026-09-23, round 57) —
+                          Plot: a payment an admin flagged as a mismatch (wrong
+                          amount, duplicate, suspected fraud — see
+                          flagPaymentMismatch, payments.actions.ts) stays
+                          status='pending' by design, so it was showing this
+                          exact same "awaiting confirmation" box as a totally
+                          normal, still-processing payment — the customer had
+                          no way to know anything was wrong or that action was
+                          needed on their end. Now split into two distinct
+                          looks: a warning box (mismatchReason set) vs. the
+                          original neutral "still processing" box. */}
+                      {pendingPayment?.mismatchReason ? (
                         <div
                           style={{
-                            background: 'rgba(255,255,255,.08)',
-                            border: '1px solid rgba(255,255,255,.25)',
+                            background: 'rgba(220,38,38,.16)',
+                            border: '1px solid rgba(220,38,38,.4)',
                             padding: '10px 12px',
                             marginBottom: 12,
                           }}
                         >
-                          <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.7, marginBottom: 3 }}>
-                            Payment submitted
+                          <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.85, marginBottom: 3 }}>
+                            Payment needs your attention
                           </p>
                           <p style={{ fontSize: 12.5 }}>
                             {pendingPayment.amount ? `₹${Number(pendingPayment.amount).toLocaleString('en-IN')}` : 'Your payment'}
-                            {pendingPayment.method ? ` via ${pendingPayment.method}` : ''} is awaiting confirmation — usually within a
-                            working day.
+                            {pendingPayment.method ? ` via ${pendingPayment.method}` : ''} couldn&apos;t be confirmed:{' '}
+                            {pendingPayment.mismatchReason}. Please contact support on WhatsApp.
                           </p>
                         </div>
+                      ) : (
+                        pendingPayment && (
+                          <div
+                            style={{
+                              background: 'rgba(255,255,255,.08)',
+                              border: '1px solid rgba(255,255,255,.25)',
+                              padding: '10px 12px',
+                              marginBottom: 12,
+                            }}
+                          >
+                            <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.7, marginBottom: 3 }}>
+                              Payment submitted
+                            </p>
+                            <p style={{ fontSize: 12.5 }}>
+                              {pendingPayment.amount ? `₹${Number(pendingPayment.amount).toLocaleString('en-IN')}` : 'Your payment'}
+                              {pendingPayment.method ? ` via ${pendingPayment.method}` : ''} is awaiting confirmation — usually within a
+                              working day.
+                            </p>
+                          </div>
+                        )
                       )}
                       {p.status === 'rejected' && p.rejection_reason ? (
                         <p style={{ fontSize: 12.5, marginBottom: 12, color: '#ffb3a3' }}>{p.rejection_reason}</p>

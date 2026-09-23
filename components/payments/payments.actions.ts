@@ -290,6 +290,14 @@ export async function flagPaymentMismatch(paymentId: string, reason: string) {
   revalidatePath('/admin/payments');
   revalidatePath('/admin/queue/payments');
   revalidatePath(`/admin/payments/${paymentId}`);
+  // Redesign 2026-09 (follow-up, 2026-09-23, round 57) — was missing
+  // entirely; the customer-facing surfaces that now show mismatch_reason
+  // (CustomerHome.tsx's dashboard card, PropertyView.tsx) never got told
+  // to refresh, so a flagged payment could sit showing the stale, wrong
+  // "awaiting confirmation" message until something unrelated happened to
+  // revalidate those paths.
+  if (payment?.property_id) revalidatePath(`/properties/${payment.property_id}`);
+  revalidatePath('/dashboard');
   return { success: true, propertyId: payment?.property_id as string | undefined };
 }
 

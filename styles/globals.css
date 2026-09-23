@@ -39,6 +39,21 @@ a:not(.btn-primary):not(.btn-secondary) {
 a:not(.btn-primary):not(.btn-secondary):hover {
   color: var(--color-link-hover);
 }
+/* Redesign 2026-09 (follow-up, 2026-09-23, round 58) — Plot found the
+   customer redesign's "Register a property" button losing its text
+   color after being visited and navigated back to (fixed in
+   plot360-redesign.css) and asked to check the rest of the app for the
+   same thing. This is the base/legacy stylesheet — used by admin, agent,
+   and every not-yet-redesigned customer screen (see the --color-accent
+   comment above) — and had the identical gap: none of these button/link
+   classes pinned a :visited color, so the browser's own default visited-
+   link color could show through on any of them once used as a <Link>
+   rather than a plain <button>. Pinning each to its own normal-state
+   color below.
+*/
+a:not(.btn-primary):not(.btn-secondary):visited {
+  color: var(--color-link);
+}
 
 * { box-sizing: border-box; }
 
@@ -75,6 +90,7 @@ h1, h2, h3 {
   cursor: pointer;
   transition: background 0.15s ease;
 }
+.btn-primary:visited { color: #fff; }
 .btn-primary:hover { background: var(--color-accent-hover); }
 .btn-primary:disabled { background: var(--color-border); cursor: not-allowed; }
 
@@ -88,6 +104,7 @@ h1, h2, h3 {
   font-weight: 500;
   cursor: pointer;
 }
+.btn-secondary:visited { color: var(--color-accent); }
 
 .card {
   background: #fff;
@@ -195,6 +212,7 @@ h1, h2, h3 {
   min-height: 200px;
   text-decoration: none;
 }
+.ghost-card:visited { color: var(--color-text-muted); }
 .ghost-card:hover { border-color: var(--color-accent); color: var(--color-text); }
 
 .btn-outline-danger {
@@ -207,6 +225,7 @@ h1, h2, h3 {
   font-weight: 500;
   cursor: pointer;
 }
+.btn-outline-danger:visited { color: var(--color-danger); }
 .btn-outline-danger:hover { background: rgba(192, 57, 43, 0.06); }
 
 @media (max-width: 860px) {

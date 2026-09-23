@@ -137,8 +137,24 @@ export async function updatePaymentSettings(formData: FormData) {
     return { error: 'Enter a valid agent payout rate.' };
   }
 
+  // Redesign 2026-09 (follow-up, 2026-09-23, round 57) — Plot hit "No
+  // payment account registered on Google Pay" testing the new real UPI
+  // link. That's GPay saying the VPA itself isn't a real, active one
+  // linked to any bank — not a code bug on our end, the deep link opened
+  // correctly with the right amount/payee/note. There's no way to check
+  // from here whether a VPA is genuinely active (that needs a live UPI
+  // verification API, which nothing in this app has), but this at least
+  // catches the more common accidental mistakes — a typo missing the
+  // "@bank" part, stray spaces, a pasted phone number or email instead
+  // of a VPA — before they get saved and silently break every UPI
+  // payment attempt until someone notices.
+  const upiIdRaw = String(formData.get('upi_id') || '').trim();
+  if (upiIdRaw && !/^[\w.\-]{2,}@[a-zA-Z][\w.\-]{1,}$/.test(upiIdRaw)) {
+    return { error: 'That doesn’t look like a valid UPI ID (expected a form like yourname@bank). Double-check it against your UPI app before saving.' };
+  }
+
   const payload = {
-    upi_id: String(formData.get('upi_id') || '') || null,
+    upi_id: upiIdRaw || null,
     bank_account_name: String(formData.get('bank_account_name') || '') || null,
     bank_account_number: String(formData.get('bank_account_number') || '') || null,
     bank_ifsc: String(formData.get('bank_ifsc') || '') || null,

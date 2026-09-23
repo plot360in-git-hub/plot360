@@ -196,6 +196,20 @@ export async function PropertyView({ propertyId }: { propertyId: string }) {
             <div><dt className="field-label">Valid from</dt><dd>{payment.valid_from}</dd></div>
             <div><dt className="field-label">Next payment due</dt><dd>{payment.valid_until}</dd></div>
           </dl>
+        ) : payment.mismatch_reason ? (
+          // Redesign 2026-09 (follow-up, 2026-09-23, round 57) — same gap as
+          // CustomerHome.tsx's dashboard card: a payment an admin flagged as
+          // a mismatch stays status='pending' by design (flagPaymentMismatch,
+          // payments.actions.ts), so this branch used to be unreachable —
+          // everything with mismatch_reason set fell into the generic
+          // "Awaiting confirmation" case below, identical to a completely
+          // normal still-processing payment.
+          <div>
+            <span className="status-pill rejected" style={{ marginBottom: 12, display: 'inline-block' }}>Needs your attention</span>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+              We couldn&apos;t confirm this payment: {payment.mismatch_reason}. Please contact support on WhatsApp.
+            </p>
+          </div>
         ) : payment.transaction_reference ? (
           <div>
             <span className="status-pill pending" style={{ marginBottom: 12, display: 'inline-block' }}>Awaiting confirmation</span>

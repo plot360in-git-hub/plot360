@@ -119,6 +119,15 @@
 }
 
 .p360 a { color: var(--color-accent); text-underline-offset: 3px; }
+/* Redesign 2026-09 (follow-up, 2026-09-23, round 58) — same :visited gap
+   as .btn-primary below, found while checking the rest of the app for
+   it: none of these plain-link classes pinned a :visited color either,
+   so any of them could show the browser's default visited-link color
+   instead of their intended one — most visibly .nav-link-inverse, the
+   light-on-dark-background variant (header/footer), which is exactly
+   the same "light text turns dark and unreadable" failure as the button
+   bug. */
+.p360 a:visited { color: var(--color-accent); }
 /* Redesign 2026-09 (follow-up, round 7) — was `var(--p-alert)`, which
    happened to equal --color-accent-700 back when the accent was red (so
    "hover = darker accent" and "error text" were coincidentally the same
@@ -144,12 +153,28 @@
   white-space: nowrap;
 }
 .p360 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.p360 .btn:visited { color: var(--color-text); }
 .p360 .btn-primary { background: var(--color-accent); color: var(--color-bg); }
 .p360 .btn-primary:hover { background: var(--color-accent-600); }
 .p360 .btn-primary:active { background: var(--color-accent-700); }
+/* Redesign 2026-09 (follow-up, 2026-09-23, round 57) — Plot: "Register a
+   property" (a <Link>, i.e. a real <a> tag styled as a button) showed
+   dark, hard-to-read text on the dark navy button after visiting
+   /properties/new and coming back — the browser's own default :visited
+   link color competing with .btn-primary's `color: var(--color-bg)`.
+   .btn's base rule already sets color: var(--color-text) (dark ink, the
+   *unvisited*-looking default for a plain link), so once the browser
+   applies its own :visited styling on top, text can fall back toward
+   that dark base color even on a .btn-primary — pinning it here to the
+   same light color .btn-primary always uses removes the discrepancy
+   regardless of visited state. Same treatment for -secondary/-ghost so
+   this can't recur on those either. */
+.p360 .btn-primary:visited { color: var(--color-bg); }
 .p360 .btn-secondary { border-color: var(--color-divider); color: var(--color-text); }
+.p360 .btn-secondary:visited { color: var(--color-text); }
 .p360 .btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .p360 .btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.p360 .btn-ghost:visited { color: var(--color-accent); }
 .p360 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .p360 .btn-block { width: 100%; margin-top: var(--space-2); justify-content: flex-start; text-align: left; }
 
@@ -205,8 +230,11 @@
    classes rather than inline styles so :hover actually works without
    client-side state. */
 .p360 .nav-link { color: var(--color-text); text-decoration: none; }
+.p360 .nav-link:visited { color: var(--color-text); }
 .p360 .nav-link:hover { color: var(--color-accent); }
 .p360 .nav-link-inverse { color: var(--color-bg); text-decoration: none; }
+.p360 .nav-link-inverse:visited { color: var(--color-bg); }
 .p360 .nav-link-inverse:hover { opacity: 0.8; }
 .p360 .footer-link { color: var(--p-ink-soft); text-decoration: none; }
+.p360 .footer-link:visited { color: var(--p-ink-soft); }
 .p360 .footer-link:hover { color: var(--color-accent); }
