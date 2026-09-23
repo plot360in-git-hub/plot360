@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { computeExpiryDate, remainingAfterReservations, creditToConsume } from '@/lib/visitCredits';
+import { remainingAfterReservations, creditToConsume } from '@/lib/visitCredits';
 import type { VisitCredit } from '@/types/database.types';
 
 // ---------- reads ----------
@@ -142,97 +142,43 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
     .eq('property_id', propertyId);
   const paymentType: 'initial' | 'renewal' = (priorPayments ?? 0) === 0 ? 'initial' : 'renewal';
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-
   if (method === 'upi') {
-    const expiresAt = computeExpiryDate(today).toISOString().slice(0, 10);
-
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    let admin;
-    try {
-      admin = createAdminClient();
-    } catch {
-      return { error: 'UPI activation is not configured on the server yet (missing SUPABASE_SERVICE_ROLE_KEY).' };
-    }
-
-    // Prefer whatever the customer typed in (their real UPI reference) —
-    // fall back to the generated placeholder only when they left it blank.
+    // Redesign 2026-09 (follow-up, 2026-09-23) — Plot: this used to mark
+    // the payment 'completed' and issue visit_credits instantly, with NO
+    // real verification — the "Opening your UPI app" screen in
+    // ChoosePlanAndPay.tsx never actually opened anything (no upi:// link
+    // existed at all), it just faked a delay and then trusted whatever
+    // reference the customer optionally typed in. Anyone could tap Pay,
+    // wait 1.4s, and get free visit credits without paying. Now that
+    // ChoosePlanAndPay builds a real upi://pay deep link (lib/upi.ts) and
+    // actually sends the customer to their UPI app, this branch matches
+    // the 'bank' branch below exactly: record as 'pending' and stop —
+    // recordPayment (payments.actions.ts, the admin's existing pending-
+    // payment confirmation screen) already knows how to set
+    // expiration_date and issue visit_credits for a plan_id payment once
+    // an admin confirms the money actually arrived, so nothing new was
+    // needed on that side.
     const transactionReference = customerTransactionId?.trim() || `UPI-${Date.now()}`;
 
-    const { data: payment, error: paymentError } = await admin
-      .from('payments')
-      .insert({
-        property_id: propertyId,
-        payment_type: paymentType,
-        plan_id: planId,
-        status: 'completed',
-        amount: plan.price,
-        payment_method: 'UPI',
-        transaction_reference: transactionReference,
-        paid_at: todayStr,
-        valid_from: todayStr,
-        valid_until: expiresAt,
-        recorded_by: userData.user.id,
-      })
-      .select('id')
-      .single();
-    if (paymentError) return { error: paymentError.message };
-
-    const { error: creditError } = await admin.from('visit_credits').insert({
+    const { error: paymentError } = await supabase.from('payments').insert({
       property_id: propertyId,
-      payment_id: payment.id,
-      quantity_purchased: visitQuantity,
-      purchased_at: todayStr,
-      expires_at: expiresAt,
+      payment_type: paymentType,
+      plan_id: planId,
+      status: 'pending',
+      amount: plan.price,
+      payment_method: 'UPI',
+      transaction_reference: transactionReference,
     });
-    if (creditError) return { error: creditError.message };
-
-    // Redesign 2026-09 (follow-up, round 19) — real bug Plot hit: a
-    // property paid for through this instant-UPI path never got
-    // properties.expiration_date set (only recordPayment, the admin
-    // bank-transfer confirmation path, did that), and
-    // getEligiblePropertiesForAssignment (monitoring.actions.ts) — the
-    // "legacy" Job assignment source, which already has "the first visit
-    // of a cycle is eligible immediately on payment, no due-date wait"
-    // built in — filters on `expiration_date is not null`. So a property
-    // paid via UPI just sat there: verified, paid, credits issued, but
-    // invisible to Job assignment, leaving "Schedule a visit" as the only
-    // apparent next step even for a brand-new property's first visit.
-    // Setting expiration_date here (matching what recordPayment does for
-    // the same paymentType==='initial' case) makes it flow through that
-    // same existing mechanism instead of building a second one.
-    // Deliberately NOT setting next_monitoring_due_date here (unlike
-    // recordPayment's legacy branch) — that column is what lets
-    // getEligiblePropertiesForAssignment auto-surface a property's
-    // SECOND+ visit once a due-date window opens, with no customer
-    // action. For these visit-credit-based plans (1, 4, or any other
-    // purchased quantity) every visit after the first should only ever
-    // appear once the customer explicitly schedules it (ScheduleVisit ->
-    // requestVisit -> visit_requests -> the "visit_request" Job
-    // assignment source) — leaving next_monitoring_due_date null keeps
-    // this property out of the legacy auto-surface path for anything
-    // past its first visit.
-    const { error: propertyError } = await admin
-      .from('properties')
-      .update({ expiration_date: expiresAt })
-      .eq('id', propertyId);
-    if (propertyError) return { error: propertyError.message };
+    if (paymentError) return { error: paymentError.message };
 
     revalidatePath('/dashboard');
     revalidatePath(`/properties/${propertyId}`);
-    revalidatePath('/admin/queue/job-assignment');
     return {
       success: true as const,
       method: 'upi' as const,
       planName: plan.name as string,
-      visitQuantity,
       amount: plan.price as number,
-      // Redesign 2026-09 (follow-up, round 2) — the "done" screen's rows
-      // table (ConfirmationScreen.tsx) shows this as "Reference"; it used
-      // to be written to the payments row and then dropped on the floor.
       reference: transactionReference,
-      expiresAt,
       propertyName: property.property_name as string,
     };
   }

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { DISPLAY_PHONE, REPRESENTATIVE_NAME } from '@/lib/contact';
 
 // Redesign 2026-09 (follow-up, round 2) — Plot sent the mock's own "done"
 // screen screenshot ("Transfer noted. We will confirm it.") and pointed
@@ -24,9 +23,25 @@ import { DISPLAY_PHONE, REPRESENTATIVE_NAME } from '@/lib/contact';
 // showing it to the customer as fact was misleading. Removed; the body/
 // next copy below already tells the customer what happens next without
 // claiming it already did.
+// Redesign 2026-09 (follow-up, 2026-09-23) — 'reg-upi' used to be its own
+// "Payment received" / instant-success variant, because the old UPI path
+// activated credits immediately with no real verification (see
+// visitCredits.actions.ts's purchaseVisitCredits for the full story on
+// why that was wrong). UPI now goes through the exact same pending-
+// confirmation flow as bank transfer, so both share this one variant —
+// paymentMethodLabel is what's shown in the "Amount" row, and upiLinks is
+// only present (and only rendered) for the UPI case, giving the customer
+// a way to actually open their UPI app from this screen too, not just
+// once on the previous one.
 export type ConfirmationVariant =
-  | { kind: 'reg-upi'; propertyName: string; planName: string; visitQuantity: number; amount: number; reference: string; expiresAt: string }
-  | { kind: 'reg-bank'; propertyName: string; planName: string; amount: number }
+  | {
+      kind: 'reg-bank';
+      propertyName: string;
+      planName: string;
+      amount: number;
+      paymentMethodLabel: string;
+      upiLinks?: { generic: string; phonepe: string; googlePay: string; paytm: string };
+    }
   | { kind: 'sched'; propertyName: string; windowText: string; creditsRemaining: number; expiresAt: string };
 
 function formatRupees(amount: number): string {
@@ -48,36 +63,27 @@ type DoneContent = {
 
 function content(v: ConfirmationVariant): DoneContent {
   switch (v.kind) {
-    case 'reg-upi':
-      return {
-        tone: 'success',
-        kicker: 'Payment received',
-        title: 'Registered. We take it from here.',
-        body: `${REPRESENTATIVE_NAME} from Plot360 will WhatsApp you within a working day to collect documents and arrange owner approval. You do not need to fill anything else in.`,
-        rows: [
-          { k: 'Property', v: v.propertyName },
-          { k: 'Plan', v: v.planName },
-          { k: 'Paid', v: `${formatRupees(v.amount)} · UPI` },
-          { k: 'Reference', v: v.reference },
-          { k: 'Visit credits', v: `${v.visitQuantity} · until ${formatDate(v.expiresAt)}` },
-        ],
-        next: `Nothing is expected from you right now. Watch for a WhatsApp from ${DISPLAY_PHONE}.`,
-      };
-    case 'reg-bank':
+    case 'reg-bank': {
+      const isUpi = !!v.upiLinks;
       return {
         tone: 'pending',
         kicker: 'Awaiting confirmation',
-        title: 'Transfer noted. We will confirm it.',
-        body: 'Bank transfers take up to a working day to appear. Your property is registered and held; we confirm on WhatsApp the moment the amount lands.',
+        title: isUpi ? "Payment started. We'll confirm it." : 'Transfer noted. We will confirm it.',
+        body: isUpi
+          ? "Finish paying in your UPI app if it didn't open automatically (buttons below). Your property is registered and held; we confirm on WhatsApp the moment the payment lands."
+          : 'Bank transfers take up to a working day to appear. Your property is registered and held; we confirm on WhatsApp the moment the amount lands.',
         rows: [
           { k: 'Property', v: v.propertyName },
           { k: 'Plan', v: v.planName },
-          { k: 'Amount', v: `${formatRupees(v.amount)} · bank transfer` },
+          { k: 'Amount', v: `${formatRupees(v.amount)} · ${v.paymentMethodLabel}` },
           { k: 'Status', v: 'Awaiting confirmation' },
           { k: 'Visit credits', v: 'Activate on confirmation' },
         ],
-        next: 'You can close the app. Credits and scheduling unlock once the transfer is confirmed.',
+        next: isUpi
+          ? 'Credits and scheduling unlock once the payment is confirmed.'
+          : 'You can close the app. Credits and scheduling unlock once the transfer is confirmed.',
       };
+    }
     case 'sched':
       return {
         tone: 'success',
@@ -185,6 +191,28 @@ export function ConfirmationScreen({
           </div>
         ))}
       </div>
+
+      {variant.kind === 'reg-bank' && variant.upiLinks && (
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 0' }}>
+          <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 10 }}>
+            Didn&apos;t open automatically? Try again:
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <a href={variant.upiLinks.generic} className="btn btn-secondary" style={{ flex: '1 1 auto', minHeight: 42, fontSize: 13, textDecoration: 'none' }}>
+              Any UPI app
+            </a>
+            <a href={variant.upiLinks.phonepe} className="btn btn-secondary" style={{ flex: '1 1 auto', minHeight: 42, fontSize: 13, textDecoration: 'none' }}>
+              PhonePe
+            </a>
+            <a href={variant.upiLinks.googlePay} className="btn btn-secondary" style={{ flex: '1 1 auto', minHeight: 42, fontSize: 13, textDecoration: 'none' }}>
+              Google Pay
+            </a>
+            <a href={variant.upiLinks.paytm} className="btn btn-secondary" style={{ flex: '1 1 auto', minHeight: 42, fontSize: 13, textDecoration: 'none' }}>
+              Paytm
+            </a>
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 22px 40px' }}>
         <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', lineHeight: 1.5 }}>{c.next}</p>

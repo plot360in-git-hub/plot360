@@ -3111,3 +3111,56 @@ its actual root cause rather than patched at the symptom:**
    WhatsApp") that "No address yet" on a freshly-registered property
    with genuinely nothing filled in yet is correct, intended behavior —
    not a bug on its own.
+
+## 56. Real UPI deep link + pending confirmation (2026-09-23)
+
+Plot reported that "Opening your UPI app…" on the payment screen
+(`ChoosePlanAndPay.tsx`) didn't actually open anything. Root cause: it
+never did — that screen showed a full-screen overlay for a hardcoded
+1.4s `setTimeout` and then called `purchaseVisitCredits(..., 'upi', ...)`,
+which immediately marked the payment `status: 'completed'` and issued
+`visit_credits`, trusting whatever transaction reference the customer
+optionally typed in (or a generated placeholder if left blank). There
+was no `upi://` link anywhere in the app. This meant two things needed
+fixing, not one: the missing link itself, and — more seriously — that
+any customer could get free visit credits by tapping Pay and waiting,
+since nothing verified a payment had actually happened.
+
+- `lib/upi.ts` (new) — builds a real UPI deep link per the NPCI intent
+  spec (`upi://pay?pa=...&pn=...&am=...&tn=...&cu=INR&tr=...`), which
+  Android and iOS UPI-compliant apps are both required to register.
+  Also builds three app-specific fallback links (PhonePe, Google Pay,
+  Paytm) built from the same parameters, for the case where the generic
+  link doesn't trigger anything (mostly an iOS quirk).
+- `visitCredits.actions.ts`'s `purchaseVisitCredits` — the UPI branch no
+  longer uses the service-role admin client or completes the payment
+  instantly. It now inserts the payment as `status: 'pending'`, exactly
+  like the existing bank-transfer branch — no `visit_credits` row, no
+  `properties.expiration_date` update. `recordPayment`
+  (`payments.actions.ts`, the admin's existing pending-payment
+  confirmation action, used today for bank transfers) already knows how
+  to set `expiration_date` and issue `visit_credits` for a `plan_id`
+  payment once an admin confirms the money arrived — so UPI now rides
+  that same, already-correct admin confirmation path with no new
+  admin-side code needed.
+- `ChoosePlanAndPay.tsx` — `pay()` now creates the pending payment
+  first, builds the real links from the returned reference/amount and
+  the admin-configured `payment_settings.upi_id`, and navigates to the
+  generic link (`window.location.href`). The payee name shown inside
+  the customer's UPI app is `payment_settings.bank_account_name`
+  (falls back to a literal "Plot360" if unset).
+- `ConfirmationScreen.tsx` — the old `'reg-upi'` variant (an instant
+  "Payment received" success screen) is gone; UPI and bank transfer now
+  share one `'reg-bank'` pending variant, told apart only by
+  `paymentMethodLabel`. When `upiLinks` is present, the screen also
+  renders "Any UPI app / PhonePe / Google Pay / Paytm" buttons built
+  from the same reference, so a customer who comes back to this screen
+  (app-switched away and returned, or the automatic link silently did
+  nothing) has more than one shot at actually opening their UPI app.
+
+Not touched: `SubscribeForm.tsx` (the older property-renewal payment
+screen, `app/properties/[id]/subscribe`) — checked, and it never had
+this bug; it already treats every payment method as pending-until-an-
+admin-confirms via a plain manual reference-entry form, no fake
+"opening" animation. Left as-is; a real UPI link could be added there
+too later if wanted, but it wasn't part of what broke.

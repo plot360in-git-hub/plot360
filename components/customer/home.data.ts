@@ -56,12 +56,15 @@ export async function getCustomerHomeData() {
       // that: no credits (correct — none exist yet), but also no "payment
       // submitted, awaiting confirmation" message either, so it just
       // looked like nothing happened. Fetches each property's own pending
-      // payment (if any) so CustomerHome can say so explicitly. A UPI
-      // payment never appears here — purchaseVisitCredits marks it
-      // status='completed' immediately, matching the admin Payments
-      // queue's own "UPI payments confirm themselves" rule
-      // (getPaymentsQueue, queues.actions.ts, same status='pending'
-      // filter).
+      // payment (if any) so CustomerHome can say so explicitly.
+      //
+      // Redesign 2026-09 (follow-up, 2026-09-23, round 56) — UPI used to
+      // never appear here because purchaseVisitCredits marked it
+      // status='completed' instantly, with no real verification (see that
+      // function's own note). Now that UPI goes through the same
+      // pending-until-admin-confirms path as bank transfer, it shows up
+      // here too — this query needed no change, it was always a generic
+      // status='pending' filter.
       propertyIds.length > 0
         ? supabase
             .from('payments')

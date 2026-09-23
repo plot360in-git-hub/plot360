@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { purchaseVisitCredits } from '@/components/payments/visitCredits.actions';
+import { buildUpiLinks } from '@/lib/upi';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
 
 type Plan = {
@@ -59,37 +60,71 @@ export function ChoosePlanAndPay({
   const [transactionId, setTransactionId] = useState('');
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
+  // Redesign 2026-09 (follow-up, 2026-09-23) — the actual name shown to
+  // the customer inside their UPI app as who they're paying. Falls back
+  // to a literal "Plot360" if the admin hasn't set a bank account name in
+  // Payment Settings yet.
+  const payeeName = paymentSettings?.bank_account_name || 'Plot360';
 
   function pay() {
     if (!selectedPlan || !method) return;
     setError(null);
 
     if (method === 'upi') {
-      setOpening(true);
-      window.setTimeout(() => {
-        setOpening(false);
-        startTransition(async () => {
-          const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', transactionId);
-          if ('error' in result) setError(result.error ?? null);
-          else
-            setConfirmation({
-              kind: 'reg-upi',
-              propertyName: result.propertyName,
-              amount: result.amount,
-              planName: result.planName,
-              visitQuantity: result.visitQuantity,
-              reference: result.reference ?? '',
-              expiresAt: result.expiresAt ?? '',
-            });
+      if (!paymentSettings?.upi_id) {
+        setError('UPI is not set up yet — please use bank transfer, or contact support.');
+        return;
+      }
+      startTransition(async () => {
+        const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', transactionId);
+        if ('error' in result) {
+          setError(result.error ?? null);
+          return;
+        }
+        const links = buildUpiLinks({
+          payeeVpa: paymentSettings.upi_id!,
+          payeeName,
+          amount: result.amount,
+          note: `Plot360 ${result.planName}`,
+          transactionRef: result.reference ?? '',
         });
-      }, 1400);
+        // Redesign 2026-09 (follow-up, 2026-09-23) — this is the part that
+        // was missing entirely before: actually navigating to a upi://
+        // link. The browser/OS takes it from here — Android shows its own
+        // app chooser when more than one UPI app is installed, iOS opens
+        // whichever app is registered for the scheme. If nothing happens
+        // (no UPI app installed, or an iOS quirk with the generic link),
+        // the confirmation screen below repeats this as tappable buttons,
+        // including the three app-specific schemes, so the customer isn't
+        // stuck with only this one automatic attempt.
+        setOpening(true);
+        window.location.href = links.generic;
+        window.setTimeout(() => {
+          setOpening(false);
+          setConfirmation({
+            kind: 'reg-bank',
+            propertyName: result.propertyName,
+            amount: result.amount,
+            planName: result.planName,
+            paymentMethodLabel: 'UPI',
+            upiLinks: links,
+          });
+        }, 1200);
+      });
       return;
     }
 
     startTransition(async () => {
       const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank', transactionId);
       if ('error' in result) setError(result.error ?? null);
-      else setConfirmation({ kind: 'reg-bank', propertyName: result.propertyName, amount: result.amount, planName: result.planName });
+      else
+        setConfirmation({
+          kind: 'reg-bank',
+          propertyName: result.propertyName,
+          amount: result.amount,
+          planName: result.planName,
+          paymentMethodLabel: 'bank transfer',
+        });
     });
   }
 
@@ -220,7 +255,7 @@ export function ChoosePlanAndPay({
           >
             <span style={{ fontWeight: 800 }}>UPI</span>
             <span style={{ fontSize: 12.5, fontWeight: 400, color: 'var(--p-ink-soft)' }}>
-              Opens your UPI app. Credits activate immediately.
+              Opens your UPI app. We confirm on WhatsApp once it's received.
             </span>
           </button>
           <button
