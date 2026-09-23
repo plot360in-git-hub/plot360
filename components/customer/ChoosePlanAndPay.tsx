@@ -251,6 +251,18 @@ export function ChoosePlanAndPay({
               flexDirection: 'column',
               alignItems: 'flex-start',
               gap: 4,
+              // Redesign 2026-09 (follow-up, 2026-09-23, round 59) — Plot: the
+              // description line under "UPI" ran out of the box on mobile.
+              // .btn (plot360-redesign.css) sets white-space: nowrap for
+              // ordinary single-line button labels — fine everywhere else
+              // .btn is used, but here the button is a two-line label +
+              // description card (flexDirection: column), and white-space is
+              // inherited, so the description span kept the nowrap and spilled
+              // past the card's right edge instead of wrapping. Overriding
+              // back to 'normal' only where a .btn genuinely holds multi-line
+              // content, same fix applied to the Bank transfer button below.
+              whiteSpace: 'normal',
+              width: '100%',
             }}
           >
             <span style={{ fontWeight: 800 }}>UPI</span>
@@ -270,6 +282,10 @@ export function ChoosePlanAndPay({
               flexDirection: 'column',
               alignItems: 'flex-start',
               gap: 4,
+              // See the UPI button above — same nowrap-inherited-into-the-
+              // description-line fix.
+              whiteSpace: 'normal',
+              width: '100%',
             }}
           >
             <span style={{ fontWeight: 800 }}>Bank transfer</span>

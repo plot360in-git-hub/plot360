@@ -3164,3 +3164,37 @@ this bug; it already treats every payment method as pending-until-an-
 admin-confirms via a plain manual reference-entry form, no fake
 "opening" animation. Left as-is; a real UPI link could be added there
 too later if wanted, but it wasn't part of what broke.
+
+## 57. Payment method description text overflowing its box (2026-09-23)
+
+Plot sent screenshots of the "Pay with" step (`ChoosePlanAndPay.tsx`)
+showing the UPI button's second line — "Opens your UPI app. We confirm
+on WhatsApp once it's rec…" — running past the right edge of its own
+card instead of wrapping, cut off by the screen edge.
+
+Root cause: `.p360 .btn` (`plot360-redesign.css`) sets
+`white-space: nowrap` — correct for the vast majority of `.btn` uses in
+the app, which are genuine single-line labels ("Log in", "Schedule a
+visit", "Use this proof", etc.) that should never wrap. `white-space` is
+an inherited CSS property, though, and the UPI/Bank transfer buttons are
+the one place in the app where a `.btn` holds two lines of content — a
+bold label (`<span>UPI</span>`) plus a separate, intentionally-wrapping
+description (`<span>Opens your UPI app...</span>`) stacked with
+`flexDirection: 'column'`. Neither button's inline style overrode
+`white-space` back to `normal`, so the description span inherited the
+button's nowrap and spilled out of the card instead of wrapping onto a
+second line.
+
+Fixed by adding `whiteSpace: 'normal'` (plus `width: '100%'`, matching
+the plan buttons above them) to both the UPI and Bank transfer buttons'
+inline styles — the description text now wraps inside the card like the
+plan-name/discount-tag row above it already did (see round 55's "long
+plan name" fix in `ChoosePlanAndPay.tsx`, the same nowrap-vs-wrap
+category of bug, different cause).
+
+Audited the rest of the customer-facing app for the same pattern —
+every other `.btn` usage (marketing nav, plan-selection toggle buttons,
+"Any UPI app / PhonePe / Google Pay / Paytm" retry buttons on
+`ConfirmationScreen.tsx`, admin queue pager, etc.) is a genuine
+single-line label with no wrapping description, so nowrap is correct
+there and nothing else needed the same fix.
