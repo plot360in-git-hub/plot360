@@ -410,12 +410,23 @@ export async function getAssignmentWhatsAppDetails(jobId: string) {
   };
 }
 
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: a property with an
+// agent already assigned (or in progress, or submitted) wasn't showing up
+// ANYWHERE in the admin console he could find — the two queues
+// (Job assignment / Agent submissions) only ever show a job at the exact
+// moment it enters that specific status, and this overview page (the one
+// screen that lists every job regardless of status) had no link in the
+// sidebar nav at all (see AdminShell.tsx's NAV). Fixed the nav gap
+// separately; this select was also missing the property's own
+// verification status and owner, which the new search box on this page
+// (MonitoringOverview.tsx) needs to match a customer's name, and which
+// admins asked to see at a glance without opening the property record.
 export async function getAllMonitoringJobs() {
   const supabase = await createClient();
   const { data } = await supabase
     .from('monitoring_jobs')
     .select(
-      `*, properties(id, property_name, next_monitoring_due_date), agent_profiles(id, profiles(first_name, last_name, email))`
+      `*, properties(id, property_name, next_monitoring_due_date, status, profiles(first_name, last_name, email, phone_country_code, phone_number)), agent_profiles(id, profiles(first_name, last_name, email))`
     )
     .order('assigned_at', { ascending: false });
   return data ?? [];

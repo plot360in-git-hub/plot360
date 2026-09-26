@@ -72,7 +72,17 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
   const allJobs = jobs ?? [];
   const gate = canScheduleVisit(property.status, credits, allJobs.length > 0);
   const stage = milestoneStage(property, allJobs, reserved > 0);
-  const completedCount = allJobs.filter((j) => ['approved', 'ec_pending'].includes(j.status)).length;
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot screenshotted this
+  // page showing "3 of 4 left" right above "0 of 4 visits used" for the
+  // same property — a real, visible contradiction. It counted only
+  // approved/ec_pending jobs as "used", while "left" above it already
+  // subtracts `reserved` (a visit that's assigned/in progress but not yet
+  // approved still ties up a credit). Deriving "used" from the same
+  // totalPurchased/remaining figures the credits row already shows keeps
+  // the two numbers always consistent (used + remaining = totalPurchased,
+  // by construction) instead of drifting apart from being computed two
+  // different ways.
+  const usedCount = Math.max(totalPurchased - remaining, 0);
   const latestVisitNumber = allJobs[0]?.visit_number ?? null;
 
   // allJobs is already ordered newest-first (by assigned_at), so the first
@@ -195,7 +205,7 @@ export async function PropertyVisitHistory({ propertyId }: { propertyId: string 
             <h2 style={{ fontSize: 17 }}>Visit history</h2>
             {totalPurchased > 0 && (
               <span className="tag" style={{ fontSize: 10, border: '1px solid var(--color-divider)' }}>
-                {completedCount} of {totalPurchased} visits used
+                {usedCount} of {totalPurchased} visits used
               </span>
             )}
           </div>

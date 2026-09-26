@@ -36,6 +36,19 @@ const NAV: { id: string; label: string; href: string; ownerOnly?: boolean; group
   { id: 'qAgentVerify', label: 'Agent verification', href: '/admin/queue/agent-verification', group: 'Queues' },
   { id: 'qService', label: 'Service requests', href: '/admin/queue/service-requests', group: 'Queues' },
   { id: 'qPayments', label: 'Payments', href: '/admin/queue/payments', group: 'Queues' },
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: a property with an
+  // agent already assigned (or in progress, or submitted) wasn't
+  // reachable from anywhere in this sidebar — the six queues above only
+  // ever surface a job at the exact moment it's waiting on a specific
+  // admin action (unassigned, or submitted-and-unreviewed), so an
+  // "assigned, agent hasn't visited yet" job (like the rest of this
+  // job's lifecycle) fell into a gap no queue covers. MonitoringOverview
+  // (app/admin/monitoring) already lists every job regardless of status
+  // — Upcoming/Active/Completed — plus who the agent is; it just had no
+  // link here, so this is a genuine "can't find it anywhere" bug, not
+  // just a missing feature. Placed in Queues since it's day-to-day
+  // tracking, not owner-only.
+  { id: 'monitoring', label: 'Monitoring', href: '/admin/monitoring', group: 'Queues' },
   { id: 'plans', label: 'Plans & pricing', href: '/admin/plans', ownerOnly: true, group: 'Owner' },
   { id: 'users', label: 'Users', href: '/admin/users', ownerOnly: true, group: 'Owner' },
   // Redesign 2026-09 (round 32) — payments-received ledger + agent-payout

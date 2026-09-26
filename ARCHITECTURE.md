@@ -3558,3 +3558,69 @@ for a customer already logged into the app.
 the WhatsApp message's `reportUrl` from `/r/<token>` instead of the old
 authenticated path, falling back to the old authenticated link if token
 creation fails for any reason, so the message always has a working link.
+
+## 63. Monitoring overview linked into the admin sidebar, made searchable, and enriched with verification/payment status (2026-09-26)
+
+Plot reported a customer whose visit had an agent assigned (the
+customer's own property page showed "Visit 1 — Agent assigned") but "in
+admin this property is not showing up anywhere" — no way to tell if an
+agent was assigned, who, whether they'd completed the visit, whether it
+had been submitted for review, or whether admin had closed it out. Plot
+also asked for a general way to search any customer or property across
+verification, payment, and agent-submission status.
+
+The property genuinely wasn't reachable, and it wasn't a data bug — it
+was a navigation gap. The admin sidebar (`AdminShell.tsx`'s `NAV`) only
+lists the six queue screens, each of which shows a job for exactly one
+moment in its lifecycle: Job assignment shows a property only while it's
+paid-but-unassigned; Agent submissions shows a job only while it's
+`submitted` and awaiting review. The instant a job moves to `assigned`
+(agent picked, hasn't visited yet) or `accepted` (visiting), it drops out
+of both queues — correctly, since neither admin action is pending — but
+there was no screen in the nav that still showed it. `MonitoringOverview`
+(`app/admin/monitoring`, `components/admin/MonitoringOverview.tsx`)
+already existed and already lists every job regardless of status —
+Upcoming / Active assignments / Completed — with the assigned agent's
+name and a reassign control. It just had no link in the sidebar, so an
+admin would only ever land there by typing the URL directly.
+
+Fixes, all in this one page plus the nav:
+
+- `AdminShell.tsx`: added a "Monitoring" entry to `NAV` (Queues group),
+  pointing at `/admin/monitoring`. This alone makes an assigned-but-not-
+  yet-submitted job findable.
+- New `components/admin/MonitoringSearchBox.tsx` — a debounced,
+  push-to-URL search input (same pattern as `QueueControls.tsx`'s search
+  field, kept separate since this page has no sort control). `app/admin/monitoring/page.tsx`
+  now reads `?q=` and passes it to `MonitoringOverview`.
+- `MonitoringOverview.tsx` filters all three sections (Upcoming / Active /
+  Completed) by one query matched against property name, the owner's
+  name/email/phone, the agent's name/email, and SRO name/code — one
+  search box answers "find this customer or this property" regardless of
+  which section or status their job is currently in.
+- Each Active/Completed row now also shows the property's verification
+  status and latest payment status inline (small pills, same style as
+  the queue screens' status pills), alongside the existing agent name —
+  so "is it verified, is it paid, is it assigned, who to, has the agent
+  submitted, has admin reviewed it" is answerable from this one page
+  without opening the property, payments, and queue screens separately.
+- `components/admin/monitoring.actions.ts`'s `getAllMonitoringJobs()`
+  select gained `properties(..., status, profiles(first_name, last_name,
+  email, phone_country_code, phone_number))` (previously just `id,
+  property_name, next_monitoring_due_date`) to supply the verification
+  status and owner contact the search and new pills need. Every existing
+  caller of this function still gets everything it got before, plus the
+  new fields.
+
+Separately, Plot's screenshot of the customer's own property page showed
+a real, visible contradiction: "3 of 4 left" in the visit-credits row
+directly above "0 of 4 visits used" in the Visit history section, for the
+same property. Both numbers were technically correct but measuring
+different things — "left" (`PropertyVisitHistory.tsx`) already subtracts
+`reserved` (an assigned-or-in-progress visit that hasn't been approved
+yet still ties up a credit), while "used" counted only `approved`/
+`ec_pending` jobs. `usedCount` is now derived as `totalPurchased -
+remaining` — the same two figures already shown in the credits row —
+instead of being recomputed independently from job statuses, so the two
+numbers can never drift apart or contradict each other again (they sum
+to `totalPurchased` by construction).
