@@ -3624,3 +3624,52 @@ remaining` — the same two figures already shown in the credits row —
 instead of being recomputed independently from job statuses, so the two
 numbers can never drift apart or contradict each other again (they sum
 to `totalPurchased` by construction).
+
+## 64. Visit report PDF no longer truncates photos, and includes an EC that's on file even if not formally requested (2026-09-26)
+
+Plot: the report was only ever showing 6 photos, and asked for at least
+one photo from each of the 4 boundary directions to reliably appear,
+ideally all photos, plus the EC document "if it is also provided" — and
+not to restrict the report to 3 pages.
+
+Root cause of the 6-photo cap: the "Photographic record" page
+(`lib/pdf/visitReportPdf.ts`) was a single fixed A4 page with a 2-column
+photo grid sized to whatever rows fit in the space below the title and a
+short note — everything past that was dropped, with a "the full set is in
+your Plot360 account" note standing in for the rest. At this page's exact
+layout constants that worked out to 3 rows × 2 = 6 photos, matching what
+Plot saw exactly. Separately, whether the EC annexure page appeared at
+all was gated on `ecRequested` (whether the owner asked for one at
+registration) rather than on whether an EC actually existed to show
+(`data.ec`, fetched independently of that flag) — so a copy admin
+uploaded without the request flag being set never made it into the PDF.
+
+Fixes, both in `buildVisitReportPdf`:
+
+- The photo section now spans as many pages as it takes to show every
+  photo (`orderedPhotos`/`photoPageCount`, computed up front so "Page X
+  of N" on every page — including page 1 — can state the real total
+  before any page is drawn). First page keeps the short intro note and
+  gets the same 6-photo capacity as before; each continuation page (title
+  says "Photographic record (continued)", no intro note) fits slightly
+  more per page (8, at this layout's constants) since it doesn't need
+  room for that note. Nothing is ever left out of the PDF itself again.
+- Photos are reordered before pagination — boundary photos first, grouped
+  in N/E/S/W compass order, then every other photo in its original
+  order — so the four boundary shots reliably land on the first page as
+  a group instead of depending on upload order (which could previously
+  push one past the 6-photo cutoff, or now, past whichever page it'd fall
+  on). A retake (two photos tagged for the same side) stays together.
+- `includeEcPage` is now `data.ecRequested || !!data.ec` — an EC that's
+  on file earns its annexure page regardless of whether it was formally
+  requested at registration. The page-1 detail row and the annexure
+  page's own header text now say "Requested" vs. "Included" accordingly,
+  and the row's "see page N" reference is computed from the real,
+  now-variable page count instead of a hardcoded "page 4".
+
+Every "Page X of N" reference in the file (masthead, page 1/2/photo-page/
+EC-page footers) is now driven by `totalPages`, computed once up front
+from `photoPageCount` and `includeEcPage`, rather than the old hardcoded
+"3 or 4". A customer's own uploaded EC PDF's pages, when it's a multi-page
+PDF, are still appended after the annexure page with no Plot360 chrome
+and aren't part of this count — unchanged from before.

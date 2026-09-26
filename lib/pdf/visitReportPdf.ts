@@ -335,11 +335,61 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
   pdfDoc.setProducer('Plot360');
   const fonts: Fonts = await embedFonts(pdfDoc);
 
-  // Whether page 4 (EC annexure) is included, and whether we can embed a
-  // real EC (image inline, or PDF pages copied in as received) or only a
-  // "still being processed" notice.
-  const includeEcPage = data.ecRequested;
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: the report only ever
+  // showed 6 photos and dropped the rest ("full set is in your Plot360
+  // account"), and separately an EC that had actually been uploaded but
+  // wasn't formally "requested" at registration never appeared at all.
+  // Two independent fixes:
+  //
+  // 1. Whether the EC annexure page is included no longer depends only on
+  //    ecRequested — an EC that's simply on file (data.ec, fetched by
+  //    getEcDigitalCopyForProperty regardless of the requested flag)
+  //    earns its page too, since the point is "did we get one to show
+  //    you", not "did you ask for one at signup".
+  // 2. The photo section is no longer capped at whatever fits on a single
+  //    page — see orderedPhotos/photoPageCount below, which spread every
+  //    photo across as many pages as it takes instead of truncating.
+  const includeEcPage = data.ecRequested || !!data.ec;
   const contentWidth = PAGE_W - MARGIN_X * 2;
+
+  // ---------------- Photo pagination (used by page 1's "Page X of N" and computed before any page is drawn) ----------------
+  // Boundary-first ordering: the four boundary photos (N/E/S/W) lead the
+  // photographic record as a group, in compass order, ahead of any other
+  // photo — Plot asked for "at least 1 pic from all 4 directions" to
+  // reliably show, and relying on upload order didn't guarantee that
+  // (nor did truncating to whatever fit on one page). Multiple photos for
+  // the same side (a retake) stay together, in their original order.
+  const BOUNDARY_ORDER = ['N', 'E', 'S', 'W'];
+  const orderedPhotos = [
+    ...BOUNDARY_ORDER.flatMap((side) => data.photos.filter((p) => p.boundarySide === side)),
+    ...data.photos.filter((p) => !BOUNDARY_ORDER.includes(p.boundarySide ?? '')),
+  ];
+
+  const photoGap = 16;
+  const photoTileW = (contentWidth - photoGap) / 2;
+  const photoTileH = photoTileW * 0.75; // 4:3
+  const photoBottomLimit = 70;
+  const photoRowStride = photoTileH + 26;
+  // Every photo page starts its grid at the same y, right under the
+  // "Photographic record" title; only the first page also carries a
+  // short note beneath the title (at most 2 lines), so it gets slightly
+  // less room than a continuation page.
+  const photoTitleStartY = PAGE_H - 90 - 16;
+  const firstPhotoPageNoteBudget = 2 * 12 + 8 + 14; // pessimistic 2-line note + gaps
+  const firstPhotoPageGridStartY = photoTitleStartY - firstPhotoPageNoteBudget;
+  const continuationPhotoPageGridStartY = photoTitleStartY - 6;
+  const firstPhotoPageMaxRows = Math.max(1, Math.floor((firstPhotoPageGridStartY - photoBottomLimit) / photoRowStride) + 1);
+  const continuationPhotoPageMaxRows = Math.max(1, Math.floor((continuationPhotoPageGridStartY - photoBottomLimit) / photoRowStride) + 1);
+  const firstPhotoPageCapacity = firstPhotoPageMaxRows * 2;
+  const continuationPhotoPageCapacity = continuationPhotoPageMaxRows * 2;
+  // Never truncates — always enough pages for every photo, minimum 1 page
+  // even with zero photos (keeps the report's structure the same either way).
+  const photoPageCount =
+    orderedPhotos.length <= firstPhotoPageCapacity
+      ? 1
+      : 1 + Math.ceil((orderedPhotos.length - firstPhotoPageCapacity) / continuationPhotoPageCapacity);
+  const totalPages = 2 + photoPageCount + (includeEcPage ? 1 : 0);
+  const ecPageNumber = includeEcPage ? 2 + photoPageCount + 1 : null;
 
   // ---------------- Page 1 — masthead, summary ----------------
   const page1 = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -355,7 +405,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
 
   let y = PAGE_H - mastheadH - 24;
   const reportCode = reportCodeFor(property.id);
-  const topLeft = `Page 1 of ${includeEcPage ? 4 : 3} · ${reportCode}`;
+  const topLeft = `Page 1 of ${totalPages} · ${reportCode}`;
   const topRight = `Issued ${formatDatePlain(new Date().toISOString())}`;
   page1.drawText(topLeft.toUpperCase(), { x: MARGIN_X, y, size: 7, font: fonts.regular, color: INK_SOFT });
   const topRightW = fonts.regular.widthOfTextAtSize(topRight.toUpperCase(), 7);
@@ -401,7 +451,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     ['Map pin', property.plot_gps_coordinate || (property.google_map_lat && property.google_map_lng ? `${property.google_map_lat}, ${property.google_map_lng}` : 'Not recorded')],
     ['Visit window', `${formatWindow(job.requested_window_start, job.requested_window_end)}${job.submitted_at ? ` · attended ${formatDateIST(job.submitted_at)}, ${formatTimeIST(job.submitted_at)}` : ''}`],
     ['Field agent', `Plot360 verified agent · ${agentCodeFor(job.agent_id)}`],
-    ['EC copy', data.ecRequested ? 'Requested — see page 4' : 'Not requested'],
+    ['EC copy', includeEcPage ? `${data.ecRequested ? 'Requested' : 'Included'} — see page ${ecPageNumber}` : 'Not requested'],
   ];
   const labelColW = 110;
   for (const [label, value] of detailRows) {
@@ -437,7 +487,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     y = drawParagraph(page1, changeText, { x: MARGIN_X, y, size: 9.5, font: fonts.regular, color: TEXT, maxWidth: contentWidth, lineHeight: 13 });
   }
 
-  drawFooter(page1, fonts, `Plot360 · site visit record · ${reportCode}/V${job.visit_number ?? ''}`, 1, includeEcPage ? 4 : 3);
+  drawFooter(page1, fonts, `Plot360 · site visit record · ${reportCode}/V${job.visit_number ?? ''}`, 1, totalPages);
 
   // ---------------- Page 2 — checks table + observations ----------------
   const page2 = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -497,72 +547,80 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     });
   }
 
-  drawFooter(page2, fonts, `plot360.in · WhatsApp ${DISPLAY_PHONE}`, 2, includeEcPage ? 4 : 3);
+  drawFooter(page2, fonts, `plot360.in · WhatsApp ${DISPLAY_PHONE}`, 2, totalPages);
 
-  // ---------------- Page 3 — photographs ----------------
-  const page3 = pdfDoc.addPage([PAGE_W, PAGE_H]);
-  drawSecondaryHeader(page3, fonts, `Photographic record · ${formatDateIST(job.decided_at ?? job.submitted_at)}`);
-  y = PAGE_H - 90;
-  page3.drawText('Photographic record', { x: MARGIN_X, y, size: 19, font: fonts.bold, color: TEXT });
-  y -= 16;
+  // ---------------- Pages 3..(3+photoPageCount-1) — photographs ----------------
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: this used to be a
+  // single page capped at whatever grid fit, with everything past that
+  // dropped and a "full set is in your Plot360 account" note. Now spreads
+  // orderedPhotos (boundary photos first, see above) across as many pages
+  // as it takes — nothing is ever left out of the PDF itself.
+  let photoCursor = 0;
+  for (let p = 0; p < photoPageCount; p++) {
+    const isFirstPhotoPage = p === 0;
+    const capacity = isFirstPhotoPage ? firstPhotoPageCapacity : continuationPhotoPageCapacity;
+    const pagePhotos = orderedPhotos.slice(photoCursor, photoCursor + capacity);
+    const captionStartIndex = photoCursor;
+    photoCursor += pagePhotos.length;
 
-  // How many photos actually fit determines the note's wording ("Six of
-  // eighteen photographs...") — worked out from a pessimistic 2-line
-  // budget for the note itself, so the grid never overflows regardless
-  // of how the final note text happens to wrap.
-  const gap = 16;
-  const tileW = (contentWidth - gap) / 2;
-  const tileH = tileW * 0.75; // 4:3
-  const bottomLimit = 70;
-  const rowStride = tileH + 26;
-  const noteBudget = 2 * 12 + 8;
-  const maxRows = Math.max(1, Math.floor((y - noteBudget - bottomLimit) / rowStride) + 1);
-  const maxPhotosShown = maxRows * 2;
-  const shownPhotos = data.photos.slice(0, maxPhotosShown);
-  const hiddenCount = data.photos.length - shownPhotos.length;
+    const photoPage = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    drawSecondaryHeader(photoPage, fonts, `Photographic record · ${formatDateIST(job.decided_at ?? job.submitted_at)}`);
+    y = PAGE_H - 90;
+    photoPage.drawText(isFirstPhotoPage ? 'Photographic record' : 'Photographic record (continued)', {
+      x: MARGIN_X,
+      y,
+      size: 19,
+      font: fonts.bold,
+      color: TEXT,
+    });
+    y -= 16;
 
-  const photoNote =
-    hiddenCount > 0
-      ? `${shownPhotos.length} of ${data.photos.length} photographs.${data.videoCount ? ` ${data.videoCount} video${data.videoCount === 1 ? '' : 's'} and the` : ' The'} full set ${data.videoCount ? 'are' : 'is'} in your Plot360 account.`
-      : `${data.photos.length} photograph${data.photos.length === 1 ? '' : 's'}${data.videoCount ? ` and ${data.videoCount} video${data.videoCount === 1 ? '' : 's'}` : ''} from this visit.`;
-  y = drawParagraph(page3, photoNote, { x: MARGIN_X, y, size: 9, font: fonts.regular, color: INK_SOFT, maxWidth: contentWidth, lineHeight: 12 });
-  y -= 14;
-
-  let col = 0;
-  let rowTopY = y;
-  for (let i = 0; i < shownPhotos.length; i++) {
-    if (rowTopY - tileH < bottomLimit) break; // safety net; maxRows above should already prevent this
-    const photo = shownPhotos[i];
-    const x = MARGIN_X + col * (tileW + gap);
-    const fetched = await fetchBytes(photo.url);
-    const img = fetched ? await embedImageBytes(pdfDoc, fetched.bytes, fetched.contentType) : null;
-    if (img) {
-      const scale = Math.min(tileW / img.width, tileH / img.height);
-      const drawW = img.width * scale;
-      const drawH = img.height * scale;
-      page3.drawRectangle({ x, y: rowTopY - tileH, width: tileW, height: tileH, color: NEUTRAL_300 });
-      page3.drawImage(img, { x: x + (tileW - drawW) / 2, y: rowTopY - tileH + (tileH - drawH) / 2, width: drawW, height: drawH });
+    if (isFirstPhotoPage) {
+      const photoNote = `${orderedPhotos.length} photograph${orderedPhotos.length === 1 ? '' : 's'}${data.videoCount ? ` and ${data.videoCount} video${data.videoCount === 1 ? '' : 's'}` : ''} from this visit${photoPageCount > 1 ? `, across ${photoPageCount} pages` : ''}.`;
+      y = drawParagraph(photoPage, photoNote, { x: MARGIN_X, y, size: 9, font: fonts.regular, color: INK_SOFT, maxWidth: contentWidth, lineHeight: 12 });
+      y -= 14;
     } else {
-      page3.drawRectangle({ x, y: rowTopY - tileH, width: tileW, height: tileH, color: NEUTRAL_400 });
-      page3.drawText('Photo unavailable', { x: x + 8, y: rowTopY - tileH + 8, size: 8, font: fonts.regular, color: TEXT });
+      y -= 6;
     }
-    const caption = photo.boundarySide ? `${BOUNDARY_LABELS[photo.boundarySide] ?? photo.boundarySide} boundary` : `Photograph ${String(i + 1).padStart(2, '0')}`;
-    page3.drawText(caption, { x, y: rowTopY - tileH - 12, size: 8, font: fonts.regular, color: TEXT });
 
-    if (col === 1) {
-      col = 0;
-      rowTopY -= tileH + 26;
-    } else {
-      col = 1;
+    let col = 0;
+    let rowTopY = y;
+    for (let i = 0; i < pagePhotos.length; i++) {
+      if (rowTopY - photoTileH < photoBottomLimit) break; // safety net; the capacity math above should already prevent this
+      const photo = pagePhotos[i];
+      const x = MARGIN_X + col * (photoTileW + photoGap);
+      const fetched = await fetchBytes(photo.url);
+      const img = fetched ? await embedImageBytes(pdfDoc, fetched.bytes, fetched.contentType) : null;
+      if (img) {
+        const scale = Math.min(photoTileW / img.width, photoTileH / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        photoPage.drawRectangle({ x, y: rowTopY - photoTileH, width: photoTileW, height: photoTileH, color: NEUTRAL_300 });
+        photoPage.drawImage(img, { x: x + (photoTileW - drawW) / 2, y: rowTopY - photoTileH + (photoTileH - drawH) / 2, width: drawW, height: drawH });
+      } else {
+        photoPage.drawRectangle({ x, y: rowTopY - photoTileH, width: photoTileW, height: photoTileH, color: NEUTRAL_400 });
+        photoPage.drawText('Photo unavailable', { x: x + 8, y: rowTopY - photoTileH + 8, size: 8, font: fonts.regular, color: TEXT });
+      }
+      const caption = photo.boundarySide
+        ? `${BOUNDARY_LABELS[photo.boundarySide] ?? photo.boundarySide} boundary`
+        : `Photograph ${String(captionStartIndex + i + 1).padStart(2, '0')}`;
+      photoPage.drawText(caption, { x, y: rowTopY - photoTileH - 12, size: 8, font: fonts.regular, color: TEXT });
+
+      if (col === 1) {
+        col = 0;
+        rowTopY -= photoRowStride;
+      } else {
+        col = 1;
+      }
     }
+
+    drawFooter(photoPage, fonts, 'Photographs are unedited and timestamped at capture', 2 + p + 1, totalPages);
   }
 
-  drawFooter(page3, fonts, 'Photographs are unedited and timestamped at capture', 3, includeEcPage ? 4 : 3);
-
-  // ---------------- Page 4 — EC annexure (only when requested) ----------------
+  // ---------------- Final page — EC annexure (only when requested or on file) ----------------
   if (includeEcPage) {
     const page4 = pdfDoc.addPage([PAGE_W, PAGE_H]);
-    drawSecondaryHeader(page4, fonts, 'Annexure · requested by owner');
+    drawSecondaryHeader(page4, fonts, data.ecRequested ? 'Annexure · requested by owner' : 'Annexure · encumbrance certificate');
     y = PAGE_H - 90;
     page4.drawText('Encumbrance certificate', { x: MARGIN_X, y, size: 19, font: fonts.bold, color: TEXT });
     y -= 16;
@@ -645,7 +703,7 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
       'Plot360 is not a real estate broker, agent, valuer, surveyor or title-verification authority. This report records what a Plot360 field agent observed on the ground on the date stated, and reproduces the encumbrance certificate as issued; it does not verify ownership, title, encumbrances or the legal status of the property beyond the authorisation documents collected from the customer, and it is not legal advice. Photographs and videos are unedited and timestamped at capture. For an opinion on title or on the entries in the certificate, consult an advocate. Full terms at plot360.in/legal/terms-of-use.';
     drawParagraph(page4, disclaimer, { x: MARGIN_X, y: discTop - 28, size: 7.5, font: fonts.regular, color: INK_SOFT, maxWidth: contentWidth, lineHeight: 10.5 });
 
-    drawFooter(page4, fonts, `Questions? WhatsApp ${DISPLAY_PHONE} · plot360.in`, 4, 4);
+    drawFooter(page4, fonts, `Questions? WhatsApp ${DISPLAY_PHONE} · plot360.in`, ecPageNumber!, totalPages);
 
     // Raw appended EC PDF pages (only when the EC was itself a PDF)
     // intentionally carry no Plot360 chrome/footer — they're the
