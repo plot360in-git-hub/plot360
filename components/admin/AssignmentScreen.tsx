@@ -8,6 +8,13 @@ import { AssignAgentButtons } from './AssignAgentButtons';
 // assignment queue for both assignment origins — see assignment.
 // actions.ts for why there are two ("legacy" subscription/due-date
 // model vs "visit_request" customer self-service scheduling).
+//
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added the agent's
+// phone number beside their name in both lists below, so admin can call
+// them directly while deciding who to assign, instead of having to open
+// their agent record first. Sourced from getSuggestedAgents /
+// getVerifiedAgentsExcludingBanned (assignment.actions.ts /
+// agent-bans.actions.ts), both updated to select it.
 export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_request' | 'stuck'; id: string }) {
   const target = await getAssignmentTarget(kind, id);
   if (!target) return <p style={{ padding: 24 }}>This visit is no longer waiting for assignment.</p>;
@@ -36,7 +43,12 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
           <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderBottom: '1px solid var(--color-divider)' }}>
             <div style={{ width: 26, flex: 'none', fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 13, color: 'var(--color-accent-700)' }}>{String(i + 1).padStart(2, '0')}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{profileDisplayName(a.profiles)}</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {profileDisplayName(a.profiles)}
+                {a.profiles?.phone_number && (
+                  <span style={{ fontWeight: 400, color: 'var(--p-ink-soft)' }}> · {a.profiles.phone_country_code ?? ''} {a.profiles.phone_number}</span>
+                )}
+              </div>
               <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginTop: 2 }}>
                 SRO {a.sro_name} {a.sro_code} · {a.completedVisits} visits completed
               </div>
@@ -54,7 +66,12 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
         {overrideAgents.map((a: any) => (
           <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '11px 0', borderBottom: '1px solid var(--color-divider)' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{profileDisplayName(a.profiles)}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                {profileDisplayName(a.profiles)}
+                {a.profiles?.phone_number && (
+                  <span style={{ fontWeight: 400, color: 'var(--p-ink-soft)' }}> · {a.profiles.phone_country_code ?? ''} {a.profiles.phone_number}</span>
+                )}
+              </div>
               <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 2 }}>SRO {a.sro_name} {a.sro_code}</div>
             </div>
             <div style={{ width: 130, flex: 'none', fontSize: 11, color: a.sroMatches ? 'var(--p-ink-soft)' : 'var(--p-alert)' }}>{a.sroMatches ? 'SRO match' : 'SRO — no match'}</div>

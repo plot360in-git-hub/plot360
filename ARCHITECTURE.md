@@ -3673,3 +3673,45 @@ from `photoPageCount` and `includeEcPage`, rather than the old hardcoded
 "3 or 4". A customer's own uploaded EC PDF's pages, when it's a multi-page
 PDF, are still appended after the annexure page with no Plot360 chrome
 and aren't part of this count — unchanged from before.
+
+## 65. District/Pincode added to Property verification's Site location, agent phone shown wherever admin picks or reviews an agent (2026-09-26)
+
+Two small admin-console gaps Plot pointed out from screenshots:
+
+1. The Property verification screen's "Site location" fields
+   (`LocationFieldsForm.tsx`) never exposed District or Pincode, even
+   though both columns already exist on `properties` (`district`,
+   `postal_code`) and are used elsewhere (the visit report PDF's address
+   line, for one) — the quick registration flow just never collected
+   them and this admin screen never offered to fill them in. Added
+   between Mandal and SRO name/code, per the order asked
+   (Mandal → District → Pincode → SRO), as a new row in the existing
+   2-column grid. `updatePropertyLocationFields` (`admin.actions.ts`) now
+   saves both.
+2. Neither the "Assign a visit" screen nor the submission review screen
+   showed an agent's phone number — admin deciding who to assign work to,
+   or reviewing a submitted visit, had no way to call that agent without
+   opening their separate agent record first. Added beside/under the
+   agent's name in three places:
+   - `AssignmentScreen.tsx` — both the SRO-matched "Suggested" list and
+     the "All agents — manual override" list. Fed by
+     `getSuggestedAgents` (`assignment.actions.ts`) and
+     `getVerifiedAgentsExcludingBanned` (`agent-bans.actions.ts`), both
+     now selecting `phone_country_code, phone_number` alongside the
+     name fields they already fetched.
+   - `SubmissionReviewScreen.tsx` — the "Submitted ... by <agent>" line.
+     `getJobForReview` (`monitoring.actions.ts`) already selected
+     `phone_number`; added the missing `phone_country_code` so the
+     number renders with its prefix instead of bare digits.
+   - `MonitoringOverview.tsx` (added last entry, #63) — its Active and
+     Completed rows' "Agent: <name>" now includes the phone too (new
+     `agentLabel` helper), and the page's search box now also matches on
+     it, since this is the same "find and contact this agent" need as
+     the other two screens and `getAllMonitoringJobs` needed the same
+     two columns added to its `agent_profiles` join regardless.
+   Every phone shown here is the real, unmasked number (matching the
+   existing convention in `AgentReview.tsx`, `AgentVerificationQueue.tsx`,
+   `PaymentsOverview.tsx` and `RenewalsQueue.tsx`, none of which mask it
+   either) — unlike the visit report PDF's customer-facing `maskPhone`,
+   this is an internal admin screen where the whole point is dialing the
+   number shown.

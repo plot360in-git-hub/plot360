@@ -179,6 +179,12 @@ export async function updatePropertyLocationFields(propertyId: string, formData:
     street_address: str('street_address'),
     village_town: str('village_town'),
     mandal_taluka: str('mandal_taluka'),
+    // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: District and
+    // Pincode were columns that already existed on `properties` but this
+    // form never collected them — added to LocationFieldsForm.tsx between
+    // Mandal and SRO name/code, so they need saving here too.
+    district: str('district'),
+    postal_code: str('postal_code'),
     sro_name: str('sro_name'),
     sro_code: str('sro_code'),
     plot_gps_coordinate: str('plot_gps_coordinate'),

@@ -180,9 +180,13 @@ export async function getSuggestedAgents(sroCode: string | null) {
   const supabase = await createClient();
   const banned = await getBannedAgentIds();
 
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added phone so
+  // AssignmentScreen.tsx can show it beside the agent's name — see the
+  // matching note on getVerifiedAgentsExcludingBanned (agent-bans.actions.ts),
+  // which feeds the "manual override" list below this one.
   const { data: agents } = await supabase
     .from('agent_profiles')
-    .select('id, sro_name, sro_code, profiles(first_name, last_name, email)')
+    .select('id, sro_name, sro_code, profiles(first_name, last_name, email, phone_country_code, phone_number)')
     .eq('status', 'verified')
     .eq('sro_code', sroCode);
   const matching = (agents ?? []).filter((a) => !banned.has(a.id));

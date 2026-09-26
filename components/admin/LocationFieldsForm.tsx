@@ -21,6 +21,13 @@ function buildMapsUrl(value?: string | null): string | null {
 // screen's editable "Site location" fields — the quick registration
 // flow leaves most of these blank for an admin to fill in while
 // verifying (see admin.actions.ts, updatePropertyLocationFields).
+//
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: District and Pincode
+// weren't editable here at all, even though both columns already exist
+// on `properties` (district, postal_code) and are used elsewhere (the
+// visit report PDF's address line, etc.) — this screen just never
+// exposed them. Added between Mandal and SRO name/code, per Plot's asked
+// order.
 export function LocationFieldsForm({ property }: { property: any }) {
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -58,6 +65,14 @@ export function LocationFieldsForm({ property }: { property: any }) {
         <div className="field">
           <label>Mandal</label>
           <input className="input" style={{ minHeight: 38 }} name="mandal_taluka" defaultValue={property.mandal_taluka ?? ''} />
+        </div>
+        <div className="field">
+          <label>District</label>
+          <input className="input" style={{ minHeight: 38 }} name="district" defaultValue={property.district ?? ''} />
+        </div>
+        <div className="field">
+          <label>Pincode</label>
+          <input className="input" style={{ minHeight: 38 }} name="postal_code" defaultValue={property.postal_code ?? ''} placeholder="6-digit PIN" />
         </div>
         <div className="field">
           <label>

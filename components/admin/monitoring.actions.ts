@@ -426,18 +426,23 @@ export async function getAllMonitoringJobs() {
   const { data } = await supabase
     .from('monitoring_jobs')
     .select(
-      `*, properties(id, property_name, next_monitoring_due_date, status, profiles(first_name, last_name, email, phone_country_code, phone_number)), agent_profiles(id, profiles(first_name, last_name, email))`
+      `*, properties(id, property_name, next_monitoring_due_date, status, profiles(first_name, last_name, email, phone_country_code, phone_number)), agent_profiles(id, profiles(first_name, last_name, email, phone_country_code, phone_number))`
     )
     .order('assigned_at', { ascending: false });
   return data ?? [];
 }
 
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added
+// phone_country_code (phone_number was already here) so
+// SubmissionReviewScreen.tsx can show the agent's full number beside
+// their name — admin reviewing a submission had no way to call them
+// directly from this screen.
 export async function getJobForReview(jobId: string) {
   const supabase = await createClient();
   const [{ data: job }, { data: media }] = await Promise.all([
     supabase
       .from('monitoring_jobs')
-      .select(`*, properties(*), agent_profiles(id, profiles(first_name, last_name, email, phone_number))`)
+      .select(`*, properties(*), agent_profiles(id, profiles(first_name, last_name, email, phone_country_code, phone_number))`)
       .eq('id', jobId)
       .single(),
     supabase.from('monitoring_media').select('*').eq('job_id', jobId).order('uploaded_at', { ascending: true }),

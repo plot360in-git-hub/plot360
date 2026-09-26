@@ -42,8 +42,15 @@ export async function SubmissionReviewScreen({ jobId }: { jobId: string }) {
         <h2 style={{ fontSize: 24, letterSpacing: '-0.02em', margin: '12px 0 0' }}>
           {job.visit_number ? `Visit ${job.visit_number} submission` : 'Visit submission'} · {property?.property_name}
         </h2>
+        {/* Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added the
+            agent's phone number beside their name so admin can call them
+            directly while reviewing, instead of having to look them up
+            separately. See getJobForReview (monitoring.actions.ts). */}
         <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>
-          Submitted {job.submitted_at?.slice(0, 16).replace('T', ' ')} by {profileDisplayName(agentProfile?.profiles)} · {photoCount} photos, {videoCount} video · waiting {formatWait(waitHours)}
+          Submitted {job.submitted_at?.slice(0, 16).replace('T', ' ')} by {profileDisplayName(agentProfile?.profiles)}
+          {agentProfile?.profiles?.phone_number && ` (${agentProfile.profiles.phone_country_code ?? ''} ${agentProfile.profiles.phone_number})`}
+          {' · '}
+          {photoCount} photos, {videoCount} video · waiting {formatWait(waitHours)}
         </div>
 
         {job.flagged && (

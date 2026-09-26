@@ -75,10 +75,18 @@ export async function toggleAgentBan(agentId: string, shouldBan: boolean, reason
 
 // Same shape as monitoring.actions.ts's getVerifiedAgentsList(), minus
 // anyone currently banned — used by the redesigned Assignment screen.
+//
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added the agent's
+// phone so AssignmentScreen.tsx can show it beside their name — admin was
+// picking an agent to assign work to with no way to call them directly
+// from this screen.
 export async function getVerifiedAgentsExcludingBanned() {
   const supabase = await createClient();
   const [{ data: agents }, banned] = await Promise.all([
-    supabase.from('agent_profiles').select('id, sro_name, sro_code, profiles(first_name, last_name, email)').eq('status', 'verified'),
+    supabase
+      .from('agent_profiles')
+      .select('id, sro_name, sro_code, profiles(first_name, last_name, email, phone_country_code, phone_number)')
+      .eq('status', 'verified'),
     getBannedAgentIds(),
   ]);
   return (agents ?? []).filter((a) => !banned.has(a.id));

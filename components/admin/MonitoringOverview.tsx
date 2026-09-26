@@ -35,6 +35,16 @@ const PROPERTY_STATUS_CLASS: Record<string, string> = {
   rejected: 'rejected',
 };
 
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: added the agent's
+// phone number beside their name in both Active and Completed rows below
+// (getAllMonitoringJobs already joins it), so admin can call them
+// directly while tracking a job instead of opening the agent's record.
+function agentLabel(agentProfile: any) {
+  const name = profileDisplayName(agentProfile?.profiles);
+  const phone = agentProfile?.profiles?.phone_number;
+  return phone ? `${name} (${agentProfile.profiles.phone_country_code ?? ''} ${phone})` : name;
+}
+
 function paymentPill(payment: any) {
   const status = payment?.status === 'completed' ? 'Completed' : payment ? 'Pending' : 'None on file';
   const cls = payment?.status === 'completed' ? 'verified' : payment ? 'pending' : 'rejected';
@@ -115,7 +125,8 @@ export async function MonitoringOverview({ query = '' }: { query?: string }) {
       j.properties?.profiles?.email,
       j.properties?.profiles?.phone_number,
       profileDisplayName(j.agent_profiles?.profiles),
-      j.agent_profiles?.profiles?.email
+      j.agent_profiles?.profiles?.email,
+      j.agent_profiles?.profiles?.phone_number
     )
   );
   const filteredCompleted = completed.filter((j: any) =>
@@ -126,7 +137,8 @@ export async function MonitoringOverview({ query = '' }: { query?: string }) {
       j.properties?.profiles?.email,
       j.properties?.profiles?.phone_number,
       profileDisplayName(j.agent_profiles?.profiles),
-      j.agent_profiles?.profiles?.email
+      j.agent_profiles?.profiles?.email,
+      j.agent_profiles?.profiles?.phone_number
     )
   );
 
@@ -185,7 +197,7 @@ export async function MonitoringOverview({ query = '' }: { query?: string }) {
               <Link href={`/admin/monitoring/${j.id}`} style={{ textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
                 <h4 style={{ marginBottom: 4 }}>{j.properties?.property_name}</h4>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>
-                  Customer: {profileDisplayName(j.properties?.profiles)} · Agent: {profileDisplayName(j.agent_profiles?.profiles)}
+                  Customer: {profileDisplayName(j.properties?.profiles)} · Agent: {agentLabel(j.agent_profiles)}
                 </p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {propertyStatus && (
@@ -221,7 +233,7 @@ export async function MonitoringOverview({ query = '' }: { query?: string }) {
               <div style={{ minWidth: 0 }}>
                 <h4 style={{ marginBottom: 4 }}>{j.properties?.property_name}</h4>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>
-                  Customer: {profileDisplayName(j.properties?.profiles)} · Agent: {profileDisplayName(j.agent_profiles?.profiles)} · Approved{' '}
+                  Customer: {profileDisplayName(j.properties?.profiles)} · Agent: {agentLabel(j.agent_profiles)} · Approved{' '}
                   {j.decided_at?.slice(0, 10)} · Next due: {j.properties?.next_monitoring_due_date ?? '—'}
                 </p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
