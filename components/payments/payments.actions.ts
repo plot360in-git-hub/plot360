@@ -261,7 +261,13 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
   revalidatePath('/admin/queue/payments');
   revalidatePath(`/properties/${propertyId}`);
   revalidatePath('/dashboard');
-  return { success: true, validUntil };
+  // Redesign 2026-09 (follow-up, 2026-09-26) — amount/visitQuantity/planName
+  // added so confirmPaymentWithLog (review-decisions.actions.ts) can build
+  // its professional payment-confirmation WhatsApp message ("Thank you for
+  // the payment of ₹X... valid for N visit(s)...") without a second query —
+  // every value it needs was already computed in this function, just never
+  // returned past it before.
+  return { success: true, validUntil, amount, visitQuantity: plan?.visit_quantity ?? null, planName: (plan?.name as string | undefined) ?? null };
 }
 
 // ---------- Redesign 2026-09 — admin console ----------

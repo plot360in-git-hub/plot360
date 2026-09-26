@@ -34,6 +34,7 @@ export function AssignAgentForm({ propertyId, agents }: { propertyId: string; ag
       const address = [p.street_address, p.village_town, p.district, p.state].filter(Boolean).join(', ');
       const mapUrl = p.google_map_lat && p.google_map_lng ? `https://www.google.com/maps?q=${p.google_map_lat},${p.google_map_lng}` : null;
       const message = buildAssignmentMessage({
+        agentName: details.agentName!,
         propertyName: p.property_name,
         plotSize: `${p.plot_size ?? ''} ${p.plot_size_unit ?? ''}`.trim(),
         address,

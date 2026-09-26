@@ -356,7 +356,20 @@ export function AgentCaptureScreen({
                 <option value="W">West</option>
               </select>
             </div>
-            <input className="input" type="file" name="media" accept="image/*,video/*,.pdf" multiple capture={mode === 'magic' ? 'environment' : undefined} style={{ marginBottom: 8 }} />
+            {/* Redesign 2026-09 (follow-up, 2026-09-26) — Plot: opening this
+                from the WhatsApp magic link opened the phone's camera
+                directly instead of the usual "Photo Library / Take Photo /
+                Choose File" picker, so an agent couldn't pick photos already
+                on their phone (e.g. taken moments earlier as a backup, or
+                shared from someone else on-site) — only fresh camera shots.
+                `capture="environment"` is what forces that: it's an
+                instruction to skip the picker and launch the camera. Was
+                only set for `mode === 'magic'`, on a mistaken assumption
+                that the magic-link flow should push agents toward fresh,
+                in-the-moment photos; not requested anywhere and not worth
+                the loss of the gallery option, so removed entirely — same
+                as the authenticated flow already had it. */}
+            <input className="input" type="file" name="media" accept="image/*,video/*,.pdf" multiple style={{ marginBottom: 8 }} />
             <button type="submit" className="btn btn-secondary btn-block" disabled={uploadPending}>
               {uploadPending ? 'Uploading…' : 'Add photo / video'}
             </button>

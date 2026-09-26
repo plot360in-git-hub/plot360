@@ -47,6 +47,55 @@ export function isConcerningAnswer(key: string, value: string | boolean | null |
   return false;
 }
 
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot asked for the admin's
+// "Comments for the customer's report" field (monitoring_jobs.admin_remarks
+// — shown to the customer as "Note from Plot360" / "Plot360 review
+// comments") to arrive pre-filled with a professional, survey-report-style
+// summary composed from the agent's own answers, instead of starting
+// blank and needing the admin to type one from scratch every time. This is
+// deliberately a different, more narrative composition than
+// lib/pdf/visitReportPdf.ts's own composeSummary() (which drives the
+// PDF's separate, always-auto "Summary" box on page 1 and is never shown
+// for editing) — this one is only ever a starting DRAFT: the admin sees it
+// in an editable textarea (SubmissionReviewActions.tsx) and can rewrite or
+// clear it entirely before approving, same as if they'd typed it
+// themselves.
+export function composeVisitSummaryDraft(job: Record<string, any>, propertyName: string): string {
+  const name = propertyName || 'the property';
+  const vacant = !!job.q_vacant_as_expected;
+  const boundaryIntact = !!job.q_boundary_intact;
+  const markersVisible = !!job.q_boundary_markers_visible;
+
+  const sentences: string[] = [
+    `Our field agent visited ${name} and carried out a full on-site inspection.`,
+    `The plot was found ${vacant ? 'vacant, as expected' : 'not vacant, contrary to what was expected'}, with the boundary/fencing ${boundaryIntact ? 'intact' : 'not fully intact'} and boundary markers/pillars ${markersVisible ? 'visible and intact' : 'not fully visible'}.`,
+  ];
+
+  const concerns: string[] = [];
+  if (job.q_encroachment) concerns.push('signs of encroachment');
+  if (job.q_illegal_dumping) concerns.push('illegal dumping or debris');
+  if (job.q_unauthorized_construction) concerns.push('unauthorized construction or activity');
+  if (job.q_govt_notice_posted) concerns.push('a government/municipal notice posted on site');
+  if (job.q_water_logging) concerns.push('a water-logging or drainage issue');
+  sentences.push(
+    concerns.length
+      ? `The visit noted ${concerns.join(', ')}.`
+      : 'No encroachment, unauthorized construction, illegal dumping, or government notice was observed, and no water-logging or drainage issues were noted.'
+  );
+
+  const overallCondition = String(job.q_overall_condition || '').trim();
+  if (overallCondition) sentences.push(`Overall plot condition: ${overallCondition}.`);
+
+  const attention = String(job.q_attention_needed || '').trim();
+  const attentionMeaningful = attention.length > 0 && !['none', 'no', 'n/a', 'na'].includes(attention.toLowerCase());
+  if (attentionMeaningful) sentences.push(`For the owner's attention: ${attention}.`);
+
+  const notes = String(job.observations || '').trim();
+  if (notes) sentences.push(`Additional notes from the field agent: ${notes}`);
+
+  return sentences.join(' ');
+}
+
 // Extracts and validates the 10 answers from a submitted FormData. Used by
 // both agent submission actions (authenticated + magic-link) so the same
 // validation rules apply regardless of which path an agent used.

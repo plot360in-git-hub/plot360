@@ -376,7 +376,7 @@ export async function getAssignmentWhatsAppDetails(jobId: string) {
 
   const { data: job } = await supabase
     .from('monitoring_jobs')
-    .select('property_id, agent_profiles(profiles(phone_country_code, phone_number))')
+    .select('property_id, agent_profiles(profiles(first_name, last_name, username, phone_country_code, phone_number))')
     .eq('id', jobId)
     .single();
   if (!job) return { error: 'Job not found.' };
@@ -392,10 +392,19 @@ export async function getAssignmentWhatsAppDetails(jobId: string) {
   if ('error' in tokenResult) return { error: tokenResult.error };
 
   const agentProfile: any = job.agent_profiles;
+  // Redesign 2026-09 (follow-up, 2026-09-26) — agentName added so the
+  // assignment/reassignment WhatsApp messages (whatsapp.ts) can open with
+  // "Dear <agent name>," per Plot's professional-message ask, instead of
+  // never addressing the agent by name at all.
+  const agentProfileRow = agentProfile?.profiles;
+  const agentName = agentProfileRow
+    ? [agentProfileRow.first_name, agentProfileRow.last_name].filter(Boolean).join(' ') || agentProfileRow.username || 'Agent'
+    : 'Agent';
   return {
     success: true,
     phoneCountryCode: agentProfile?.profiles?.phone_country_code,
     phoneNumber: agentProfile?.profiles?.phone_number,
+    agentName,
     property,
     uploadLink: `${process.env.NEXT_PUBLIC_SITE_URL}/m/${tokenResult.token}`,
   };
@@ -444,6 +453,25 @@ export async function getMonitoringMediaUrl(filePath: string) {
   return data.signedUrl;
 }
 
+// Redesign 2026-09 (follow-up, 2026-09-26) — Plot: "Manager or admin can
+// also be allowed to edit submitted agent job Overall plot condition,
+// Anything needing the owner's attention?, and Agent's notes while
+// reviewing it (to correct any spelling mistakes or add or remove other
+// values)." These three are free-text, agent-typed-on-a-phone fields
+// (q_overall_condition, q_attention_needed, observations) — unlike the
+// other eight fixed Yes/No checks, there's real value in an admin fixing a
+// typo or tightening the wording before it reaches the customer's report
+// and PDF (visitReportPdf.ts reads these same columns live, so a
+// correction here is picked up automatically, no separate PDF-side change
+// needed). Optional and additive: omitting `overrides` (or a given key
+// within it) leaves that column untouched, so every existing caller of
+// decideMonitoringJob keeps working unchanged.
+export type SubmissionAnswerOverrides = {
+  q_overall_condition?: string;
+  q_attention_needed?: string;
+  observations?: string;
+};
+
 // Approve: locks the job, and schedules the NEXT monitoring 6 months out.
 // Reject: sends it back to the agent with feedback explaining why.
 export async function decideMonitoringJob(
@@ -451,7 +479,8 @@ export async function decideMonitoringJob(
   propertyId: string,
   decision: 'approved' | 'rejected',
   feedback?: string,
-  adminRemarks?: string
+  adminRemarks?: string,
+  overrides?: SubmissionAnswerOverrides
 ) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
@@ -487,6 +516,9 @@ export async function decideMonitoringJob(
       admin_feedback: decision === 'rejected' ? feedback || null : null,
       admin_remarks: decision === 'approved' ? adminRemarks?.trim() || null : null,
       decided_at: new Date().toISOString(),
+      ...(overrides?.q_overall_condition !== undefined ? { q_overall_condition: overrides.q_overall_condition.trim() } : {}),
+      ...(overrides?.q_attention_needed !== undefined ? { q_attention_needed: overrides.q_attention_needed.trim() } : {}),
+      ...(overrides?.observations !== undefined ? { observations: overrides.observations.trim() } : {}),
     })
     .eq('id', jobId);
   if (jobError) return { error: jobError.message };

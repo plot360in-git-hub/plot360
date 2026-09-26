@@ -8,7 +8,14 @@ import { logAdminAction } from './timeline.actions';
 import { flagPaymentMismatch } from '@/components/payments/payments.actions';
 import { setAgentStatus } from './agents.actions';
 import { isCurrentUserAdmin } from './admin.actions';
-import { buildAdditionalInfoMessage } from './whatsapp';
+import {
+  buildAdditionalInfoMessage,
+  buildPaymentConfirmedMessage,
+  buildPropertyVerifiedMessage,
+  buildVisitReportReadyMessage,
+  customerDisplayName,
+} from './whatsapp';
+import type { SubmissionAnswerOverrides } from './monitoring.actions';
 
 // Redesign 2026-09 — admin console. Thin wrappers around the existing,
 // untouched decision actions (setPropertyStatus, decideMonitoringJob,
@@ -45,12 +52,12 @@ export async function verifyProperty(propertyId: string) {
   const supabase = await createClient();
   const { data: property } = await supabase
     .from('properties')
-    .select('property_name, profiles(phone_country_code, phone_number)')
+    .select('property_name, profiles(first_name, last_name, username, phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
   const profile: any = (property as any)?.profiles;
   const phone = phoneOf(profile);
-  const message = `Plot360: ${property?.property_name ?? 'Your property'} is verified. We will be in touch to schedule your first visit.`;
+  const message = buildPropertyVerifiedMessage(customerDisplayName(profile), property?.property_name ?? 'your property');
   if (phone) {
     await logWhatsAppMessage({ relatedEntityType: 'property', relatedEntityId: propertyId, recipientPhone: phone, body: message });
   }
@@ -103,8 +110,7 @@ export async function sendAdditionalInfoRequest(propertyId: string) {
   const owner: any = property.profiles;
   if (!owner?.phone_number) return { error: 'No phone number on file for this customer.' };
 
-  const customerName = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || owner.username || 'Customer';
-  const message = buildAdditionalInfoMessage(customerName);
+  const message = buildAdditionalInfoMessage(customerDisplayName(owner));
 
   await logWhatsAppMessage({
     relatedEntityType: 'property',
@@ -124,19 +130,38 @@ export async function sendAdditionalInfoRequest(propertyId: string) {
 
 // ---------- Agent submissions ----------
 
-export async function approveSubmission(jobId: string, propertyId: string, adminRemarks: string) {
-  const result = await decideMonitoringJob(jobId, propertyId, 'approved', undefined, adminRemarks);
+export async function approveSubmission(
+  jobId: string,
+  propertyId: string,
+  adminRemarks: string,
+  overrides?: SubmissionAnswerOverrides
+) {
+  const result = await decideMonitoringJob(jobId, propertyId, 'approved', undefined, adminRemarks, overrides);
   if ('error' in result) return result;
 
   const supabase = await createClient();
-  const { data: property } = await supabase
-    .from('properties')
-    .select('property_name, profiles(phone_country_code, phone_number)')
-    .eq('id', propertyId)
-    .single();
+  const [{ data: property }, { data: ownership }] = await Promise.all([
+    supabase
+      .from('properties')
+      .select('property_name, profiles(first_name, last_name, username, phone_country_code, phone_number)')
+      .eq('id', propertyId)
+      .single(),
+    supabase.from('property_ownership').select('ec_digital_copy_requested').eq('property_id', propertyId).maybeSingle(),
+  ]);
   const profile: any = (property as any)?.profiles;
   const phone = phoneOf(profile);
-  const message = `Plot360: Your visit report for ${property?.property_name ?? 'your property'} is ready, with photographs${result.ecPending ? '' : ' and your EC copy'}.`;
+  const propertyName = property?.property_name ?? 'your property';
+  // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: the WhatsApp saying the
+  // report is ready should also carry a direct link to it, so the customer
+  // doesn't have to log in and hunt for it. Same pattern rejectSubmission
+  // below already uses for its upload link.
+  const reportUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/properties/${propertyId}/visit-report/${jobId}/pdf`;
+  const message = buildVisitReportReadyMessage({
+    customerName: customerDisplayName(profile),
+    propertyName,
+    reportUrl,
+    includesEcCopy: !!ownership?.ec_digital_copy_requested && !result.ecPending,
+  });
   if (phone) {
     await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
@@ -146,8 +171,13 @@ export async function approveSubmission(jobId: string, propertyId: string, admin
     : result;
 }
 
-export async function rejectSubmission(jobId: string, propertyId: string, reasonText: string) {
-  const result = await decideMonitoringJob(jobId, propertyId, 'rejected', reasonText);
+export async function rejectSubmission(
+  jobId: string,
+  propertyId: string,
+  reasonText: string,
+  overrides?: SubmissionAnswerOverrides
+) {
+  const result = await decideMonitoringJob(jobId, propertyId, 'rejected', reasonText, undefined, overrides);
   if ('error' in result) return result;
 
   const supabase = await createClient();
@@ -193,12 +223,18 @@ export async function confirmPaymentWithLog(paymentId: string, propertyId: strin
   const supabase = await createClient();
   const { data: property } = await supabase
     .from('properties')
-    .select('property_name, profiles(phone_country_code, phone_number)')
+    .select('property_name, profiles(first_name, last_name, username, phone_country_code, phone_number)')
     .eq('id', propertyId)
     .single();
   const profile: any = (property as any)?.profiles;
   const phone = phoneOf(profile);
-  const message = `Plot360: Payment received for ${property?.property_name ?? 'your property'}, valid until ${result.validUntil}. Your visit will now be scheduled.`;
+  const message = buildPaymentConfirmedMessage({
+    customerName: customerDisplayName(profile),
+    propertyName: property?.property_name ?? 'your property',
+    amount: result.amount ?? 0,
+    visitQuantity: result.visitQuantity ?? null,
+    validUntil: result.validUntil,
+  });
   if (phone) {
     await logWhatsAppMessage({ relatedEntityType: 'payment', relatedEntityId: paymentId, recipientPhone: phone, body: message });
   }

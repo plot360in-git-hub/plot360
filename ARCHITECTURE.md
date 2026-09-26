@@ -3198,3 +3198,167 @@ every other `.btn` usage (marketing nav, plan-selection toggle buttons,
 `ConfirmationScreen.tsx`, admin queue pager, etc.) is a genuine
 single-line label with no wrapping description, so nowrap is correct
 there and nothing else needed the same fix.
+
+## 58. Agent upload photo picker, admin corrections to agent answers, an
+##     auto-drafted customer summary, a visit-report link on WhatsApp, and
+##     four WhatsApp messages reworded to a professional letter format
+##     (2026-09-26)
+
+Five separate asks from Plot in one round, all touching the
+agent-visit → admin-review → customer-notification pipeline.
+
+**Agent upload opened the camera instead of the photo picker.**
+`AgentCaptureScreen.tsx`'s file input had `capture={mode === 'magic' ?
+'environment' : undefined}` — `capture="environment"` is what forces a
+mobile browser to skip the usual "Photo Library / Take Photo / Choose
+File" picker and launch the camera directly. This was only set for the
+magic-link flow (opened from the WhatsApp job link, no login), which
+is exactly the screen in Plot's screenshot. There was no reason for the
+two paths (magic-link vs. authenticated `/agent/jobs`) to behave
+differently here, and forcing the camera meant an agent couldn't pick a
+photo already on their phone. Removed the `capture` attribute entirely
+— both paths now get the full native picker.
+
+**Admin/manager can now correct the agent's three free-text answers
+while reviewing.** `q_overall_condition`, `q_attention_needed`, and
+`observations` ("Agent's notes") are agent-typed-on-a-phone text, prone
+to typos, unlike the other eight fixed Yes/No checks. Previously these
+were read-only on the Submission review screen
+(`SubmissionReviewScreen.tsx`) and there was no way to fix a typo before
+it reached the customer's PDF report. Now:
+- `SubmissionReviewScreen.tsx`'s "The ten checks" grid is filtered to
+  only the eight boolean checks (renamed "The eight fixed checks, as
+  answered") — the two free-text ones and the old static "Agent's
+  notes" block moved into `SubmissionReviewActions.tsx` as three
+  editable fields (initialized from the agent's original values).
+- `decideMonitoringJob` (`monitoring.actions.ts`) gained an optional
+  `overrides: SubmissionAnswerOverrides` parameter — when a key is
+  provided, that column is updated as part of the same approve/reject
+  write; omitted keys are left untouched, so every other caller is
+  unaffected. `approveSubmission`/`rejectSubmission`
+  (`review-decisions.actions.ts`) both accept and forward it.
+- Since `lib/pdf/visitReportPdf.ts` reads these same `monitoring_jobs`
+  columns live at PDF-generation time, an admin's correction is
+  automatically reflected in the customer's report with no separate
+  PDF-side change needed.
+- Deliberately NOT made editable: the eight Yes/No checks themselves —
+  those are the agent's objective on-site observations; editing them
+  would mean an admin overriding what was actually seen on site, not
+  correcting a typo.
+
+**"Comments for the customer's report" now starts pre-filled with an
+auto-drafted, professional summary.** Plot asked for this field (shown
+to the customer as "Note from Plot360" / "Plot360 review comments") to
+arrive with a survey-report-style paragraph composed from the agent's
+own answers, instead of starting blank. Added
+`composeVisitSummaryDraft(job, propertyName)` to
+`lib/visitReportQuestions.ts` — a narrative composition (vacancy/
+boundary/markers status, any concerning items, overall condition,
+attention-needed, agent's notes, in that order) deliberately separate
+from that file's existing `composeSummary()` in `visitReportPdf.ts`
+(which drives the PDF's own always-auto, never-edited "Summary" box on
+page 1 — a different, terser composition for a different purpose).
+`SubmissionReviewScreen.tsx` computes the draft server-side and passes
+it to `SubmissionReviewActions.tsx` as `defaultRemarks`, which the
+`remarks` textarea now initializes to instead of `''`. Still a plain
+`useState` the admin can rewrite or clear entirely before approving —
+nothing forces the draft through unedited.
+
+**The "your visit report is ready" WhatsApp now includes a link to the
+report**, and all four of the messages below were rewritten from their
+old one-line, unsigned form to Plot's requested letter format ("Dear
+<name>, ... Thanks, Plot360 Team"). New builders added to
+`components/admin/whatsapp.ts`:
+- `customerDisplayName(profile)` — the shared "Dear <name>" fallback
+  chain (`first + last name, else username, else "Customer"`) that four
+  different call sites were each re-implementing; pulled out once.
+- `buildAdditionalInfoMessage` (existing function, reworded) — the
+  property-verification-stage "we need more information" message now
+  also lists exactly what to have ready: site address, Google Map pin,
+  government ID proof, and the sale deed's last page — Plot's own
+  wording, tightened for a professional business message (e.g. "any
+  Govt issued Phot ID proof" → "any government-issued photo ID (Driving
+  Licence, Voter ID, Aadhaar, etc.)"). Sent from
+  `sendAdditionalInfoRequest`, unchanged trigger (admin taps "Request
+  more info" on the Property verification detail screen).
+- `buildPropertyVerifiedMessage` (new) — replaces `verifyProperty`'s old
+  `"Plot360: <name> is verified. We will be in touch..."` one-liner.
+- `buildPaymentConfirmedMessage` (new) — replaces
+  `confirmPaymentWithLog`'s old `"Plot360: Payment received for
+  <name>..."` one-liner with one naming the actual amount paid, number
+  of visits purchased, and expiry date. Needed `recordPayment`
+  (`payments.actions.ts`) to start returning `amount`/`visitQuantity`/
+  `planName` — all three were already computed inside that function,
+  just never passed back to the caller before.
+- `buildVisitReportReadyMessage` (new) — replaces `approveSubmission`'s
+  old one-liner, and is the one that now carries the report link:
+  `${NEXT_PUBLIC_SITE_URL}/properties/${propertyId}/visit-report/${jobId}/pdf`
+  (the existing RLS-gated PDF route from round 35 — 404s for anyone but
+  the property's own owner, so it's safe to send even though it needs
+  the customer to be logged in to actually open it; same
+  `NEXT_PUBLIC_SITE_URL` pattern `rejectSubmission` already uses for its
+  agent upload link). Also fixed a small pre-existing accuracy gap while
+  touching this: the old message always said "and your EC copy" unless
+  the job was `ec_pending`, even for a property where no EC was ever
+  requested at all. `includesEcCopy` is now computed as
+  `ecRequested && !ecPending` (an extra `property_ownership` query in
+  `approveSubmission`), so the message only claims an EC copy is
+  included when one was both requested and actually is in the report.
+
+Not changed: `rejectPropertyVerification`'s and
+`flagPaymentMismatchWithLog`'s messages, and `rejectSubmission`'s
+agent-facing rework message — Plot's four examples were specifically
+the verification-kickoff, verified, payment-confirmed, and
+report-ready messages; the reject/flag messages weren't mentioned and
+were left in their existing form.
+
+## 59. Agent assignment/reassignment WhatsApp messages reworded, and a
+##     "missing letters" report investigated (2026-09-26)
+
+Two follow-ups from the same round as #58.
+
+**"Missing letters" in the info-request message — investigated, not a
+code bug.** Plot's screenshot showed "followin·:" and "dist·ict" instead
+of "following:" and "district" inside the WhatsApp Web compose box.
+Checked `components/admin/whatsapp.ts`'s source both by eye and
+byte-for-byte (`grep`, then a `cat -A`/Python byte-scan for any
+zero-width or otherwise invisible characters around those two words) —
+the string is plain, correctly-spelled ASCII with nothing hidden in it.
+The `?text=` value is also built with a single, ordinary
+`encodeURIComponent(message)` call (`buildWhatsAppLink`), so there's no
+double-encoding step that could corrupt it either. This points to a
+rendering artifact in WhatsApp Web's own compose box — most likely its
+red spell-check squiggle (visible under several words in the
+screenshot) visually overlapping the letter at that zoom level, rather
+than the message itself being missing characters. Nothing changed here;
+flagged to Plot to double check by reading the actual sent message
+(recipient side, or pasted into a plain text field) rather than the
+compose-box screenshot before assuming a real bug.
+
+**Agent assignment/reassignment WhatsApp reworded to match the same
+letter format.** Plot's example specifically covered the fresh-
+assignment message ("Plot360: New visit job. Property: ... Location:
+... Pin: ... Upload link: ... (closes on submit or in 7 days)" → "Dear
+<Agent Name> / A new Visit job for <property> has been ready and
+assigned to you / location: ... / Google pin: ... / upload url / closes
+on submit or in 7 days / Thanks, Plot360 Team"). Applied to both
+`buildAssignmentMessage` (fresh assignment) and `buildReassignmentMessage`
+(handed to a different agent) in `whatsapp.ts`, since they share the
+exact same structure and audience — leaving only one reworded would have
+been an inconsistency, not a deliberate choice. Both now take a new
+`agentName` param and collapse the old three separate optional lines
+(Location Map / GPS Coordinates / Nearby Landmark) into one "Google pin"
+line via a shared `buildGooglePinText` helper, preferring the map URL,
+then the raw GPS coordinate, then the nearby-landmark text, in that
+order — the same preference those three lines were already checked in,
+just now picking one value instead of printing up to three. Plot size is
+kept as an extra line when known (dropped from Plot's own shorter
+template, but useful for an agent planning a visit, so kept rather than
+removed outright).
+`getAssignmentWhatsAppDetails` (`monitoring.actions.ts`, the shared data-
+loader all three call sites — `AssignAgentForm.tsx`,
+`ReassignAgentForm.tsx`, `ResendWhatsAppButton.tsx` — use) now also
+selects the agent's `first_name`/`last_name`/`username` and returns a
+computed `agentName` (same fallback chain as `customerDisplayName` in
+whatsapp.ts, just for an agent profile instead of a customer one), which
+each call site passes straight through.

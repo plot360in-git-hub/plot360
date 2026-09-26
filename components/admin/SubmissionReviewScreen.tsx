@@ -4,7 +4,7 @@ import { profileDisplayName } from './displayName';
 import { TimelineOutboxPanel } from './TimelineOutboxPanel';
 import { SubmissionReviewActions } from './SubmissionReviewActions';
 import { EcUploadFormP360 } from './EcUploadFormP360';
-import { VISIT_QUESTIONS, isConcerningAnswer } from '@/lib/visitReportQuestions';
+import { VISIT_QUESTIONS, isConcerningAnswer, composeVisitSummaryDraft } from '@/lib/visitReportQuestions';
 import { hoursSince, formatWait } from '@/lib/adminQueue';
 
 // Redesign 2026-09 — admin console, Submission review screen
@@ -76,11 +76,21 @@ export async function SubmissionReviewScreen({ jobId }: { jobId: string }) {
           {media.length === 0 && <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)' }}>No media uploaded.</p>}
         </div>
 
-        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)', marginTop: 22 }}>The ten checks, as answered</div>
+        {/* Redesign 2026-09 (follow-up, 2026-09-26) — the two free-text
+            checks (Overall plot condition, Anything needing the owner's
+            attention?) moved out of this read-only grid — Plot asked for
+            admin/manager to be able to correct these (typos, added or
+            removed detail) while reviewing, so they're now editable fields
+            inside SubmissionReviewActions below, alongside Agent's notes.
+            Only the eight fixed Yes/No checks stay here, read-only, since
+            those are objective on-site observations with nothing to
+            "correct" — editing them would mean overriding what the agent
+            actually saw. */}
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)', marginTop: 22 }}>The eight fixed checks, as answered</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 26px', marginTop: 9 }}>
-          {VISIT_QUESTIONS.map((q) => {
+          {VISIT_QUESTIONS.filter((q) => q.type === 'boolean').map((q) => {
             const value = (job as any)[q.key];
-            const display = q.type === 'boolean' ? (value ? 'Yes' : 'No') : value || '—';
+            const display = value ? 'Yes' : 'No';
             const concerning = isConcerningAnswer(q.key, value);
             return (
               <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--color-divider)' }}>
@@ -90,12 +100,6 @@ export async function SubmissionReviewScreen({ jobId }: { jobId: string }) {
             );
           })}
         </div>
-        {job.observations && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>Agent's notes</div>
-            <p style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 6 }}>{job.observations}</p>
-          </div>
-        )}
 
         <div style={{ borderTop: '2px solid var(--color-divider)', marginTop: 20, paddingTop: 18 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
@@ -108,7 +112,15 @@ export async function SubmissionReviewScreen({ jobId }: { jobId: string }) {
           </div>
         </div>
 
-        <SubmissionReviewActions jobId={jobId} propertyId={job.property_id} propertyName={property?.property_name ?? 'this property'} />
+        <SubmissionReviewActions
+          jobId={jobId}
+          propertyId={job.property_id}
+          propertyName={property?.property_name ?? 'this property'}
+          overallCondition={job.q_overall_condition ?? ''}
+          attentionNeeded={job.q_attention_needed ?? ''}
+          agentNotes={job.observations ?? ''}
+          defaultRemarks={composeVisitSummaryDraft(job, property?.property_name ?? 'this property')}
+        />
       </div>
 
       <TimelineOutboxPanel entityType="monitoring_job" entityId={jobId} whatsappEntityType="monitoring_job" />
