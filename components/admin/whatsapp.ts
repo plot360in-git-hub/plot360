@@ -139,9 +139,12 @@ export function buildPaymentConfirmedMessage(params: {
 // Redesign 2026-09 (follow-up, 2026-09-26) — Plot's replacement for the old
 // one-line "Plot360: Your visit report for <name> is ready, with
 // photographs and your EC copy." message, now also carrying a direct link
-// to the visit report PDF (app/properties/[id]/visit-report/[jobId]/pdf —
-// RLS-gated to the property's own owner, so the link is safe to send even
-// though it needs the customer to be logged in to actually open it).
+// to the visit report PDF. reportUrl is a no-login token link
+// (app/r/[token], see components/customer/report-link.actions.ts) so it
+// opens directly in WhatsApp's cookie-less in-app browser — an earlier
+// version pointed at the cookie-authenticated
+// app/properties/[id]/visit-report/[jobId]/pdf route, which WhatsApp's
+// browser could never satisfy even for a customer logged in elsewhere.
 // includesEcCopy is computed by the caller (approveSubmission) as
 // `ecRequested && !ecPending` — true only once an EC was both asked for
 // AND is actually in the report; `false` covers both "never asked for one"

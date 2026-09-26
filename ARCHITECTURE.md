@@ -3498,3 +3498,63 @@ If Plot360 ever moves to Supabase's Pro/Team plan and raises the global
 file size limit in Dashboard → Storage → Settings, `MAX_FILE_SIZE_BYTES`
 in `lib/fileValidation.ts` should be updated to match — it's a single
 constant, not scattered per call site.
+
+## 62. No-login token link for the customer's WhatsApp visit-report PDF (2026-09-26)
+
+Plot reported that the WhatsApp "your visit report is ready" message's
+link opened `uat.plot360.in` rather than the PDF directly, and pasted a
+real example message showing the link was correctly formed:
+`.../properties/[id]/visit-report/[jobId]/pdf`. The link itself wasn't
+the problem — that route (`app/properties/[id]/visit-report/[jobId]/pdf/route.ts`)
+is gated by Postgres RLS via `getVisitReportPdfData`'s normal
+cookie-authenticated Supabase client, so it only ever serves the PDF to a
+signed-in request from the property's own owner. WhatsApp's in-app
+browser is a separate, cookie-less webview from the customer's regular
+phone browser — even a customer who's logged into the Plot360 app
+elsewhere on the same phone isn't recognized there, RLS blocks the row,
+and the route falls back to its generic `'This visit report is not
+available.'` 404 text, which is what Plot was seeing as "opens
+uat.plot360.in rather than direct pdf file."
+
+Given the choice between (1) redirecting an unauthenticated visitor to
+login and bouncing back, or (2) a no-login expiring token link mirroring
+the agent's magic-link uploads, Plot picked the token link.
+
+New `visit_report_tokens` table (`supabase/schema.sql`) — the
+customer-facing mirror of `monitoring_upload_tokens` (agent uploads, see
+#60 / `components/agent/magic-link.actions.ts`): `job_id`, a unique
+random `token`, `expires_at`. RLS on it is admin-only-through-the-app,
+same shape as the upload-tokens table; the public flow bypasses RLS
+entirely via the service-role client, exactly like the agent link.
+
+New `components/customer/report-link.actions.ts`: `getOrCreateReportToken(jobId)`
+(admin-only, called from `approveSubmission`) creates/reuses a token;
+`getVisitReportPdfDataByToken(token)` validates it (exists, not expired,
+job still `approved`/`ec_pending`) with a service-role client and then
+calls the *same* `getVisitReportPdfData` every authenticated caller
+already uses, passing that service-role client through instead of a
+session client. One key difference from the agent's 7-day upload link:
+a visit report is a permanent record the owner should be able to reopen
+for years, not a short-lived task link, so validity here is
+`RECORD_LINK_VALIDITY_DAYS = 1095` (~3 years) rather than tied to the
+job's status changing.
+
+`components/properties/monitoring/monitoring.actions.ts`:
+`getVisitReportPdfData`, `getMonitoringMediaDownloadUrl`, and
+`getEcDigitalCopyForProperty` all gained an optional second
+`supabaseOverride` parameter (defaults to the normal cookie-authenticated
+client, so every existing call site is unaffected) so the token flow can
+thread the service-role client through the same data-fetching and
+signed-URL logic instead of duplicating it.
+
+New route `app/r/[token]/route.ts` — a no-login sibling of
+`app/properties/[id]/visit-report/[jobId]/pdf/route.ts`, reachable with
+just the token. The authenticated route is untouched and still used by
+the in-app "Download PDF" button (`components/customer/VisitReportView.tsx`)
+for a customer already logged into the app.
+
+`components/admin/review-decisions.actions.ts`'s `approveSubmission` and
+`components/admin/whatsapp.ts`'s `buildVisitReportReadyMessage` now build
+the WhatsApp message's `reportUrl` from `/r/<token>` instead of the old
+authenticated path, falling back to the old authenticated link if token
+creation fails for any reason, so the message always has a working link.

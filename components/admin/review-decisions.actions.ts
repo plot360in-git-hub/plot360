@@ -153,9 +153,21 @@ export async function approveSubmission(
   const propertyName = property?.property_name ?? 'your property';
   // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: the WhatsApp saying the
   // report is ready should also carry a direct link to it, so the customer
-  // doesn't have to log in and hunt for it. Same pattern rejectSubmission
-  // below already uses for its upload link.
-  const reportUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/properties/${propertyId}/visit-report/${jobId}/pdf`;
+  // doesn't have to log in and hunt for it. This used to point at the
+  // cookie-authenticated .../visit-report/[jobId]/pdf route, but WhatsApp's
+  // in-app browser has no session cookies, so that link just opened "This
+  // visit report is not available." Now uses a no-login token link — the
+  // customer-facing mirror of the agent's magic-link uploads (see
+  // components/customer/report-link.actions.ts and ARCHITECTURE.md #62) —
+  // falling back to the old authenticated link if token creation fails for
+  // any reason, so the message still has a working link for anyone
+  // already logged in.
+  const { getOrCreateReportToken } = await import('@/components/customer/report-link.actions');
+  const reportTokenResult = await getOrCreateReportToken(jobId);
+  const reportUrl =
+    'success' in reportTokenResult
+      ? `${process.env.NEXT_PUBLIC_SITE_URL}/r/${reportTokenResult.token}`
+      : `${process.env.NEXT_PUBLIC_SITE_URL}/properties/${propertyId}/visit-report/${jobId}/pdf`;
   const message = buildVisitReportReadyMessage({
     customerName: customerDisplayName(profile),
     propertyName,

@@ -82,8 +82,15 @@ export async function getVisitReportData(jobId: string) {
 // scopes this to the requesting owner's own properties or an admin;
 // only approved/ec_pending jobs return data (enforced here, not just by
 // the caller, since the PDF route has no other gate).
-export async function getVisitReportPdfData(jobId: string) {
-  const supabase = await createClient();
+//
+// Redesign 2026-09 (follow-up, 2026-09-26) — supabaseOverride lets the new
+// token-based /r/[token] report route (components/customer/report-link.actions.ts)
+// pass in a service-role client instead: that route serves a customer
+// opening a WhatsApp link with no session at all, so it can't rely on the
+// normal cookie-authenticated client or its RLS. Every existing caller
+// keeps working unchanged since the override is optional.
+export async function getVisitReportPdfData(jobId: string, supabaseOverride?: any) {
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: job } = await supabase
     .from('monitoring_jobs')
     .select('*, properties(*, profiles(first_name, last_name, phone_country_code, phone_number))')
@@ -97,7 +104,7 @@ export async function getVisitReportPdfData(jobId: string) {
   const [{ data: ownership }, { data: mediaRows }, ec, { data: verifiedAction }, { data: previousJob }] = await Promise.all([
     supabase.from('property_ownership').select('ec_digital_copy_requested').eq('property_id', property.id).maybeSingle(),
     supabase.from('monitoring_media').select('*').eq('job_id', jobId).order('uploaded_at', { ascending: true }),
-    getEcDigitalCopyForProperty(property.id),
+    getEcDigitalCopyForProperty(property.id, supabase),
     supabase
       .from('admin_actions')
       .select('created_at')
@@ -121,11 +128,18 @@ export async function getVisitReportPdfData(jobId: string) {
   ]);
 
   const media = mediaRows ?? [];
-  const photos = media.filter((m) => m.media_type === 'photo');
+  // Redesign 2026-09 (follow-up, 2026-09-26) — supabaseOverride's `any`
+  // type widens `supabase`, and everything derived from it, to `any` —
+  // that's normally silent, but it also strips the contextual typing
+  // .filter()/.map() would otherwise infer for their callback params,
+  // which next build's real type check (unlike this sandbox's
+  // syntax-only tscheck) flags as TS7006 under strict mode. Explicit
+  // `any` annotations here say the same thing without tripping it.
+  const photos = media.filter((m: any) => m.media_type === 'photo');
   const photosWithUrls = await Promise.all(
-    photos.map(async (m) => ({ url: await getMonitoringMediaDownloadUrl(m.file_path), boundarySide: m.boundary_side as string | null }))
+    photos.map(async (m: any) => ({ url: await getMonitoringMediaDownloadUrl(m.file_path, supabase), boundarySide: m.boundary_side as string | null }))
   );
-  const videoCount = media.filter((m) => m.media_type === 'video').length;
+  const videoCount = media.filter((m: any) => m.media_type === 'video').length;
 
   return {
     job,
@@ -140,8 +154,8 @@ export async function getVisitReportPdfData(jobId: string) {
   };
 }
 
-export async function getMonitoringMediaDownloadUrl(filePath: string) {
-  const supabase = await createClient();
+export async function getMonitoringMediaDownloadUrl(filePath: string, supabaseOverride?: any) {
+  const supabase = supabaseOverride ?? (await createClient());
   const { data, error } = await supabase.storage.from('monitoring-media').createSignedUrl(filePath, 60 * 10, { download: true });
   if (error) return null;
   return data.signedUrl;
@@ -150,8 +164,8 @@ export async function getMonitoringMediaDownloadUrl(filePath: string) {
 // The Digital EC is uploaded by admin (not the customer) once received
 // externally, and belongs here in the monitoring/verification section
 // rather than the customer's own "Uploaded Documents" list.
-export async function getEcDigitalCopyForProperty(propertyId: string) {
-  const supabase = await createClient();
+export async function getEcDigitalCopyForProperty(propertyId: string, supabaseOverride?: any) {
+  const supabase = supabaseOverride ?? (await createClient());
   const { data } = await supabase
     .from('property_documents')
     .select('file_path')

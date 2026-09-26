@@ -267,6 +267,33 @@ create table if not exists monitoring_upload_tokens (
 create index if not exists idx_monitoring_upload_tokens_job on monitoring_upload_tokens(job_id);
 create index if not exists idx_monitoring_upload_tokens_token on monitoring_upload_tokens(token);
 
+-- ---------- visit_report_tokens (passwordless magic-link report links) ----------
+-- Redesign 2026-09 (follow-up, 2026-09-26) — Plot: the WhatsApp visit-report
+-- link was opening "This visit report is not available" instead of the
+-- PDF, because it pointed at the normal cookie-authenticated
+-- /properties/[id]/visit-report/[jobId]/pdf route (RLS-gated), and
+-- WhatsApp's in-app browser is a separate, cookie-less webview — even a
+-- customer who's logged in on their phone's regular browser isn't
+-- recognized there. This table is the customer-facing mirror of
+-- monitoring_upload_tokens above (the agent's magic-link uploads): a long
+-- random token that IS the credential, checked by a service-role client
+-- that bypasses RLS (see components/customer/report-link.actions.ts). The
+-- difference from the agent link is validity: a visit report is a
+-- permanent record the owner should be able to reopen for years, not a
+-- short-lived task link, so its expiry is set far longer (see
+-- RECORD_LINK_VALIDITY_DAYS in that file) rather than revoked on job
+-- status change.
+create table if not exists visit_report_tokens (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references monitoring_jobs(id) on delete cascade,
+  token text not null unique,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_visit_report_tokens_job on visit_report_tokens(job_id);
+create index if not exists idx_visit_report_tokens_token on visit_report_tokens(token);
+
 -- ---------- renewal_requests (owner requests, admin decides) ----------
 create table if not exists renewal_requests (
   id uuid primary key default gen_random_uuid(),
@@ -323,6 +350,7 @@ alter table agent_documents enable row level security;
 alter table monitoring_jobs enable row level security;
 alter table monitoring_media enable row level security;
 alter table monitoring_upload_tokens enable row level security;
+alter table visit_report_tokens enable row level security;
 
 -- Safe way to check admin status from within another table's RLS policy
 -- (or even profiles' own policy) without triggering Postgres's "infinite
@@ -614,6 +642,18 @@ drop policy if exists "monitoring_upload_tokens_insert_admin" on monitoring_uplo
 create policy "monitoring_upload_tokens_insert_admin" on monitoring_upload_tokens for insert with check (is_admin());
 drop policy if exists "monitoring_upload_tokens_delete_admin" on monitoring_upload_tokens;
 create policy "monitoring_upload_tokens_delete_admin" on monitoring_upload_tokens for delete using (is_admin());
+
+-- visit_report_tokens: same shape as monitoring_upload_tokens above — only
+-- relevant for admin access through the normal authenticated app. The
+-- public /r/[token] report route never goes through this RLS at all; it
+-- uses a service-role client (lib/supabase/admin.ts) since an anonymous
+-- WhatsApp visitor with just a token can't satisfy any auth.uid() policy.
+drop policy if exists "visit_report_tokens_select_admin" on visit_report_tokens;
+create policy "visit_report_tokens_select_admin" on visit_report_tokens for select using (is_admin());
+drop policy if exists "visit_report_tokens_insert_admin" on visit_report_tokens;
+create policy "visit_report_tokens_insert_admin" on visit_report_tokens for insert with check (is_admin());
+drop policy if exists "visit_report_tokens_delete_admin" on visit_report_tokens;
+create policy "visit_report_tokens_delete_admin" on visit_report_tokens for delete using (is_admin());
 
 -- properties: give an agent row-level SELECT only on properties they have
 -- a monitoring job for. Uses a SECURITY DEFINER function rather than a
