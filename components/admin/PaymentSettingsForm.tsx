@@ -1,7 +1,9 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { updatePaymentSettings } from '@/components/payments/plans.actions';
+import { updatePaymentSettings, createPaymentQrUploadUrl } from '@/components/payments/plans.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 
 export function PaymentSettingsForm({ settings, qrUrl }: { settings: any; qrUrl: string | null }) {
   const initial = {
@@ -91,8 +93,33 @@ export function PaymentSettingsForm({ settings, qrUrl }: { settings: any; qrUrl:
               setError(null);
               const formData = new FormData();
               for (const [k, v] of Object.entries(draft)) formData.set(k, v as string);
-              if (fileRef.current?.files?.[0]) formData.set('qr_code_image', fileRef.current.files[0]);
-              const result = await updatePaymentSettings(formData);
+
+              // Redesign 2026-09 (follow-up) — QR image now uploads
+              // straight to storage instead of through this Server
+              // Action, which on Vercel has a hard 4.5MB request-body
+              // limit. See lib/uploadDirect.ts and ARCHITECTURE.md #60.
+              let qrPath: string | null = null;
+              const qrFile = fileRef.current?.files?.[0];
+              if (qrFile) {
+                const oversized = findOversizedFiles([qrFile]);
+                if (oversized.length > 0) {
+                  setError(oversizedFilesMessage(oversized));
+                  return;
+                }
+                const urlResult = await createPaymentQrUploadUrl(qrFile.name);
+                if (urlResult?.error || !urlResult?.path || !urlResult?.token || !urlResult?.bucket) {
+                  setError(urlResult?.error ?? 'Could not prepare the QR image upload — check your connection and try again.');
+                  return;
+                }
+                const results = await uploadFilesDirect(urlResult.bucket, [{ path: urlResult.path, token: urlResult.token, file: qrFile }]);
+                if (!results[0]?.ok) {
+                  setError('QR image failed to upload — check your connection and try again.');
+                  return;
+                }
+                qrPath = urlResult.path;
+              }
+
+              const result = await updatePaymentSettings(formData, qrPath);
               if (result && 'error' in result) setError(result.error ?? null);
               else {
                 setSavedAt(new Date().toLocaleString('en-IN'));

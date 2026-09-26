@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { uploadMediaByToken, deleteMediaByToken, submitByToken } from './magic-link.actions';
+import { createMediaUploadUrls, recordUploadedMedia, deleteMediaByToken, submitByToken } from './magic-link.actions';
 import { VisitQuestionsFields } from './VisitQuestionsFields';
-import { findOversizedImages, formatFileSize } from '@/lib/fileValidation';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
+import { uploadFilesDirect, mediaTypeOf } from '@/lib/uploadDirect';
+
+// Note (2026-09-26): kept in sync with magic-link.actions.ts's split
+// upload API (see ARCHITECTURE.md #60) purely so this unwired legacy
+// screen keeps compiling — PublicCapture.tsx/AgentCaptureScreen.tsx is the
+// live component for this route.
 
 export function PublicUploadForm({
   token,
@@ -34,20 +40,42 @@ export function PublicUploadForm({
 
   function handleUpload(formData: FormData) {
     setUploadError(null);
-    const files = formData.getAll('media') as File[];
-    const oversized = findOversizedImages(files);
+    const files = (formData.getAll('media') as File[]).filter((f) => f.size > 0);
+    if (files.length === 0) {
+      setUploadError('No files selected.');
+      return;
+    }
+    const oversized = findOversizedFiles(files);
     if (oversized.length > 0) {
-      setUploadError(
-        `${oversized.length > 1 ? 'These photos are' : 'This photo is'} too large (max 50MB each): ${oversized
-          .map((f) => `${f.name} (${formatFileSize(f.size)})`)
-          .join(', ')}`
-      );
+      setUploadError(oversizedFilesMessage(oversized));
       return;
     }
     startUpload(async () => {
-      const result = await uploadMediaByToken(token, formData);
-      if (result?.error) setUploadError(result.error);
-      else refreshMedia();
+      const urlResult = await createMediaUploadUrls(token, files.map((f) => f.name));
+      if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+        setUploadError(urlResult?.error ?? 'Could not prepare the upload — check your connection and try again.');
+        return;
+      }
+      const uploads = urlResult.uploads;
+      const results = await uploadFilesDirect(
+        urlResult.bucket,
+        uploads.map((u, i) => ({ path: u.path, token: u.token, file: files[i] }))
+      );
+      const succeeded = results.filter((r) => r.ok);
+      const failed = results.filter((r) => !r.ok);
+      if (succeeded.length > 0) {
+        const items = succeeded.map((r) => ({ path: uploads[r.index].path, mediaType: mediaTypeOf(files[r.index]) }));
+        const result = await recordUploadedMedia(token, items);
+        if (result?.error) {
+          setUploadError(result.error);
+          return;
+        }
+      }
+      if (failed.length > 0) {
+        setUploadError(`${failed.length} of ${files.length} file(s) failed to upload${succeeded.length ? ` (${succeeded.length} saved)` : ''} — try again.`);
+      } else {
+        refreshMedia();
+      }
     });
   }
 

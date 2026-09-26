@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { saveOwnership } from './registration.actions';
+import { saveOwnership, createOwnershipUploadUrls } from './registration.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 import type { PropertyOwnership } from '@/types/database.types';
-import type { ReusableOwnerIdProof } from './registration.actions';
+import type { ReusableOwnerIdProof, UploadedOwnershipFiles } from './registration.actions';
 
 // Redesign 2026-09 (follow-up, round 13) — full rebuild of the "Proofs of
 // Ownership" screen (reached from admin property verification's "Edit
@@ -137,13 +139,74 @@ export function OwnershipForm({
 
   const hasTitleDeed = (existingTitleDeedDocs ?? []).length > 0;
 
+  // Redesign 2026-09 (follow-up) — Plot: ownership documents (owner ID
+  // proof, NOC, title deed scans) used to upload straight through
+  // saveOwnership's Server Action, which on Vercel has a hard 4.5MB
+  // request-body limit that a scanned document photo can easily exceed.
+  // Any selected files now upload directly to storage first; saveOwnership
+  // only gets told where they ended up. See lib/uploadDirect.ts and
+  // ARCHITECTURE.md #60.
   function handleSubmit(formData: FormData) {
     setError(null);
     if (isOwner === 'yes' && ownerIdMode === 'reuse' && reusableOwnerIdProof) {
       formData.set('reuse_owner_id_from', reusableOwnerIdProof.filePath);
     }
+
+    const ownerIdFile = formData.get('owner_id_proof') as File | null;
+    const nocFile = formData.get('noc_file') as File | null;
+    const titleDeedFiles = (formData.getAll('title_deed') as File[]).filter((f) => f.size > 0);
+
+    const requests: { field: 'noc_file' | 'owner_id_proof' | 'title_deed'; fileName: string }[] = [];
+    const filesToUpload: File[] = [];
+    if (ownerIdFile && ownerIdFile.size > 0) {
+      requests.push({ field: 'owner_id_proof', fileName: ownerIdFile.name });
+      filesToUpload.push(ownerIdFile);
+    }
+    if (nocFile && nocFile.size > 0) {
+      requests.push({ field: 'noc_file', fileName: nocFile.name });
+      filesToUpload.push(nocFile);
+    }
+    for (const f of titleDeedFiles) {
+      requests.push({ field: 'title_deed', fileName: f.name });
+      filesToUpload.push(f);
+    }
+
+    const oversized = findOversizedFiles(filesToUpload);
+    if (oversized.length > 0) {
+      setError(oversizedFilesMessage(oversized));
+      return;
+    }
+
     startTransition(async () => {
-      const result = await saveOwnership(propertyId, formData, redirectTo);
+      let uploadedFiles: UploadedOwnershipFiles | undefined;
+
+      if (requests.length > 0) {
+        const urlResult = await createOwnershipUploadUrls(propertyId, requests);
+        if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+          setError(urlResult?.error ?? 'Could not prepare the upload — check your connection and try again.');
+          return;
+        }
+        const uploads = urlResult.uploads;
+        const results = await uploadFilesDirect(
+          urlResult.bucket,
+          uploads.map((u, i) => ({ path: u.path, token: u.token, file: filesToUpload[i] }))
+        );
+        const failed = results.filter((r) => !r.ok);
+        if (failed.length > 0) {
+          setError(`${failed.length} file(s) failed to upload — check your connection and try again before saving.`);
+          return;
+        }
+
+        uploadedFiles = {};
+        uploads.forEach((u, i) => {
+          const field = requests[i].field;
+          if (field === 'owner_id_proof') uploadedFiles!.owner_id = u.path;
+          else if (field === 'noc_file') uploadedFiles!.noc = u.path;
+          else uploadedFiles!.title_deed = [...(uploadedFiles!.title_deed ?? []), u.path];
+        });
+      }
+
+      const result = await saveOwnership(propertyId, formData, redirectTo, uploadedFiles);
       if (result?.error) setError(result.error);
     });
   }

@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { postServiceRequestMessage, closeServiceRequest } from './service-requests.actions';
+import { postServiceRequestMessage, createServiceRequestUploadUrls, recordServiceRequestAttachments, closeServiceRequest } from './service-requests.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 
 function profileDisplayName(p: any) {
   if (!p) return 'Unknown';
@@ -28,12 +30,48 @@ export function ServiceRequestThread({
 
   const isClosed = request.status === 'closed';
 
+  // Redesign 2026-09 (follow-up) — attachments now upload straight to
+  // storage from the browser instead of through a Server Action, which on
+  // Vercel has a hard 4.5MB request-body limit. See lib/uploadDirect.ts
+  // and ARCHITECTURE.md #60.
   function handleReply(formData: FormData) {
     setError(null);
+    const files = (formData.getAll('attachments') as File[]).filter((f) => f.size > 0);
+    const oversized = findOversizedFiles(files);
+    if (oversized.length > 0) {
+      setError(oversizedFilesMessage(oversized));
+      return;
+    }
     startTransition(async () => {
       const result = await postServiceRequestMessage(request.id, formData);
-      if (result?.error) setError(result.error);
-      else router.refresh();
+      if (result?.error || !result?.messageId) {
+        setError(result?.error ?? 'Something went wrong.');
+        return;
+      }
+
+      if (files.length > 0) {
+        const urlResult = await createServiceRequestUploadUrls(request.id, files.map((f) => f.name));
+        if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+          setError(`Reply sent, but attachments failed to upload: ${urlResult?.error ?? 'unknown error'}`);
+          router.refresh();
+          return;
+        }
+        const uploads = urlResult.uploads;
+        const results = await uploadFilesDirect(
+          urlResult.bucket,
+          uploads.map((u, i) => ({ path: u.path, token: u.token, file: files[i] }))
+        );
+        const succeeded = results.filter((r) => r.ok);
+        const failed = results.filter((r) => !r.ok);
+        if (succeeded.length > 0) {
+          await recordServiceRequestAttachments(result.messageId, succeeded.map((r) => uploads[r.index].path));
+        }
+        if (failed.length > 0) {
+          setError(`Reply sent, but ${failed.length} attachment(s) failed to upload — check your connection and try again.`);
+        }
+      }
+
+      router.refresh();
     });
   }
 

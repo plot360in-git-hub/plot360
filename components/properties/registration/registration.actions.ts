@@ -255,7 +255,49 @@ export async function getReusableOwnerIdProof(propertyId: string): Promise<Reusa
 // agent_entry_terms declarations (already covered by
 // properties.no_legal_case_declared and RegisterQuick's terms checkbox),
 // are dropped with no replacement — nothing downstream reads them.
-export async function saveOwnership(propertyId: string, formData: FormData, redirectTo?: string) {
+// Redesign 2026-09 (follow-up) — signed-upload-url step for ownership
+// documents (owner ID proof, NOC, title deed pages) — these routinely
+// include scanned/photographed pages that used to go straight through
+// saveOwnership's Server Action and hit Vercel's hard 4.5MB function body
+// limit. The browser now uploads directly to storage with these URLs and
+// passes the resulting paths into saveOwnership below, which only does DB
+// bookkeeping. See lib/uploadDirect.ts and ARCHITECTURE.md #60.
+//
+// Every path generated here is unique (timestamped) rather than the old
+// upsert-in-place scheme — signed upload URLs' own upsert option has
+// known reliability issues (github.com/supabase/supabase-js#1672,
+// supabase/supabase-js#1246), so replacement is handled the same way it
+// already was for a differently-named file: point the DB row at the new
+// path, then delete the now-orphaned old object.
+export async function createOwnershipUploadUrls(
+  propertyId: string,
+  requests: { field: 'noc_file' | 'owner_id_proof' | 'title_deed'; fileName: string }[]
+) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+  if (requests.length === 0) return { error: 'No files selected.' };
+
+  const uploads: { field: string; fileName: string; path: string; token: string }[] = [];
+  for (let i = 0; i < requests.length; i++) {
+    const { field, fileName } = requests[i];
+    const docType = field === 'noc_file' ? 'noc' : field === 'owner_id_proof' ? 'owner_id' : 'title_deed';
+    const path = `${propertyId}/${docType}-${Date.now()}-${i}-${fileName}`;
+    const { data, error } = await supabase.storage.from('property-documents').createSignedUploadUrl(path);
+    if (error) return { error: error.message };
+    uploads.push({ field, fileName, path, token: data.token });
+  }
+  return { success: true, bucket: 'property-documents' as const, uploads };
+}
+
+export type UploadedOwnershipFiles = { noc?: string; owner_id?: string; title_deed?: string[] };
+
+export async function saveOwnership(
+  propertyId: string,
+  formData: FormData,
+  redirectTo?: string,
+  uploadedFiles?: UploadedOwnershipFiles
+) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
@@ -273,27 +315,28 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
     .in('doc_type', ['noc', 'owner_id', 'title_deed']);
   const existingDocTypes = new Set((existingOwnershipDocs ?? []).map((d) => d.doc_type));
 
-  const nocFile = formData.get('noc_file') as File | null;
-  const ownerIdFile = formData.get('owner_id_proof') as File | null;
+  const nocPath = uploadedFiles?.noc ?? null;
+  const ownerIdPathUploaded = uploadedFiles?.owner_id ?? null;
   const reuseOwnerIdFrom = String(formData.get('reuse_owner_id_from') || '').trim();
-  const titleDeedFiles = (formData.getAll('title_deed') as File[]).filter((f) => f.size > 0);
+  const titleDeedPaths = uploadedFiles?.title_deed ?? [];
 
-  const ownerIdMissing = !existingDocTypes.has('owner_id') && !reuseOwnerIdFrom && (!ownerIdFile || ownerIdFile.size === 0);
+  const ownerIdMissing = !existingDocTypes.has('owner_id') && !reuseOwnerIdFrom && !ownerIdPathUploaded;
   if (ownerIdMissing) {
     return { error: isOwner ? 'Owner ID proof is required.' : "Owner ID proof (on which the plot is registered) is required." };
   }
   if (!isOwner) {
-    if (!existingDocTypes.has('noc') && (!nocFile || nocFile.size === 0)) {
+    if (!existingDocTypes.has('noc') && !nocPath) {
       return { error: 'NOC (No Objection Certificate) is required.' };
     }
   }
-  if (!existingDocTypes.has('title_deed') && titleDeedFiles.length === 0) {
+  if (!existingDocTypes.has('title_deed') && titleDeedPaths.length === 0) {
     return { error: 'Property Title / Sale Deed is required.' };
   }
 
-  async function uploadIfPresent(field: string, docType: DocumentType) {
-    const file = formData.get(field) as File | null;
-    if (!file || file.size === 0) return null;
+  // Points a property_documents row at an already-uploaded path (see
+  // createOwnershipUploadUrls above) and cleans up the object it replaces.
+  async function commitDocPath(path: string | null, docType: DocumentType) {
+    if (!path) return null;
 
     const { data: existing } = await supabase
       .from('property_documents')
@@ -301,12 +344,6 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
       .eq('property_id', propertyId)
       .eq('doc_type', docType)
       .maybeSingle();
-
-    const path = `${propertyId}/${docType}-${file.name}`;
-    const { error: uploadError } = await supabase.storage
-      .from('property-documents')
-      .upload(path, file, { upsert: true });
-    if (uploadError) throw new Error(uploadError.message);
 
     // Explicit update-or-insert instead of .upsert()/ON CONFLICT — the
     // property_documents unique index is partial (to allow multiple
@@ -318,8 +355,8 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
       : (await supabase.from('property_documents').insert({ property_id: propertyId, doc_type: docType, file_path: path })).error;
     if (docError) throw new Error(`Saving ${docType.replace(/_/g, ' ')} record failed: ${docError.message}`);
 
-    // Replacing a file with a different name leaves the old one orphaned —
-    // clean it up now that the new one is safely saved.
+    // Replacing a file leaves the old one orphaned — clean it up now that
+    // the new one is safely saved.
     if (existing?.file_path && existing.file_path !== path) {
       await supabase.storage.from('property-documents').remove([existing.file_path]);
     }
@@ -356,12 +393,11 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
 
   // Title deed allows multiple pages/files (e.g. first page + last page) —
   // each upload ADDS a new row rather than replacing the previous one,
-  // unlike the other document types above, which stay single-file.
-  async function uploadTitleDeedFiles(files: File[]) {
-    for (const file of files) {
-      const path = `${propertyId}/title_deed-${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('property-documents').upload(path, file);
-      if (uploadError) throw new Error(uploadError.message);
+  // unlike the other document types above, which stay single-file. Paths
+  // are already-uploaded (see createOwnershipUploadUrls) — this just
+  // records them.
+  async function commitTitleDeedPaths(paths: string[]) {
+    for (const path of paths) {
       const { error: docError } = await supabase
         .from('property_documents')
         .insert({ property_id: propertyId, doc_type: 'title_deed', file_path: path });
@@ -370,9 +406,9 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
   }
 
   try {
-    const nocPath = await uploadIfPresent('noc_file', 'noc');
-    const ownerIdPath = reuseOwnerIdFrom ? await reuseOwnerIdProof(reuseOwnerIdFrom) : await uploadIfPresent('owner_id_proof', 'owner_id');
-    await uploadTitleDeedFiles(titleDeedFiles);
+    const nocResultPath = await commitDocPath(nocPath, 'noc');
+    const ownerIdResultPath = reuseOwnerIdFrom ? await reuseOwnerIdProof(reuseOwnerIdFrom) : await commitDocPath(ownerIdPathUploaded, 'owner_id');
+    await commitTitleDeedPaths(titleDeedPaths);
 
     // This is now the final step — no more separate Documents screen — so
     // it also does the finalization work that used to live in
@@ -391,8 +427,8 @@ export async function saveOwnership(propertyId: string, formData: FormData, redi
         owner_full_name: String(formData.get('owner_full_name') || ''),
         is_registered_user_owner: isOwner,
         ec_digital_copy_requested: !!propertyRow?.ec_interest,
-        ...(nocPath ? { noc_file_url: nocPath } : {}),
-        ...(ownerIdPath ? { owner_id_proof_url: ownerIdPath } : {}),
+        ...(nocResultPath ? { noc_file_url: nocResultPath } : {}),
+        ...(ownerIdResultPath ? { owner_id_proof_url: ownerIdResultPath } : {}),
       },
       { onConflict: 'property_id' } // fixes: duplicate key value violates unique constraint "property_ownership_property_id_key"
     );

@@ -2,7 +2,9 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createServiceRequest, getMyPropertiesForServiceRequest } from './service-requests.actions';
+import { createServiceRequest, createServiceRequestUploadUrls, recordServiceRequestAttachments, getMyPropertiesForServiceRequest } from './service-requests.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 
 export function NewServiceRequestForm() {
   const [isPending, startTransition] = useTransition();
@@ -14,12 +16,44 @@ export function NewServiceRequestForm() {
     getMyPropertiesForServiceRequest().then(setProperties);
   }, []);
 
+  // Redesign 2026-09 (follow-up) — attachments now upload straight to
+  // storage from the browser instead of through a Server Action, which on
+  // Vercel has a hard 4.5MB request-body limit. See lib/uploadDirect.ts
+  // and ARCHITECTURE.md #60.
   function handleSubmit(formData: FormData) {
     setError(null);
+    const files = (formData.getAll('attachments') as File[]).filter((f) => f.size > 0);
+    const oversized = findOversizedFiles(files);
+    if (oversized.length > 0) {
+      setError(oversizedFilesMessage(oversized));
+      return;
+    }
     startTransition(async () => {
       const result = await createServiceRequest(formData);
-      if (result?.error) setError(result.error);
-      else router.push(`/service-requests/${result.requestId}`);
+      if (result?.error || !result?.requestId) {
+        setError(result?.error ?? 'Something went wrong.');
+        return;
+      }
+
+      if (files.length > 0) {
+        const urlResult = await createServiceRequestUploadUrls(result.requestId, files.map((f) => f.name));
+        if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+          setError(`Request submitted, but attachments failed to upload: ${urlResult?.error ?? 'unknown error'}`);
+          router.push(`/service-requests/${result.requestId}`);
+          return;
+        }
+        const uploads = urlResult.uploads;
+        const results = await uploadFilesDirect(
+          urlResult.bucket,
+          uploads.map((u, i) => ({ path: u.path, token: u.token, file: files[i] }))
+        );
+        const succeeded = results.filter((r) => r.ok);
+        if (succeeded.length > 0) {
+          await recordServiceRequestAttachments(result.messageId!, succeeded.map((r) => uploads[r.index].path));
+        }
+      }
+
+      router.push(`/service-requests/${result.requestId}`);
     });
   }
 

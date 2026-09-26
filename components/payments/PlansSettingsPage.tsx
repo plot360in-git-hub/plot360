@@ -2,7 +2,9 @@
 
 import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { upsertPlan, togglePlanActive, updatePaymentSettings } from './plans.actions';
+import { upsertPlan, togglePlanActive, updatePaymentSettings, createPaymentQrUploadUrl } from './plans.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 import { computePlanPrice } from '@/lib/subscription';
 
 function PlanPricePreview({ basePrice, discountPercent }: { basePrice: string; discountPercent: string }) {
@@ -66,10 +68,34 @@ export function PlansSettingsPage({ plans, paymentSettings, qrUrl }: { plans: an
     });
   }
 
+  // Redesign 2026-09 (follow-up) — QR image now uploads straight to
+  // storage instead of through this Server Action, which on Vercel has a
+  // hard 4.5MB request-body limit. See lib/uploadDirect.ts and
+  // ARCHITECTURE.md #60.
   function handleSettingsSubmit(formData: FormData) {
     setSettingsError(null);
+    const qrFile = formData.get('qr_code_image') as File | null;
     startTransition(async () => {
-      const result = await updatePaymentSettings(formData);
+      let qrPath: string | null = null;
+      if (qrFile && qrFile.size > 0) {
+        const oversized = findOversizedFiles([qrFile]);
+        if (oversized.length > 0) {
+          setSettingsError(oversizedFilesMessage(oversized));
+          return;
+        }
+        const urlResult = await createPaymentQrUploadUrl(qrFile.name);
+        if (urlResult?.error || !urlResult?.path || !urlResult?.token || !urlResult?.bucket) {
+          setSettingsError(urlResult?.error ?? 'Could not prepare the QR image upload — check your connection and try again.');
+          return;
+        }
+        const results = await uploadFilesDirect(urlResult.bucket, [{ path: urlResult.path, token: urlResult.token, file: qrFile }]);
+        if (!results[0]?.ok) {
+          setSettingsError('QR image failed to upload — check your connection and try again.');
+          return;
+        }
+        qrPath = urlResult.path;
+      }
+      const result = await updatePaymentSettings(formData, qrPath);
       if (result?.error) setSettingsError(result.error);
       else router.refresh();
     });

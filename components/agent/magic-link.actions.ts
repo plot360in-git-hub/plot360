@@ -114,26 +114,44 @@ export async function getJobByToken(token: string) {
   return { success: true, job: check.job, property, media: mediaWithUrls };
 }
 
-export async function uploadMediaByToken(token: string, formData: FormData) {
+// Redesign 2026-09 (follow-up) — split the old single uploadMediaByToken
+// (which uploaded file bytes straight through this Server Action) into a
+// "get me somewhere to upload" step and a "record what I uploaded" step —
+// the actual bytes now go browser → Supabase Storage directly, bypassing
+// Vercel's 4.5MB function body limit. See lib/uploadDirect.ts and
+// ARCHITECTURE.md #60.
+export async function createMediaUploadUrls(token: string, fileNames: string[]) {
   const check = await validateToken(token);
   if (!check.valid) return { error: check.reason };
   if (check.job.status === 'submitted') return { error: 'Already submitted — waiting on admin review.' };
+  if (fileNames.length === 0) return { error: 'No files selected.' };
 
-  const files = formData.getAll('media') as File[];
-  if (files.length === 0) return { error: 'No files selected.' };
+  const uploads: { fileName: string; path: string; token: string }[] = [];
+  for (let i = 0; i < fileNames.length; i++) {
+    const path = `${check.job.id}/${Date.now()}-${i}-${fileNames[i]}`;
+    const { data, error } = await check.admin.storage.from('monitoring-media').createSignedUploadUrl(path);
+    if (error) return { error: error.message };
+    uploads.push({ fileName: fileNames[i], path, token: data.token });
+  }
+  return { success: true, bucket: 'monitoring-media' as const, uploads };
+}
 
-  const boundarySideRaw = String(formData.get('boundary_side') || '');
-  const boundarySide = (['N', 'E', 'S', 'W'] as const).includes(boundarySideRaw as any) ? boundarySideRaw : null;
+export async function recordUploadedMedia(
+  token: string,
+  items: { path: string; mediaType: string }[],
+  boundarySide?: string | null
+) {
+  const check = await validateToken(token);
+  if (!check.valid) return { error: check.reason };
+  if (check.job.status === 'submitted') return { error: 'Already submitted — waiting on admin review.' };
+  if (items.length === 0) return { error: 'No files selected.' };
 
-  for (const file of files) {
-    if (file.size === 0) continue;
-    const path = `${check.job.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await check.admin.storage.from('monitoring-media').upload(path, file);
-    if (uploadError) return { error: uploadError.message };
-    const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'photo' : 'document';
+  const side = (['N', 'E', 'S', 'W'] as const).includes(boundarySide as any) ? boundarySide : null;
+
+  for (const item of items) {
     const { error: insertError } = await check.admin
       .from('monitoring_media')
-      .insert({ job_id: check.job.id, media_type: mediaType, file_path: path, boundary_side: mediaType === 'photo' ? boundarySide : null });
+      .insert({ job_id: check.job.id, media_type: item.mediaType, file_path: item.path, boundary_side: item.mediaType === 'photo' ? side : null });
     if (insertError) return { error: insertError.message };
   }
 

@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { submitSubscriptionPayment } from './subscribe.actions';
+import { submitSubscriptionPayment, createPaymentScreenshotUploadUrl } from './subscribe.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 import { computePlanPrice, effectiveDiscountPercent } from '@/lib/subscription';
 
 function PlanPriceDisplay({ plan, isRenewal }: { plan: any; isRenewal: boolean }) {
@@ -64,10 +66,34 @@ export function SubscribeForm({
     );
   }
 
+  // Redesign 2026-09 (follow-up) — the payment screenshot now uploads
+  // straight to storage instead of through this Server Action, which on
+  // Vercel has a hard 4.5MB request-body limit that a phone screenshot can
+  // occasionally exceed. See lib/uploadDirect.ts and ARCHITECTURE.md #60.
   function handleSubmit(formData: FormData) {
     setError(null);
+    const screenshotFile = formData.get('screenshot') as File | null;
     startTransition(async () => {
-      const result = await submitSubscriptionPayment(propertyId, formData);
+      let screenshotPath: string | null = null;
+      if (screenshotFile && screenshotFile.size > 0) {
+        const oversized = findOversizedFiles([screenshotFile]);
+        if (oversized.length > 0) {
+          setError(oversizedFilesMessage(oversized));
+          return;
+        }
+        const urlResult = await createPaymentScreenshotUploadUrl(propertyId, screenshotFile.name);
+        if (urlResult?.error || !urlResult?.path || !urlResult?.token || !urlResult?.bucket) {
+          setError(urlResult?.error ?? 'Could not prepare the screenshot upload — check your connection and try again.');
+          return;
+        }
+        const results = await uploadFilesDirect(urlResult.bucket, [{ path: urlResult.path, token: urlResult.token, file: screenshotFile }]);
+        if (!results[0]?.ok) {
+          setError('Screenshot failed to upload — check your connection and try again.');
+          return;
+        }
+        screenshotPath = urlResult.path;
+      }
+      const result = await submitSubscriptionPayment(propertyId, formData, screenshotPath);
       if (result?.error) setError(result.error);
       else router.push('/dashboard');
     });

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { uploadTaskMedia, updateTaskStatus } from './tasks.actions';
+import { createTaskMediaUploadUrls, recordTaskMedia, updateTaskStatus } from './tasks.actions';
+import { uploadFilesDirect, mediaTypeOf } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 import type { Task, TaskMedia } from '@/types/database.types';
 
 const SUPABASE_STORAGE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public`;
@@ -31,11 +33,51 @@ export function TaskMediaGallery({
   const photos = media.filter((m) => m.media_type === 'photo');
   const videos = media.filter((m) => m.media_type === 'video');
 
+  // Redesign 2026-09 (follow-up) — uploads now go browser → Supabase
+  // Storage directly instead of through a Server Action, which on Vercel
+  // has a hard 4.5MB request-body limit that real phone photos/video
+  // routinely exceed. See lib/uploadDirect.ts and ARCHITECTURE.md #60.
   function handleUpload(formData: FormData) {
     setError(null);
+    const files = (formData.getAll('media') as File[]).filter((f) => f.size > 0);
+    if (files.length === 0) {
+      setError('No files selected.');
+      return;
+    }
+    const oversized = findOversizedFiles(files);
+    if (oversized.length > 0) {
+      setError(oversizedFilesMessage(oversized));
+      return;
+    }
     startTransition(async () => {
-      const result = await uploadTaskMedia(task.id, formData);
-      if (result?.error) setError(result.error);
+      const urlResult = await createTaskMediaUploadUrls(task.id, files.map((f) => f.name));
+      if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+        setError(urlResult?.error ?? 'Could not prepare the upload — check your connection and try again.');
+        return;
+      }
+      const uploads = urlResult.uploads;
+      const results = await uploadFilesDirect(
+        urlResult.bucket,
+        uploads.map((u, i) => ({ path: u.path, token: u.token, file: files[i] }))
+      );
+      const succeeded = results.filter((r) => r.ok);
+      const failed = results.filter((r) => !r.ok);
+
+      if (succeeded.length > 0) {
+        const items = succeeded.map((r) => ({ path: uploads[r.index].path, mediaType: mediaTypeOf(files[r.index]) }));
+        const result = await recordTaskMedia(task.id, items);
+        if (result?.error) {
+          setError(result.error);
+          return;
+        }
+      }
+      if (failed.length > 0) {
+        setError(
+          `${failed.length} of ${files.length} file${files.length === 1 ? '' : 's'} failed to upload${
+            succeeded.length ? ` (${succeeded.length} saved)` : ''
+          } — check your connection and try again.`
+        );
+      }
     });
   }
 

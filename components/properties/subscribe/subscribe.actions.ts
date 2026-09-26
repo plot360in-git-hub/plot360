@@ -18,7 +18,55 @@ export async function getMyPendingPaymentForProperty(propertyId: string) {
   return data;
 }
 
-export async function submitSubscriptionPayment(propertyId: string, formData: FormData) {
+// Shared by submitSubscriptionPayment and createPaymentScreenshotUploadUrl
+// below — idempotent (re-finds the same pending row on a second call), so
+// it's safe for the upload-url step and the final submit to each call it
+// independently and land on the same payment id.
+async function getOrCreatePendingPaymentId(supabase: any, propertyId: string) {
+  const { data: existingPending } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('property_id', propertyId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingPending) return existingPending.id as string;
+
+  const { data: newPayment, error: insertError } = await supabase
+    .from('payments')
+    .insert({ property_id: propertyId, payment_type: 'initial', status: 'pending' })
+    .select('id')
+    .single();
+  if (insertError) throw new Error(insertError.message);
+  return newPayment.id as string;
+}
+
+// Redesign 2026-09 (follow-up) — signed-upload-url step for the payment
+// screenshot; see lib/uploadDirect.ts and ARCHITECTURE.md #60.
+export async function createPaymentScreenshotUploadUrl(propertyId: string, fileName: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+
+  const { data: property } = await supabase.from('properties').select('owner_id').eq('id', propertyId).single();
+  if (!property) return { error: 'Property not found.' };
+  if (property.owner_id !== userData.user.id) return { error: 'Not authorized.' };
+
+  let paymentId: string;
+  try {
+    paymentId = await getOrCreatePendingPaymentId(supabase, propertyId);
+  } catch (e: any) {
+    return { error: e.message };
+  }
+
+  const path = `${paymentId}/${Date.now()}-${fileName}`;
+  const { data, error } = await supabase.storage.from('payment-proofs').createSignedUploadUrl(path);
+  if (error) return { error: error.message };
+  return { success: true, bucket: 'payment-proofs' as const, path, token: data.token };
+}
+
+export async function submitSubscriptionPayment(propertyId: string, formData: FormData, screenshotPath?: string | null) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
@@ -55,24 +103,11 @@ export async function submitSubscriptionPayment(propertyId: string, formData: Fo
     ? computePlanPrice(plan.base_price ?? plan.price, effectiveDiscountPercent(plan, isRenewal))
     : null;
 
-  let paymentId = existingPending?.id as string | undefined;
-  if (!paymentId) {
-    const { data: newPayment, error: insertError } = await supabase
-      .from('payments')
-      .insert({ property_id: propertyId, payment_type: 'initial', status: 'pending' })
-      .select('id')
-      .single();
-    if (insertError) return { error: insertError.message };
-    paymentId = newPayment.id;
-  }
-
-  let screenshotPath: string | null = null;
-  const screenshotFile = formData.get('screenshot') as File | null;
-  if (screenshotFile && screenshotFile.size > 0) {
-    const path = `${paymentId}/${Date.now()}-${screenshotFile.name}`;
-    const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(path, screenshotFile);
-    if (uploadError) return { error: uploadError.message };
-    screenshotPath = path;
+  let paymentId: string;
+  try {
+    paymentId = await getOrCreatePendingPaymentId(supabase, propertyId);
+  } catch (e: any) {
+    return { error: e.message };
   }
 
   const { data: updated, error } = await supabase

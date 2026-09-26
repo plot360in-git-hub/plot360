@@ -618,12 +618,21 @@ async function finalizeApprovedJob(jobId: string, propertyId: string) {
 // from ec_reference_copy, which is the customer's own reference upload
 // during registration. If a job for this property is sitting in
 // 'ec_pending', uploading the EC finally closes it out.
-export async function uploadEcDigitalCopy(propertyId: string, formData: FormData) {
+// Redesign 2026-09 (follow-up) — signed-upload-url step for the EC
+// digital copy (often a scanned PDF from the sub-registrar's office);
+// see lib/uploadDirect.ts and ARCHITECTURE.md #60.
+export async function createEcDigitalCopyUploadUrl(propertyId: string, fileName: string) {
   if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
   const supabase = await createClient();
+  const path = `${propertyId}/ec_digital_copy-${Date.now()}-${fileName}`;
+  const { data, error } = await supabase.storage.from('property-documents').createSignedUploadUrl(path);
+  if (error) return { error: error.message };
+  return { success: true, bucket: 'property-documents' as const, path, token: data.token };
+}
 
-  const file = formData.get('ec_digital_copy') as File | null;
-  if (!file || file.size === 0) return { error: 'Please choose a file to upload.' };
+export async function uploadEcDigitalCopy(propertyId: string, path: string) {
+  if (!(await isCurrentUserAdmin())) return { error: 'Not authorized.' };
+  const supabase = await createClient();
 
   const { data: existing } = await supabase
     .from('property_documents')
@@ -631,10 +640,6 @@ export async function uploadEcDigitalCopy(propertyId: string, formData: FormData
     .eq('property_id', propertyId)
     .eq('doc_type', 'ec_digital_copy')
     .maybeSingle();
-
-  const path = `${propertyId}/ec_digital_copy-${Date.now()}-${file.name}`;
-  const { error: uploadError } = await supabase.storage.from('property-documents').upload(path, file);
-  if (uploadError) return { error: uploadError.message };
 
   const docError = existing
     ? (await supabase.from('property_documents').update({ file_path: path }).eq('id', existing.id)).error

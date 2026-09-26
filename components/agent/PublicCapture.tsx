@@ -1,4 +1,4 @@
-import { uploadMediaByToken, deleteMediaByToken, submitByToken } from './magic-link.actions';
+import { createMediaUploadUrls, recordUploadedMedia, deleteMediaByToken, submitByToken } from './magic-link.actions';
 import { AgentCaptureScreen } from './AgentCaptureScreen';
 
 // Redesign 2026-09 — thin wrapper for the no-login magic-link capture
@@ -22,7 +22,8 @@ export function PublicCapture({ token, job, property, media }: { token: string; 
       visitLabel={job.visit_number ? `Visit ${job.visit_number}` : 'Site visit'}
       job={job}
       media={media}
-      onUpload={uploadMediaByToken.bind(null, token)}
+      onCreateUploadUrls={createMediaUploadUrls.bind(null, token)}
+      onRecordMedia={recordUploadedMedia.bind(null, token)}
       onDelete={deleteMediaByToken.bind(null, token)}
       onSubmit={submitByToken.bind(null, token)}
     />

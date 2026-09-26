@@ -3362,3 +3362,139 @@ selects the agent's `first_name`/`last_name`/`username` and returns a
 computed `agentName` (same fallback chain as `customerDisplayName` in
 whatsapp.ts, just for an agent profile instead of a customer one), which
 each call site passes straight through.
+
+## 60. All file uploads switched to direct-to-storage — Vercel's hard 4.5MB function body limit (2026-09-26)
+
+Plot reported "This page couldn't load" (a WhatsApp in-app-browser/WKWebView
+network-level error, not an app-rendered error page) when an agent tried to
+upload photos/video from a real phone via the WhatsApp magic link, on a weak
+signal (1 signal bar visible in the screenshot).
+
+Root cause: every file upload in this app — agent visit media, task media,
+service-request attachments, property registration documents, the EC digital
+copy, the payment QR image, the customer's payment screenshot — went through
+a Next.js Server Action, which on Vercel runs as a serverless function with
+a **hard 4.5MB request-body limit enforced by the platform itself**
+(`FUNCTION_PAYLOAD_TOO_LARGE`, see vercel.com/docs/functions/limitations).
+`next.config.mjs`'s `experimental.serverActions.bodySizeLimit: '50mb'` only
+raises *Next's own* internal parsing limit — it has no effect on Vercel's
+platform ceiling underneath it, so that setting was giving false confidence.
+A single phone photo is routinely 3-8MB and video is essentially always
+bigger, so real uploads were getting the connection cut mid-request; on a
+weak signal that surfaces as a broken page rather than a clean in-app error.
+
+Fix, applied uniformly everywhere a user selects a file to upload: the
+browser now uploads the file bytes **directly to Supabase Storage** using a
+short-lived signed upload URL, obtained from a small, byte-free server
+action call — the bytes never pass through our own server/Vercel function at
+all, so the 4.5MB ceiling doesn't apply. New shared client helper
+`lib/uploadDirect.ts` (`uploadFilesDirect` — sequential, not parallel, since
+racing several large uploads on a weak mobile connection tends to make all
+of them time out rather than a few succeed; `mediaTypeOf` — the
+photo/video/document classifier that used to live inline in each action).
+Server-side, `createSignedUploadUrl(path)` returns `{ signedUrl, token,
+path }`; client-side, `supabase.storage.from(bucket).uploadToSignedUrl(path,
+token, file)` does the actual upload with the anon-key browser client — no
+Supabase Auth session is required for this call (the signed token itself is
+what authorizes the write), which is what makes it work for the
+unauthenticated magic-link flow too, not just logged-in users.
+
+Every affected action was split into two: a "get me somewhere to upload"
+step (does the same authorization check the original function did, then
+returns signed-upload-url(s)) and a "record what I uploaded" step (does the
+DB bookkeeping only, given paths the browser already wrote to). The eight
+spots fixed, each with its own before/after pair:
+- Agent visit media, magic-link flow — `uploadMediaByToken` →
+  `createMediaUploadUrls` + `recordUploadedMedia` (`magic-link.actions.ts`,
+  `PublicCapture.tsx`; also updated the unwired legacy
+  `PublicUploadForm.tsx` purely so it keeps compiling).
+- Agent visit media, logged-in flow — `uploadJobMedia` →
+  `createJobMediaUploadUrls` + `recordJobMedia` (`agent-jobs.actions.ts`,
+  `AgentCapture.tsx`/`AgentCaptureScreen.tsx`; also the unwired legacy
+  `AgentJobDetail.tsx`).
+- Task media — `uploadTaskMedia` → `createTaskMediaUploadUrls` +
+  `recordTaskMedia` (`tasks.actions.ts`, `TaskMediaGallery.tsx`).
+- Service-request attachments — the upload loop was removed from
+  `createServiceRequest` and `postServiceRequestMessage` entirely (both now
+  return the new row's id so the caller has something to attach files to)
+  and replaced with shared `createServiceRequestUploadUrls` +
+  `recordServiceRequestAttachments` (`service-requests.actions.ts`,
+  `NewServiceRequestForm.tsx`, `ServiceRequestThread.tsx` — the admin-only
+  `ServiceRequestReplyForm.tsx` has no attachment field and needed no
+  change).
+- Property registration documents (owner ID proof, NOC, title deed pages)
+  — `saveOwnership` no longer touches file bytes at all; it now takes an
+  optional `uploadedFiles: UploadedOwnershipFiles` (paths already written by
+  the browser) alongside a new `createOwnershipUploadUrls`
+  (`registration.actions.ts`, `OwnershipForm.tsx`). Dropped the old
+  `{upsert: true}` re-upload-in-place scheme for the single-file doc types
+  (owner ID / NOC) — signed upload URLs' own upsert option has known
+  reliability issues upstream (supabase-js#1672, supabase-js#1246) — in
+  favor of what title deed already did: every upload gets a fresh unique
+  path, and the DB row + a cleanup delete of the old object handle
+  "replacement" instead. No user-visible behavior change.
+- EC digital copy (admin-uploaded, often a scanned PDF) —
+  `uploadEcDigitalCopy` now takes an already-uploaded `path` instead of a
+  `FormData`, paired with new `createEcDigitalCopyUploadUrl`
+  (`monitoring.actions.ts`, `EcUploadForm.tsx` + `EcUploadFormP360.tsx` —
+  both live, not a dupe/dead-code situation).
+- Payment QR code image (admin) — `updatePaymentSettings` now takes an
+  optional `qrPath` second param instead of reading the file from
+  `FormData`, paired with new `createPaymentQrUploadUrl`
+  (`plans.actions.ts`). Two separate live admin screens render this same
+  form and both needed the client-side change: `PaymentSettingsForm.tsx`
+  (the redesigned admin settings tab) and `PlansSettingsPage.tsx`
+  (`/admin/plans`, the older screen — not dead code, still routed).
+- Customer's payment screenshot — `submitSubscriptionPayment` now takes an
+  optional `screenshotPath` third param, paired with new
+  `createPaymentScreenshotUploadUrl` (`subscribe.actions.ts`,
+  `SubscribeForm.tsx`, the `/properties/[id]/subscribe` route — separate
+  from `ChoosePlanAndPay.tsx`'s `/properties/[id]/plan` flow, which uses
+  `purchaseVisitCredits` and never touched file bytes, so needed no
+  change). The find-or-create-pending-payment-row logic that the upload
+  path needs (to know which folder to put the screenshot in) was factored
+  into a small `getOrCreatePendingPaymentId` helper, called once by the
+  new upload-url step and again — idempotently, since it re-finds the same
+  pending row — by the final submit.
+
+Every upload site now also reports partial failure rather than all-or-
+nothing: if 3 of 5 selected files upload successfully and 2 fail (a real
+possibility on a flaky field connection), the 3 successes are still
+recorded and the user is told specifically how many failed, rather than
+losing everything because one file dropped mid-batch.
+
+## 61. File-size check now covers every file type, using Plot360's real Supabase limit (2026-09-26)
+
+Plot asked whether the app could accept a video over 50MB. It couldn't,
+reliably: `findOversizedImages` (see #60) only ever checked image files —
+by design, on the reasoning that "a 50MB video is normal, unlike a 50MB
+photo." That reasoning holds in general, but doesn't match this project's
+actual constraint: Plot confirmed Plot360 is on Supabase's free plan,
+which enforces a hard 50MB-per-file limit at the storage layer itself, for
+every file type (supabase.com/docs/guides/storage/uploads/file-limits).
+A video over that size was never going to upload — it would reach
+Supabase Storage via the direct-upload flow (#60) and get rejected there,
+surfacing to the agent as a generic "upload failed" with no indication of
+why, instead of a clear reason before they even try.
+
+`lib/fileValidation.ts`: `findOversizedImages` replaced with
+`findOversizedFiles(files, maxBytes = 50MB)` — no type filter, so photos,
+videos, and PDFs are all checked against the same real limit — plus a new
+`oversizedFilesMessage(oversized, maxBytes)` helper so every call site
+shows the same wording instead of each hand-rolling its own string.
+Applied to every upload flow in the app (all of #60's eight spots): the
+three agent visit-media components (`AgentCaptureScreen.tsx`, plus the
+unwired-but-kept-compiling `AgentJobDetail.tsx`/`PublicUploadForm.tsx`),
+`TaskMediaGallery.tsx`, both service-request forms
+(`NewServiceRequestForm.tsx`, `ServiceRequestThread.tsx`),
+`OwnershipForm.tsx` (checked across owner ID proof, NOC, and all title
+deed files at once), both EC upload forms, both payment-QR admin screens
+(`PaymentSettingsForm.tsx`, `PlansSettingsPage.tsx`), and
+`SubscribeForm.tsx`'s payment screenshot — none of these except the agent
+screen had ANY size check before this, so an oversized file of any kind
+in those flows would previously have failed the same confusing way.
+
+If Plot360 ever moves to Supabase's Pro/Team plan and raises the global
+file size limit in Dashboard → Storage → Settings, `MAX_FILE_SIZE_BYTES`
+in `lib/fileValidation.ts` should be updated to match — it's a single
+constant, not scattered per call site.

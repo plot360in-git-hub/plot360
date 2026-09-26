@@ -2,17 +2,43 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { uploadEcDigitalCopy } from './monitoring.actions';
+import { uploadEcDigitalCopy, createEcDigitalCopyUploadUrl } from './monitoring.actions';
+import { uploadFilesDirect } from '@/lib/uploadDirect';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 
 export function EcUploadForm({ propertyId, existingDoc }: { propertyId: string; existingDoc?: { name: string; url: string | null } | null }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  // Redesign 2026-09 (follow-up) — uploads straight to storage instead of
+  // through a Server Action, which on Vercel has a hard 4.5MB
+  // request-body limit that a scanned EC PDF can exceed. See
+  // lib/uploadDirect.ts and ARCHITECTURE.md #60.
   function handleSubmit(formData: FormData) {
     setError(null);
+    const file = formData.get('ec_digital_copy') as File | null;
+    if (!file || file.size === 0) {
+      setError('Please choose a file to upload.');
+      return;
+    }
+    const oversized = findOversizedFiles([file]);
+    if (oversized.length > 0) {
+      setError(oversizedFilesMessage(oversized));
+      return;
+    }
     startTransition(async () => {
-      const result = await uploadEcDigitalCopy(propertyId, formData);
+      const urlResult = await createEcDigitalCopyUploadUrl(propertyId, file.name);
+      if (urlResult?.error || !urlResult?.path || !urlResult?.token || !urlResult?.bucket) {
+        setError(urlResult?.error ?? 'Could not prepare the upload — check your connection and try again.');
+        return;
+      }
+      const results = await uploadFilesDirect(urlResult.bucket, [{ path: urlResult.path, token: urlResult.token, file }]);
+      if (!results[0]?.ok) {
+        setError('Upload failed — check your connection and try again.');
+        return;
+      }
+      const result = await uploadEcDigitalCopy(propertyId, urlResult.path);
       if (result?.error) setError(result.error);
       else router.refresh();
     });

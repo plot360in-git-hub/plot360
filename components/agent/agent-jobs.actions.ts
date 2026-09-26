@@ -44,40 +44,58 @@ export async function getJobDetail(jobId: string) {
 // and only assigns once the agent has verbally agreed to take it on.
 const WORKABLE_STATUSES = ['assigned', 'accepted', 'rejected']; // 'accepted' kept for any pre-existing rows
 
-// Agent uploads photos/videos incrementally — each call adds to the job's
-// media, doesn't touch status. Locked once submitted or approved.
-export async function uploadJobMedia(jobId: string, formData: FormData) {
+async function requireOwnJob(jobId: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: 'Not signed in.' };
+  if (!userData.user) return { ok: false as const, error: 'Not signed in.' };
 
   const { data: job } = await supabase.from('monitoring_jobs').select('agent_id, status').eq('id', jobId).single();
-  if (!job) return { error: 'Job not found.' };
-  if (job.agent_id !== userData.user.id) return { error: 'Not authorized.' };
-  if (job.status === 'approved') return { error: 'This job is already complete and locked.' };
-  if (job.status === 'submitted') return { error: 'Already submitted — wait for admin review before adding more.' };
-  if (!WORKABLE_STATUSES.includes(job.status)) return { error: 'This job cannot be updated right now.' };
+  if (!job) return { ok: false as const, error: 'Job not found.' };
+  if (job.agent_id !== userData.user.id) return { ok: false as const, error: 'Not authorized.' };
+  if (job.status === 'approved') return { ok: false as const, error: 'This job is already complete and locked.' };
+  if (job.status === 'submitted') return { ok: false as const, error: 'Already submitted — wait for admin review before adding more.' };
+  if (!WORKABLE_STATUSES.includes(job.status)) return { ok: false as const, error: 'This job cannot be updated right now.' };
+  return { ok: true as const, supabase };
+}
 
-  const files = formData.getAll('media') as File[];
-  if (files.length === 0) return { error: 'No files selected.' };
+// Redesign 2026-09 (follow-up) — split the old single uploadJobMedia
+// (which uploaded file bytes straight through this Server Action, hitting
+// Vercel's hard 4.5MB function body limit on real phone photos/video —
+// see ARCHITECTURE.md #60) into "get me somewhere to upload" + "record
+// what I uploaded". The bytes now go browser → Supabase Storage directly
+// via a signed upload URL (lib/uploadDirect.ts), never through this
+// function at all.
+export async function createJobMediaUploadUrls(jobId: string, fileNames: string[]) {
+  const gate = await requireOwnJob(jobId);
+  if (!gate.ok) return { error: gate.error };
+  if (fileNames.length === 0) return { error: 'No files selected.' };
 
-  // Redesign 2026-09 — optional boundary-side tag applied to every photo in
-  // this batch (design_handoff_plot360_redesign, "Plot360 Agent.dc.html",
-  // the "Boundary sides covered" checklist — see AgentCaptureScreen.tsx,
-  // which derives the checklist from which sides have at least one tagged
-  // photo rather than a separate manual checkbox).
-  const boundarySideRaw = String(formData.get('boundary_side') || '');
-  const boundarySide = (['N', 'E', 'S', 'W'] as const).includes(boundarySideRaw as any) ? boundarySideRaw : null;
+  const uploads: { fileName: string; path: string; token: string }[] = [];
+  for (let i = 0; i < fileNames.length; i++) {
+    const path = `${jobId}/${Date.now()}-${i}-${fileNames[i]}`;
+    const { data, error } = await gate.supabase.storage.from('monitoring-media').createSignedUploadUrl(path);
+    if (error) return { error: error.message };
+    uploads.push({ fileName: fileNames[i], path, token: data.token });
+  }
+  return { success: true, bucket: 'monitoring-media' as const, uploads };
+}
 
-  for (const file of files) {
-    if (file.size === 0) continue;
-    const path = `${jobId}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('monitoring-media').upload(path, file);
-    if (uploadError) return { error: uploadError.message };
-    const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'photo' : 'document';
-    const { error: insertError } = await supabase
+// Redesign 2026-09 — optional boundary-side tag applied to every photo in
+// this batch (design_handoff_plot360_redesign, "Plot360 Agent.dc.html",
+// the "Boundary sides covered" checklist — see AgentCaptureScreen.tsx,
+// which derives the checklist from which sides have at least one tagged
+// photo rather than a separate manual checkbox).
+export async function recordJobMedia(jobId: string, items: { path: string; mediaType: string }[], boundarySide?: string | null) {
+  const gate = await requireOwnJob(jobId);
+  if (!gate.ok) return { error: gate.error };
+  if (items.length === 0) return { error: 'No files selected.' };
+
+  const side = (['N', 'E', 'S', 'W'] as const).includes(boundarySide as any) ? boundarySide : null;
+
+  for (const item of items) {
+    const { error: insertError } = await gate.supabase
       .from('monitoring_media')
-      .insert({ job_id: jobId, media_type: mediaType, file_path: path, boundary_side: mediaType === 'photo' ? boundarySide : null });
+      .insert({ job_id: jobId, media_type: item.mediaType, file_path: item.path, boundary_side: item.mediaType === 'photo' ? side : null });
     if (insertError) return { error: insertError.message };
   }
 

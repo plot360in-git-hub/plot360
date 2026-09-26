@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { VisitQuestionsFields } from './VisitQuestionsFields';
-import { findOversizedImages, formatFileSize } from '@/lib/fileValidation';
+import { findOversizedFiles, oversizedFilesMessage } from '@/lib/fileValidation';
 import { haversineMeters, GPS_FLAG_THRESHOLD_METERS } from '@/lib/geo';
 import { VISIT_QUESTIONS } from '@/lib/visitReportQuestions';
+import { uploadFilesDirect, mediaTypeOf } from '@/lib/uploadDirect';
+
+type CreateUploadUrlsResult = {
+  error?: string;
+  success?: boolean;
+  bucket?: string;
+  uploads?: { fileName: string; path: string; token: string }[];
+};
 
 const MIN_PHOTOS = 8;
 const SIDES = [
@@ -41,7 +49,8 @@ export function AgentCaptureScreen({
   visitLabel,
   job,
   media,
-  onUpload,
+  onCreateUploadUrls,
+  onRecordMedia,
   onDelete,
   onSubmit,
   backHref,
@@ -57,7 +66,8 @@ export function AgentCaptureScreen({
   visitLabel: string;
   job: { status: string; admin_feedback: string | null } & Record<string, any>;
   media: MediaItem[];
-  onUpload: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
+  onCreateUploadUrls: (fileNames: string[]) => Promise<CreateUploadUrlsResult>;
+  onRecordMedia: (items: { path: string; mediaType: string }[], boundarySide?: string | null) => Promise<{ error?: string; success?: boolean }>;
   onDelete: (mediaId: string) => Promise<{ error?: string; success?: boolean }>;
   onSubmit: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
   backHref?: string;
@@ -122,22 +132,57 @@ export function AgentCaptureScreen({
 
   const canEdit = job.status !== 'submitted' && job.status !== 'approved' && job.status !== 'ec_pending' && !submitted;
 
+  // Redesign 2026-09 (follow-up) — uploads now go browser → Supabase
+  // Storage directly (lib/uploadDirect.ts) instead of through a Server
+  // Action, which on Vercel has a hard 4.5MB request-body limit that real
+  // phone photos/video routinely exceed — that's what was causing
+  // WhatsApp's in-app browser to show "This page couldn't load" when an
+  // agent tried to upload. See ARCHITECTURE.md #60.
   function handleUpload(formData: FormData) {
     setUploadError(null);
-    const files = formData.getAll('media') as File[];
-    const oversized = findOversizedImages(files);
-    if (oversized.length > 0) {
-      setUploadError(
-        `${oversized.length > 1 ? 'These photos are' : 'This photo is'} too large (max 50MB each): ${oversized
-          .map((f) => `${f.name} (${formatFileSize(f.size)})`)
-          .join(', ')}`
-      );
+    const files = (formData.getAll('media') as File[]).filter((f) => f.size > 0);
+    if (files.length === 0) {
+      setUploadError('No files selected.');
       return;
     }
-    if (boundarySide) formData.set('boundary_side', boundarySide);
+    // Checks every file type now (photos, video, PDFs) against Supabase's
+    // real 50MB free-tier limit — used to be images-only, which let an
+    // oversized video through to fail later with a confusing generic
+    // error instead of this clear one. See lib/fileValidation.ts.
+    const oversized = findOversizedFiles(files);
+    if (oversized.length > 0) {
+      setUploadError(oversizedFilesMessage(oversized));
+      return;
+    }
     startUpload(async () => {
-      const result = await onUpload(formData);
-      if (result?.error) setUploadError(result.error);
+      const urlResult = await onCreateUploadUrls(files.map((f) => f.name));
+      if (urlResult?.error || !urlResult?.uploads || !urlResult.bucket) {
+        setUploadError(urlResult?.error ?? 'Could not prepare the upload — check your connection and try again.');
+        return;
+      }
+      const uploads = urlResult.uploads;
+      const results = await uploadFilesDirect(
+        urlResult.bucket,
+        uploads.map((u, i) => ({ path: u.path, token: u.token, file: files[i] }))
+      );
+      const succeeded = results.filter((r) => r.ok);
+      const failed = results.filter((r) => !r.ok);
+
+      if (succeeded.length > 0) {
+        const items = succeeded.map((r) => ({ path: uploads[r.index].path, mediaType: mediaTypeOf(files[r.index]) }));
+        const result = await onRecordMedia(items, boundarySide || null);
+        if (result?.error) {
+          setUploadError(result.error);
+          return;
+        }
+      }
+      if (failed.length > 0) {
+        setUploadError(
+          `${failed.length} of ${files.length} file${files.length === 1 ? '' : 's'} failed to upload${
+            succeeded.length ? ` (${succeeded.length} saved)` : ''
+          } — check your connection and try again.`
+        );
+      }
     });
   }
 

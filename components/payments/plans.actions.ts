@@ -111,20 +111,24 @@ export async function getPaymentQrUrl(filePath: string) {
   return data.publicUrl;
 }
 
-export async function updatePaymentSettings(formData: FormData) {
+// Redesign 2026-09 (follow-up) — signed-upload-url step for the payment
+// QR code image; see lib/uploadDirect.ts and ARCHITECTURE.md #60.
+export async function createPaymentQrUploadUrl(fileName: string) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+  const path = `qr-${Date.now()}-${fileName}`;
+  const { data, error } = await gate.supabase.storage.from('payment-info').createSignedUploadUrl(path);
+  if (error) return { error: error.message };
+  return { success: true, bucket: 'payment-info' as const, path, token: data.token };
+}
+
+export async function updatePaymentSettings(formData: FormData, qrPath?: string | null) {
   const gate = await requireAdmin();
   if (!gate.ok) return { error: gate.error };
 
   const { data: existing } = await gate.supabase.from('payment_settings').select('id, qr_code_image_path').limit(1).maybeSingle();
 
-  let qrPath = existing?.qr_code_image_path ?? null;
-  const qrFile = formData.get('qr_code_image') as File | null;
-  if (qrFile && qrFile.size > 0) {
-    const path = `qr-${Date.now()}-${qrFile.name}`;
-    const { error: uploadError } = await gate.supabase.storage.from('payment-info').upload(path, qrFile, { upsert: true });
-    if (uploadError) return { error: uploadError.message };
-    qrPath = path;
-  }
+  const finalQrPath = qrPath ?? existing?.qr_code_image_path ?? null;
 
   // Redesign 2026-09 (round 32) — Accounting: the flat rate paid per
   // completed agent visit, read by getAgentPayoutSummary (accounting.
@@ -159,7 +163,7 @@ export async function updatePaymentSettings(formData: FormData) {
     bank_account_number: String(formData.get('bank_account_number') || '') || null,
     bank_ifsc: String(formData.get('bank_ifsc') || '') || null,
     bank_name: String(formData.get('bank_name') || '') || null,
-    qr_code_image_path: qrPath,
+    qr_code_image_path: finalQrPath,
     agent_visit_payout_rate: agentVisitPayoutRate,
     updated_at: new Date().toISOString(),
   };

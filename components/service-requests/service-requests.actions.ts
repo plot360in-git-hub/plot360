@@ -71,16 +71,50 @@ export async function createServiceRequest(formData: FormData) {
     .single();
   if (messageError) return { error: messageError.message };
 
-  const files = (formData.getAll('attachments') as File[]).filter((f) => f.size > 0);
-  for (const file of files) {
-    const path = `${request.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('service-request-files').upload(path, file);
-    if (uploadError) return { error: uploadError.message };
-    await supabase.from('service_request_attachments').insert({ message_id: message.id, file_path: path });
-  }
-
+  // Redesign 2026-09 (follow-up) — attachments no longer uploaded here
+  // (used to go straight through this Server Action, hitting Vercel's
+  // hard 4.5MB function body limit — see ARCHITECTURE.md #60). The caller
+  // uploads them directly to storage afterward via
+  // createServiceRequestUploadUrls + recordServiceRequestAttachments,
+  // using the requestId/messageId returned below.
   revalidateServiceRequestSurfaces();
-  return { success: true, requestId: request.id };
+  return { success: true, requestId: request.id, messageId: message.id };
+}
+
+// Redesign 2026-09 (follow-up) — signed-upload-url step for service
+// request attachments; see lib/uploadDirect.ts and ARCHITECTURE.md #60.
+export async function createServiceRequestUploadUrls(requestId: string, fileNames: string[]) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+  if (fileNames.length === 0) return { error: 'No files selected.' };
+
+  const { data: request } = await supabase.from('service_requests').select('customer_id').eq('id', requestId).single();
+  if (!request) return { error: 'Request not found.' };
+  const senderRole = await getSenderRole(supabase, userData.user.id);
+  if (senderRole !== 'admin' && request.customer_id !== userData.user.id) return { error: 'Not authorized.' };
+
+  const uploads: { fileName: string; path: string; token: string }[] = [];
+  for (let i = 0; i < fileNames.length; i++) {
+    const path = `${requestId}/${Date.now()}-${i}-${fileNames[i]}`;
+    const { data, error } = await supabase.storage.from('service-request-files').createSignedUploadUrl(path);
+    if (error) return { error: error.message };
+    uploads.push({ fileName: fileNames[i], path, token: data.token });
+  }
+  return { success: true, bucket: 'service-request-files' as const, uploads };
+}
+
+export async function recordServiceRequestAttachments(messageId: string, paths: string[]) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+  if (paths.length === 0) return { error: 'No files selected.' };
+
+  for (const path of paths) {
+    const { error } = await supabase.from('service_request_attachments').insert({ message_id: messageId, file_path: path });
+    if (error) return { error: error.message };
+  }
+  return { success: true };
 }
 
 export async function getMyServiceRequests() {
@@ -139,13 +173,9 @@ export async function postServiceRequestMessage(requestId: string, formData: For
     .single();
   if (messageError) return { error: messageError.message };
 
-  const files = (formData.getAll('attachments') as File[]).filter((f) => f.size > 0);
-  for (const file of files) {
-    const path = `${requestId}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('service-request-files').upload(path, file);
-    if (uploadError) return { error: uploadError.message };
-    await supabase.from('service_request_attachments').insert({ message_id: message.id, file_path: path });
-  }
+  // Redesign 2026-09 (follow-up) — attachments uploaded separately now,
+  // straight to storage — see createServiceRequestUploadUrls /
+  // recordServiceRequestAttachments above and ARCHITECTURE.md #60.
 
   await supabase.from('service_requests').update({ updated_at: new Date().toISOString() }).eq('id', requestId);
 
@@ -174,7 +204,7 @@ export async function postServiceRequestMessage(requestId: string, formData: For
 
   revalidatePath(`/service-requests/${requestId}`);
   revalidatePath(`/admin/service-requests/${requestId}`);
-  return { success: true };
+  return { success: true, messageId: message.id };
 }
 
 export async function closeServiceRequest(requestId: string) {

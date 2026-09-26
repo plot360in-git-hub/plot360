@@ -1,4 +1,4 @@
-import { getJobDetail, getMediaUrl, uploadJobMedia, deleteJobMedia, submitJobWork } from './agent-jobs.actions';
+import { getJobDetail, getMediaUrl, createJobMediaUploadUrls, recordJobMedia, deleteJobMedia, submitJobWork } from './agent-jobs.actions';
 import { AgentCaptureScreen } from './AgentCaptureScreen';
 
 // Redesign 2026-09 — thin server wrapper for the authenticated agent
@@ -36,7 +36,8 @@ export async function AgentCapture({ jobId }: { jobId: string }) {
         .join(' · ')}
       job={job}
       media={mediaWithUrls}
-      onUpload={uploadJobMedia.bind(null, jobId)}
+      onCreateUploadUrls={createJobMediaUploadUrls.bind(null, jobId)}
+      onRecordMedia={recordJobMedia.bind(null, jobId)}
       onDelete={deleteJobMedia.bind(null, jobId)}
       onSubmit={submitJobWork.bind(null, jobId)}
       backHref="/agent/dashboard"

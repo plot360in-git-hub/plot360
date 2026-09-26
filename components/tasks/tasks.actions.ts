@@ -78,25 +78,37 @@ export async function updateTaskStatus(taskId: string, status: 'not_done' | 'in_
   return { success: true };
 }
 
-// Handles the "Pic1..Pic12 + Video player" grid from the Task View wireframe.
-export async function uploadTaskMedia(taskId: string, formData: FormData) {
+// Redesign 2026-09 (follow-up) — split the old single uploadTaskMedia
+// (which uploaded file bytes straight through this Server Action, hitting
+// Vercel's hard 4.5MB function body limit on real phone photos/video) into
+// "get me somewhere to upload" + "record what I uploaded" — bytes now go
+// browser → Supabase Storage directly via a signed upload URL
+// (lib/uploadDirect.ts). See ARCHITECTURE.md #60.
+export async function createTaskMediaUploadUrls(taskId: string, fileNames: string[]) {
   const gate = await requireAdmin();
   if (!gate.ok) return { error: gate.error };
-  const supabase = gate.supabase;
+  if (fileNames.length === 0) return { error: 'No files selected.' };
 
-  const files = formData.getAll('media') as File[];
-  if (files.length === 0) return { error: 'No files selected.' };
+  const uploads: { fileName: string; path: string; token: string }[] = [];
+  for (let i = 0; i < fileNames.length; i++) {
+    const path = `${taskId}/${Date.now()}-${i}-${fileNames[i]}`;
+    const { data, error } = await gate.supabase.storage.from('task-media').createSignedUploadUrl(path);
+    if (error) return { error: error.message };
+    uploads.push({ fileName: fileNames[i], path, token: data.token });
+  }
+  return { success: true, bucket: 'task-media' as const, uploads };
+}
 
-  for (const file of files) {
-    if (file.size === 0) continue;
-    const path = `${taskId}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('task-media').upload(path, file);
-    if (uploadError) return { error: uploadError.message };
+// Handles the "Pic1..Pic12 + Video player" grid from the Task View wireframe.
+export async function recordTaskMedia(taskId: string, items: { path: string; mediaType: string }[]) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+  if (items.length === 0) return { error: 'No files selected.' };
 
-    const mediaType = file.type.startsWith('video') ? 'video' : 'photo';
-    const { error: insertError } = await supabase
+  for (const item of items) {
+    const { error: insertError } = await gate.supabase
       .from('task_media')
-      .insert({ task_id: taskId, media_type: mediaType, file_path: path });
+      .insert({ task_id: taskId, media_type: item.mediaType, file_path: item.path });
     if (insertError) return { error: insertError.message };
   }
 
