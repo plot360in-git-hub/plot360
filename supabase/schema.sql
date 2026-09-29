@@ -1509,3 +1509,48 @@ alter table agent_payouts enable row level security;
 drop policy if exists "agent_payouts_all_owner" on agent_payouts;
 create policy "agent_payouts_all_owner" on agent_payouts for all using (is_owner_admin()) with check (is_owner_admin());
 alter table payments add column if not exists mismatch_flagged_by uuid references profiles(id);
+
+-- =========================================================
+-- Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing
+-- Plot: visit plans (1/2/4/custom, subscription_plans.visit_quantity)
+-- already cover a "standard" plot size — this adds the missing second
+-- pricing dimension, an admin-defined extra charge for plots bigger than
+-- that standard size, added on top of whichever visit plan the customer
+-- picks (one shared size table for every plan, not a price matrix per
+-- plan — Plot's call when asked). Each row is a size band [min_size,
+-- max_size] with its own extra_price; max_size null means "this band and
+-- above". The seed row (0–500 sq yd, ₹0 extra) IS today's "up to 500 sq
+-- yards, standard price" default — admin can move that 500 boundary or
+-- its price like any other row, nothing is hardcoded. A plot bigger than
+-- every defined band's max_size has no price here on purpose — Plot's
+-- call was "contact us for a quote" rather than guessing by extrapolating
+-- the top band's rate; see ChoosePlanAndPay.tsx / lib/plotSizePricing.ts.
+-- =========================================================
+create table if not exists plot_size_price_tiers (
+  id uuid primary key default gen_random_uuid(),
+  min_size numeric not null default 0,
+  max_size numeric,             -- null = open-ended ("this size and above")
+  extra_price numeric not null default 0,
+  display_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+insert into plot_size_price_tiers (min_size, max_size, extra_price, display_order)
+select 0, 500, 0, 0
+where not exists (select 1 from plot_size_price_tiers);
+
+create index if not exists idx_plot_size_price_tiers_order on plot_size_price_tiers(display_order);
+
+alter table plot_size_price_tiers enable row level security;
+drop policy if exists "plot_size_price_tiers_select_all" on plot_size_price_tiers;
+create policy "plot_size_price_tiers_select_all" on plot_size_price_tiers for select using (true);
+drop policy if exists "plot_size_price_tiers_write_admin" on plot_size_price_tiers;
+create policy "plot_size_price_tiers_write_admin" on plot_size_price_tiers for all using (is_admin()) with check (is_admin());
+
+-- Audit trail on the payments row itself: what plot size was on file and
+-- how much of the total was the size surcharge, at the moment of
+-- purchase — so a later admin looking at a payment isn't left guessing
+-- why its amount doesn't match the plan's own price. Both null for any
+-- payment made before this change, or one recorded with no plan_id.
+alter table payments add column if not exists plot_size_at_purchase numeric;
+alter table payments add column if not exists size_surcharge numeric;

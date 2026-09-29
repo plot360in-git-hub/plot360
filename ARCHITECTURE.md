@@ -3715,3 +3715,183 @@ Two small admin-console gaps Plot pointed out from screenshots:
    either) — unlike the visit report PDF's customer-facing `maskPhone`,
    this is an internal admin screen where the whole point is dialing the
    number shown.
+
+## 66. Plot-size-tiered pricing — a second pricing dimension alongside visit plans (2026-09-28)
+
+Plot's request: visit plans (1/2/4/custom visits, already existed as
+`subscription_plans.visit_quantity`) each implicitly assumed a "standard"
+plot size, but there was no way to charge more for a bigger plot, and no
+plot-size input anywhere on the customer payment screen at all.
+Clarified three open design questions before writing any code (asked via
+the app's own clarifying-question flow, not guessed): admin defines the
+extra charge as discrete size *bands* rather than a per-sq-yd formula;
+one shared size-pricing table applies on top of *any* visit plan, rather
+than a separate size table per plan; and a plot bigger than every band
+admin has defined shows "contact us for a quote" rather than
+extrapolating a price.
+
+**Schema** (`supabase/schema.sql`) — new `plot_size_price_tiers` table:
+`min_size`, `max_size` (nullable = open-ended "this size and above"),
+`extra_price`, `display_order`. Seeded with one row (0–500 sq yd, ₹0
+extra) — that row *is* today's "up to 500 sq yards, standard price"
+default; nothing about 500 is hardcoded, admin can move that boundary or
+its price like any other row. Public `select` (customers need to read it
+to see their price recalculate), admin-only (`is_admin()`) write, same
+RLS pattern as `subscription_plans`. Also added `payments
+.plot_size_at_purchase` / `payments.size_surcharge`, so a payment row
+carries its own audit trail of what size and surcharge produced its
+amount, instead of leaving a later admin to guess why it doesn't match
+the plan's own price.
+
+**Pure pricing logic** (`lib/plotSizePricing.ts`, new file) —
+`findPlotSizeTier`/`computePlotSizeSurcharge` (the band a size falls
+into, and its surcharge, or `overMax: true` if no band matches) and
+`plotSizeTierLabel` (a band's display string). Shared, unmodified,
+between the client (live recalculation as the customer types) and the
+server (the actual amount charged) — the server never trusts a
+client-computed price, only a client-entered plot size, exactly like
+`plan.price` already worked before this change.
+
+**Admin — Plans & pricing** (`components/payments/plans.actions.ts`) —
+new `getPlotSizeTiers` (public read, mirrors `getActivePlans`),
+`upsertPlotSizeTier`/`deletePlotSizeTier` (owner-admin gated, mirrors
+`upsertPlan`). New `components/admin/PlotSizePricingTable.tsx`, same
+editable-row pattern as the existing `PlansTable.tsx` (edit in place, add
+a new band, delete), wired into `PlansPricingPage.tsx` right below the
+visit-plans table. (Note: `components/payments/PlansSettingsPage.tsx` is
+the older, unreferenced admin Plans screen per #58/#59's "kept intact,
+unreferenced" pattern — the size-pricing UI went into the live
+`PlansPricingPage.tsx`/`PlansTable.tsx` pairing instead, not that dead
+file.)
+
+**Customer payment screen** (`components/customer/ChoosePlanAndPay.tsx`,
+`/properties/[id]/plan`) — new "Plot size (sq yd)" field, defaulting to
+the property's own `plot_size` if it already has one on file, else the
+standard band's own `max_size` (500 today, but read from the tiers, not
+hardcoded). Every plan card's price now shows plan price + current size
+surcharge, with a small "₹X plan + ₹Y for plot size" breakdown line
+whenever the surcharge is nonzero; the Pay button's total does the same.
+A size bigger than every defined band shows "Contact us for a quote" in
+place of every price and disables Pay, matching Plot's chosen behavior.
+
+**`purchaseVisitCredits`** (`visitCredits.actions.ts`) — now takes
+`plotSize` (new required param, after `method`). Re-derives the surcharge
+itself from `getPlotSizeTiers()` + `computePlotSizeSurcharge` — the exact
+same function the client used for its live preview, but run again
+server-side so nothing about the amount charged is client-supplied. A
+size over every band's max now refuses the purchase outright ("needs a
+custom quote") rather than charging an undefined amount. `amount` on the
+inserted `payments` row is `plan.price + surcharge` (was `plan.price`
+alone); `plot_size_at_purchase`/`size_surcharge` recorded alongside it.
+The customer's entered size is also written back onto
+`properties.plot_size` (owner already has update rights there —
+`properties_update_own`), since a confirmed purchase size is the real
+plot size and every other screen reading `properties.plot_size` (the
+admin Site location form, visit history, etc.) should see it too, not
+just this one payment.
+
+`ConfirmationScreen.tsx` gained an optional `plotSize` row, shown only
+when the caller passes one — `recordPayment` (the admin's bank-transfer
+confirmation path, `payments.actions.ts`) already reads `amount` off the
+form with no assumption about what it's made of, so it needed no change:
+the surcharge is baked into the number by the time an admin ever sees it.
+
+Files: `supabase/schema.sql`, `lib/plotSizePricing.ts` (new),
+`components/payments/plans.actions.ts`,
+`components/payments/visitCredits.actions.ts`,
+`components/admin/PlotSizePricingTable.tsx` (new),
+`components/admin/PlansPricingPage.tsx`,
+`components/customer/ChoosePlanAndPay.tsx`,
+`components/customer/ConfirmationScreen.tsx`,
+`app/properties/[id]/plan/page.tsx`.
+
+## 66b. Plot-size field moved above the plan list + a visible running total; plans can be deleted or hidden (2026-09-28, round 2)
+
+Two follow-ups from Plot after seeing #66 live, both from a screenshot:
+
+1. The plot-size field sat *below* the plan cards, so a customer had to
+   pick a plan, then scroll down to change size, then scroll back up to
+   see the price move — the recalculation was real but not visible
+   without hunting for it. Moved the "Plot size (sq yd)" field above the
+   plan list (right after the intro line), and added a "Total for
+   <plan name>" line directly under it that updates live as the size
+   changes, using whichever plan is currently selected (a plan is always
+   selected by default). The per-card price breakdown from #66 stays as
+   well, so the recalculation is visible in three places now instead of
+   one. `components/customer/ChoosePlanAndPay.tsx` — no new state, purely
+   reordered JSX plus one new summary block.
+2. The live admin Plans page (`PlansTable.tsx`, wired via
+   `PlansPricingPage.tsx`) had no way to remove or hide a plan at all —
+   only Edit. `togglePlanActive` already existed
+   (`plans.actions.ts`) but was only ever wired into
+   `PlansSettingsPage.tsx`, the older screen this redesign replaced (see
+   #58/#59) and left unreferenced. Added a Status column (Active/Hidden,
+   same `status-pill` pattern used elsewhere in the admin console) and
+   Show/Hide + Delete buttons to every row.
+   - Show/Hide calls the existing `togglePlanActive` — this is exactly
+     the "display or hide, so it won't show on the payment page" Plot
+     asked for, since `getActiveVisitPlans`/`getActivePlans` already
+     filter on `is_active` and the customer payment screen already only
+     ever reads those.
+   - Delete is new (`deletePlan`, `plans.actions.ts`): tries a real
+     `delete` first. `subscription_plans` is referenced by
+     `payments.plan_id` (foreign key, no cascade) — any plan a customer
+     has ever paid for will make Postgres refuse the delete with a
+     foreign-key-violation error (code `23503`). deletePlan catches
+     exactly that code and falls back to deactivating the plan instead
+     (returns `deactivatedInstead: true`), which the admin UI surfaces as
+     an inline notice explaining why — a plan with real payment history
+     ends up hidden from customers either way, without silently losing or
+     orphaning that history. A plan nobody has ever paid for deletes
+     outright. Delete asks for confirmation first (irreversible).
+
+Files: `components/customer/ChoosePlanAndPay.tsx`,
+`components/payments/plans.actions.ts` (new `deletePlan`),
+`components/admin/PlansTable.tsx`.
+
+## 66c. Selected plan card now visually distinct — tint, checkmark corner, "Selected" badge (2026-09-28, round 3)
+
+Plot's screenshot showed the selected plan card circled by hand — the
+only difference before this was a 1px-thicker border, easy to miss at a
+glance next to three other very similar cards. `ChoosePlanAndPay.tsx`'s
+selected plan card now also gets a filled `--color-accent-100` (light
+navy) background, a small checkmark badge in the top-right corner, and a
+"Selected" text badge next to the plan name. Kept in the site's existing
+one accent color (Deep Navy — see this file's own round-33 comment on why
+that color, not teal or red, is the customer app's single accent) rather
+than introducing green, so the selected state stays inside the redesign's
+established palette instead of adding a second, unrelated color for one
+component.
+
+## 67. Homepage copy: '18+' corrected to '10+' photos, 4-visit plan card now advertises the free signboard (2026-09-29)
+
+Two small marketing-copy corrections on the public landing page
+(`components/marketing/LandingPage.tsx`) — no schema or pricing logic
+touched, this is copy only:
+
+1. The stats strip's "18+ photographs and video per report" overstated
+   what's actually enforced — agent capture requires at least 8 photos
+   plus a video (`MIN_PHOTOS`, `AgentCaptureScreen.tsx`). Changed to
+   "10+", still a safe floor without the earlier padding.
+2. The "4 site visits" plan card in the pricing grid didn't mention the
+   free "Monitored by Plot360" signboard at all — the admin's actual
+   Plans & pricing page has always sold that as a separate, pricier plan
+   variant ("4 Visits + install ... signboard"), but Plot wants the
+   headline 4-visit card itself to say it's included. Added a `perk`
+   field to the `PLANS` array, rendered as a checkmarked line under the
+   plan's body text. The real admin/payment-side plans (`subscription_plans`,
+   the Plans & pricing page, `ChoosePlanAndPay.tsx`) are unchanged —
+   whichever plan a customer actually buys at checkout still has its own
+   real name and price; this only changes what the homepage says the
+   headline 4-visit option comes with.
+
+## 67b. Pricing card buttons aligned regardless of card height (2026-09-29, round 2)
+
+The 4-visit card's new "free signboard" perk line (#67) made it taller
+than the 1-visit card, so its "Sign up and buy" button sat lower than the
+shorter card's button. Fixed purely with layout, no copy change: the grid
+row already stretches both cards to equal height (`alignItems: 'stretch'`,
+added); each card is now `display: flex, flexDirection: 'column', height:
+'100%'`; and a flex-spacer div (`flex: 1`) sits right before the button,
+absorbing whichever card has less content above it so both buttons land
+on the same line. `components/marketing/LandingPage.tsx`.

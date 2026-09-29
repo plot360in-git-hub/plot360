@@ -1,6 +1,7 @@
-import { getAllPlans } from '@/components/payments/plans.actions';
+import { getAllPlans, getPlotSizeTiers } from '@/components/payments/plans.actions';
 import { getPaymentSettings, getPaymentQrUrl } from '@/components/payments/plans.actions';
 import { PlansTable } from './PlansTable';
+import { PlotSizePricingTable } from './PlotSizePricingTable';
 import { PaymentSettingsForm } from './PaymentSettingsForm';
 
 // Redesign 2026-09 — admin console, Plans & pricing screen
@@ -11,7 +12,7 @@ import { PaymentSettingsForm } from './PaymentSettingsForm';
 // the same, untouched actions (getAllPlans, upsertPlan, getPaymentSettings,
 // updatePaymentSettings).
 export async function PlansPricingPage() {
-  const [plans, settings] = await Promise.all([getAllPlans(), getPaymentSettings()]);
+  const [plans, settings, sizeTiers] = await Promise.all([getAllPlans(), getPaymentSettings(), getPlotSizeTiers()]);
   const qrUrl = settings?.qr_code_image_path ? await getPaymentQrUrl(settings.qr_code_image_path) : null;
 
   return (
@@ -20,6 +21,7 @@ export async function PlansPricingPage() {
       <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>Owner role only. Prices here are what customers see at registration.</div>
 
       <PlansTable plans={plans as any[]} />
+      <PlotSizePricingTable tiers={sizeTiers as any[]} />
       <PaymentSettingsForm settings={settings} qrUrl={qrUrl} />
     </div>
   );

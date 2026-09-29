@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { remainingAfterReservations, creditToConsume } from '@/lib/visitCredits';
+import { computePlotSizeSurcharge, type PlotSizeTier } from '@/lib/plotSizePricing';
+import { getPlotSizeTiers } from './plans.actions';
 import type { VisitCredit } from '@/types/database.types';
 
 // ---------- reads ----------
@@ -120,14 +122,31 @@ export async function getActiveVisitPlans() {
 // a few lines down) or the bank branch, which previously stored no
 // reference at all until an admin filled one in later via
 // PaymentRecordForm. Optional — customerTransactionId may be blank.
-export async function purchaseVisitCredits(propertyId: string, planId: string, method: 'upi' | 'bank', customerTransactionId?: string) {
+//
+// Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing.
+// plotSize is whatever ChoosePlanAndPay's size field shows at the moment
+// of paying (defaults to the property's own plot_size, or 500, and the
+// customer can edit it there to see the price recalculate live) — but
+// never trusted for the actual amount: this always re-looks-up the
+// admin's plot_size_price_tiers bands and recomputes the surcharge
+// itself, exactly like the plan price lookup just above it. A size
+// bigger than every defined band refuses the purchase outright (matches
+// the "contact us for a quote" state that already disables Pay on the
+// client) rather than guessing.
+export async function purchaseVisitCredits(
+  propertyId: string,
+  planId: string,
+  method: 'upi' | 'bank',
+  plotSize: number,
+  customerTransactionId?: string
+) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: 'Not signed in.' };
 
   const { data: property } = await supabase
     .from('properties')
-    .select('owner_id, property_name')
+    .select('owner_id, property_name, plot_size')
     .eq('id', propertyId)
     .single();
   if (!property || property.owner_id !== userData.user.id) return { error: 'Not authorized.' };
@@ -135,6 +154,22 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
   const { data: plan } = await supabase.from('subscription_plans').select('*').eq('id', planId).eq('is_active', true).single();
   if (!plan) return { error: 'That plan is no longer available.' };
   const visitQuantity: number = plan.visit_quantity ?? 1;
+
+  const size = Number(plotSize) || Number(property.plot_size) || 0;
+  const tiers = await getPlotSizeTiers();
+  const { surcharge, overMax } = computePlotSizeSurcharge(tiers as PlotSizeTier[], size);
+  if (overMax) {
+    return { error: 'This plot size needs a custom quote — please contact support before paying.' };
+  }
+  const amount = plan.price + surcharge;
+
+  // The customer's edited size is now the confirmed, real plot size —
+  // keep properties.plot_size in sync so it stays correct everywhere else
+  // (admin's Site location form, visit history, etc.) rather than only
+  // living inside this one payment.
+  if (size > 0 && size !== Number(property.plot_size)) {
+    await supabase.from('properties').update({ plot_size: size }).eq('id', propertyId);
+  }
 
   const { count: priorPayments } = await supabase
     .from('payments')
@@ -165,9 +200,11 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       payment_type: paymentType,
       plan_id: planId,
       status: 'pending',
-      amount: plan.price,
+      amount,
       payment_method: 'UPI',
       transaction_reference: transactionReference,
+      plot_size_at_purchase: size || null,
+      size_surcharge: surcharge,
     });
     if (paymentError) return { error: paymentError.message };
 
@@ -177,7 +214,7 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
       success: true as const,
       method: 'upi' as const,
       planName: plan.name as string,
-      amount: plan.price as number,
+      amount,
       reference: transactionReference,
       propertyName: property.property_name as string,
     };
@@ -188,8 +225,10 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
     payment_type: paymentType,
     plan_id: planId,
     status: 'pending',
-    amount: plan.price,
+    amount,
     payment_method: 'Bank transfer',
+    plot_size_at_purchase: size || null,
+    size_surcharge: surcharge,
     // Was previously always left null here — an admin only ever set it
     // later via PaymentRecordForm's own "Transaction / reference number"
     // field when confirming the transfer. Now pre-filled from what the
@@ -206,7 +245,7 @@ export async function purchaseVisitCredits(propertyId: string, planId: string, m
     method: 'bank' as const,
     planName: plan.name as string,
     visitQuantity,
-    amount: plan.price as number,
+    amount,
     propertyName: property.property_name as string,
   };
 }

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveVisitPlans } from '@/components/payments/visitCredits.actions';
-import { getPaymentSettings, getPaymentQrUrl } from '@/components/payments/plans.actions';
+import { getPaymentSettings, getPaymentQrUrl, getPlotSizeTiers } from '@/components/payments/plans.actions';
 import { maskPhone } from '@/components/customer/home.data';
 import { ChoosePlanAndPay } from '@/components/customer/ChoosePlanAndPay';
 
@@ -18,14 +18,15 @@ export default async function ChoosePlanPage({ params }: { params: Promise<{ id:
 
   const { data: property } = await supabase
     .from('properties')
-    .select('id, property_name, owner_id')
+    .select('id, property_name, owner_id, plot_size')
     .eq('id', id)
     .single();
   if (!property || property.owner_id !== userData.user.id) redirect('/dashboard');
 
-  const [plans, paymentSettings, { data: profile }] = await Promise.all([
+  const [plans, paymentSettings, sizeTiers, { data: profile }] = await Promise.all([
     getActiveVisitPlans(),
     getPaymentSettings(),
+    getPlotSizeTiers(),
     supabase.from('profiles').select('phone_number').eq('id', userData.user.id).maybeSingle(),
   ]);
   const qrUrl = paymentSettings?.qr_code_image_path ? await getPaymentQrUrl(paymentSettings.qr_code_image_path) : null;
@@ -39,6 +40,8 @@ export default async function ChoosePlanPage({ params }: { params: Promise<{ id:
         paymentSettings={paymentSettings as any}
         qrUrl={qrUrl}
         maskedPhone={maskPhone(profile?.phone_number)}
+        sizeTiers={sizeTiers as any}
+        initialPlotSize={property.plot_size}
       />
     </main>
   );

@@ -31,7 +31,11 @@ const MENU = [
 
 const STATS = [
   { n: '10', label: 'fixed checks on every visit' },
-  { n: '18+', label: 'photographs and video per report' },
+  // Redesign 2026-09 (follow-up, 2026-09-29) — Plot: corrected from '18+'
+  // to '10+', closer to the app's actual enforced floor (agent capture
+  // requires at least 8 photos plus a video — MIN_PHOTOS,
+  // AgentCaptureScreen.tsx) than the old, overstated figure.
+  { n: '10+', label: 'photographs and video per report' },
   { n: '1 year', label: 'to use your visit credits' },
   { n: '1 day', label: 'to hear from a representative' },
 ];
@@ -78,7 +82,15 @@ const STEPS = [
   },
 ];
 
-const PLANS = [
+const PLANS: {
+  name: string;
+  price: string;
+  was: string;
+  tag: string;
+  border: string;
+  body: string;
+  perk?: string;
+}[] = [
   {
     name: '1 site visit',
     price: '₹1,999',
@@ -94,6 +106,12 @@ const PLANS = [
     tag: 'Most taken',
     border: '2px solid var(--color-accent)',
     body: 'Four visits, usable any time within one year against the same property. Best for land you want watched through the year.',
+    // Redesign 2026-09 (follow-up, 2026-09-29) — Plot: the 4-visit plan
+    // now advertises the free signboard as part of what it comes with,
+    // rather than only existing as a separate, pricier "+ signboard"
+    // plan on the actual admin/payment pages (Plans & pricing) — those
+    // are untouched by this change; this is marketing copy only.
+    perk: 'Includes a free "Monitored by Plot360" signboard installed at your plot.',
   },
 ];
 
@@ -331,9 +349,19 @@ export function LandingPage() {
           </div>
         ))}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 18, marginTop: 30 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 18, marginTop: 30, alignItems: 'stretch' }}>
           {PLANS.map((p) => (
-            <div key={p.name} style={{ border: p.border, borderRadius: 'var(--radius-md)', padding: 22 }}>
+            // Redesign 2026-09 (follow-up, 2026-09-29) — Plot: the 4-visit
+            // card's extra "free signboard" perk line (added just above)
+            // made it taller than the 1-visit card, which pushed its own
+            // "Sign up and buy" button down out of line with the shorter
+            // card's button. display: flex + height: 100% here (the grid
+            // row already stretches both cards to equal height via
+            // alignItems: stretch above), plus a flex-spacer div right
+            // before the button (see below), pins both buttons to the same
+            // vertical position regardless of how much body/perk text
+            // precedes them.
+            <div key={p.name} style={{ display: 'flex', flexDirection: 'column', height: '100%', border: p.border, borderRadius: 'var(--radius-md)', padding: 22 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 19 }}>{p.name}</div>
                 {p.tag && <span className="tag tag-accent">{p.tag}</span>}
@@ -349,6 +377,20 @@ export function LandingPage() {
                 <div style={{ fontSize: 13, color: 'var(--p-ink-soft)', textDecoration: 'line-through' }}>{p.was}</div>
               </div>
               <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--p-ink-soft)', margin: '9px 0 0' }}>{p.body}</p>
+              {p.perk && (
+                <p style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 13, fontWeight: 600, color: 'var(--color-accent-700)', margin: '10px 0 0' }}>
+                  <span aria-hidden="true">✓</span>
+                  <span>{p.perk}</span>
+                </p>
+              )}
+              {/* Flex spacer: absorbs whatever extra height the taller card
+                  has (the perk line above only exists on one card) so the
+                  button below always sits at a fixed 16px below whatever
+                  content precedes it, at the same vertical position on
+                  every card in the row — rather than marginTop: 'auto' on
+                  the button itself, which would collapse to 0 gap on the
+                  shorter card. */}
+              <div style={{ flex: 1 }} />
               <Link href="/signup" className="btn btn-primary btn-block" style={{ minHeight: 46, fontSize: 13.5, marginTop: 16 }}>
                 Sign up and buy
               </Link>

@@ -41,6 +41,11 @@ export type ConfirmationVariant =
       amount: number;
       paymentMethodLabel: string;
       upiLinks?: { generic: string; phonepe: string; googlePay: string; paytm: string };
+      // Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered
+      // pricing: shown as its own row when present so the amount above
+      // isn't a mystery if it included a size surcharge. Optional —
+      // omitted entirely by any caller that doesn't have it.
+      plotSize?: number;
     }
   | { kind: 'sched'; propertyName: string; windowText: string; creditsRemaining: number; expiresAt: string };
 
@@ -75,6 +80,7 @@ function content(v: ConfirmationVariant): DoneContent {
         rows: [
           { k: 'Property', v: v.propertyName },
           { k: 'Plan', v: v.planName },
+          ...(v.plotSize ? [{ k: 'Plot size', v: `${v.plotSize} sq yd` }] : []),
           { k: 'Amount', v: `${formatRupees(v.amount)} · ${v.paymentMethodLabel}` },
           { k: 'Status', v: 'Awaiting confirmation' },
           { k: 'Visit credits', v: 'Activate on confirmation' },

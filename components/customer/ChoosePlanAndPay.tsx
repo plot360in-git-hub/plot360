@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { purchaseVisitCredits } from '@/components/payments/visitCredits.actions';
 import { buildUpiLinks } from '@/lib/upi';
+import { computePlotSizeSurcharge, plotSizeTierLabel, type PlotSizeTier } from '@/lib/plotSizePricing';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
 
 type Plan = {
@@ -39,6 +40,8 @@ export function ChoosePlanAndPay({
   paymentSettings,
   qrUrl,
   maskedPhone,
+  sizeTiers,
+  initialPlotSize,
 }: {
   propertyId: string;
   propertyName: string;
@@ -46,6 +49,13 @@ export function ChoosePlanAndPay({
   paymentSettings: PaymentSettings;
   qrUrl: string | null;
   maskedPhone?: string | null;
+  // Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing.
+  // sizeTiers is the admin-configured band list (plot_size_price_tiers);
+  // initialPlotSize is the property's own plot_size if it already has one
+  // on file, so this screen starts from the real number instead of always
+  // resetting to the standard default.
+  sizeTiers: PlotSizeTier[];
+  initialPlotSize?: number | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(plans[0]?.id ?? null);
@@ -59,7 +69,22 @@ export function ChoosePlanAndPay({
   // UPI-<timestamp> placeholder (see purchaseVisitCredits).
   const [transactionId, setTransactionId] = useState('');
 
+  // Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing.
+  // The "standard" size is whichever band starts at 0 (today, admin's
+  // "Up to 500 sq yd" band) — read from the tiers themselves rather than
+  // hardcoded, so moving that boundary on the admin Plans page changes
+  // this default too. Falls back to 500 only if admin hasn't configured
+  // any bands at all yet.
+  const standardSize = useMemo(() => sizeTiers.find((t) => t.min_size <= 0)?.max_size ?? 500, [sizeTiers]);
+  const [plotSizeInput, setPlotSizeInput] = useState(String(initialPlotSize ?? standardSize));
+  const plotSize = Number(plotSizeInput) || 0;
+  const { tier: sizeTier, surcharge: sizeSurcharge, overMax: sizeOverMax } = useMemo(
+    () => computePlotSizeSurcharge(sizeTiers, plotSize),
+    [sizeTiers, plotSize]
+  );
+
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
+  const totalPrice = selectedPlan ? selectedPlan.price + sizeSurcharge : 0;
   // Redesign 2026-09 (follow-up, 2026-09-23) — the actual name shown to
   // the customer inside their UPI app as who they're paying. Falls back
   // to a literal "Plot360" if the admin hasn't set a bank account name in
@@ -67,7 +92,7 @@ export function ChoosePlanAndPay({
   const payeeName = paymentSettings?.bank_account_name || 'Plot360';
 
   function pay() {
-    if (!selectedPlan || !method) return;
+    if (!selectedPlan || !method || sizeOverMax || plotSize <= 0) return;
     setError(null);
 
     if (method === 'upi') {
@@ -76,7 +101,7 @@ export function ChoosePlanAndPay({
         return;
       }
       startTransition(async () => {
-        const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', transactionId);
+        const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'upi', plotSize, transactionId);
         if ('error' in result) {
           setError(result.error ?? null);
           return;
@@ -108,6 +133,7 @@ export function ChoosePlanAndPay({
             planName: result.planName,
             paymentMethodLabel: 'UPI',
             upiLinks: links,
+            plotSize,
           });
         }, 1200);
       });
@@ -115,7 +141,7 @@ export function ChoosePlanAndPay({
     }
 
     startTransition(async () => {
-      const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank', transactionId);
+      const result = await purchaseVisitCredits(propertyId, selectedPlan.id, 'bank', plotSize, transactionId);
       if ('error' in result) setError(result.error ?? null);
       else
         setConfirmation({
@@ -124,6 +150,7 @@ export function ChoosePlanAndPay({
           amount: result.amount,
           planName: result.planName,
           paymentMethodLabel: 'bank transfer',
+          plotSize,
         });
     });
   }
@@ -188,6 +215,49 @@ export function ChoosePlanAndPay({
           For <strong>{propertyName}</strong> — visit credits are usable within 1 year of purchase.
         </p>
 
+        {/* Redesign 2026-09 (follow-up, 2026-09-28, round 2) — Plot: moved
+            plot size above the plan list (was below it) so the customer
+            sets their real plot size first and the plan prices below
+            already reflect it, rather than picking a plan and only then
+            noticing the price changes further down the page. Also added
+            the "Total to pay" line right here — the price recalculates
+            live as this field changes, but that used to only be visible
+            by scrolling down to a plan card or the Pay button. */}
+        <div className="field" style={{ marginBottom: 20 }}>
+          <label>Plot size (sq yd)</label>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            value={plotSizeInput}
+            onChange={(e) => setPlotSizeInput(e.target.value)}
+          />
+          <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginTop: 6 }}>
+            {sizeOverMax
+              ? "This plot size is bigger than we've priced online — contact support for a quote before paying."
+              : sizeTier
+                ? `Up to ${standardSize} sq yd is included in every plan's price. ${sizeSurcharge > 0 ? `${plotSizeTierLabel(sizeTier)} adds ₹${sizeSurcharge.toLocaleString('en-IN')}.` : 'This size is within the standard price — no extra charge.'}`
+                : `Up to ${standardSize} sq yd is included in every plan's price at no extra charge.`}
+          </p>
+          {selectedPlan && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: 8,
+                marginTop: 10,
+                padding: '10px 12px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-divider)',
+              }}
+            >
+              <span style={{ fontSize: 12.5, color: 'var(--p-ink-soft)' }}>Total for {selectedPlan.name}</span>
+              <strong style={{ fontSize: 16 }}>{sizeOverMax ? 'Contact us' : `₹${totalPrice.toLocaleString('en-IN')}`}</strong>
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
           {plans.map((plan) => {
             const selected = plan.id === selectedPlanId;
@@ -197,17 +267,52 @@ export function ChoosePlanAndPay({
                 type="button"
                 onClick={() => setSelectedPlanId(plan.id)}
                 style={{
+                  position: 'relative',
                   width: '100%',
                   boxSizing: 'border-box',
                   textAlign: 'left',
+                  // Redesign 2026-09 (follow-up, 2026-09-28, round 3) — Plot:
+                  // the selected card was only distinguishable by a 1px
+                  // border-width difference, easy to miss at a glance (see
+                  // the screenshot — a selected card needed a hand-drawn
+                  // circle to be findable). Now selected also gets a filled
+                  // accent-tinted background, a thicker/more saturated
+                  // border, and the "Selected" badge + checkmark corner
+                  // below — kept in the site's own accent color
+                  // (--color-accent, Deep Navy — deliberately chosen over
+                  // teal/red in round 33, see this file's header comment)
+                  // rather than introducing an unrelated green, so it
+                  // matches the rest of the redesign's one-accent palette.
                   border: selected ? '2px solid var(--color-accent)' : '1px solid var(--color-divider)',
-                  background: 'var(--color-surface)',
+                  background: selected ? 'var(--color-accent-100)' : 'var(--color-surface)',
                   padding: '16px 18px',
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   color: 'var(--color-text)',
                 }}
               >
+                {selected && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -1,
+                      right: -1,
+                      width: 26,
+                      height: 26,
+                      background: 'var(--color-accent)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      fontWeight: 800,
+                      lineHeight: 1,
+                    }}
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                )}
                 {/* Redesign 2026-09 (follow-up) — Plot: on mobile, a long plan
                     name ("1 Visit + install "Monitored by Plot360" signboard")
                     next to the "% off" tag pushed this row — and with it the
@@ -217,18 +322,49 @@ export function ChoosePlanAndPay({
                     wrap onto its own line instead of forcing an overflow. */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px 8px', marginBottom: 4 }}>
                   <strong style={{ fontSize: 16, minWidth: 0, overflowWrap: 'break-word' }}>{plan.name}</strong>
-                  {plan.discount_percent > 0 && (
-                    <span className="tag tag-accent" style={{ flex: 'none' }}>{plan.discount_percent}% off</span>
-                  )}
+                  <span style={{ display: 'flex', gap: 6, flex: 'none' }}>
+                    {selected && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          background: 'var(--color-accent)',
+                          color: '#fff',
+                          padding: '2px 8px',
+                        }}
+                      >
+                        Selected
+                      </span>
+                    )}
+                    {plan.discount_percent > 0 && <span className="tag tag-accent">{plan.discount_percent}% off</span>}
+                  </span>
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 800 }}>
-                  ₹{plan.price.toLocaleString('en-IN')}
-                  {plan.base_price && plan.base_price > plan.price && (
-                    <span style={{ fontSize: 13, fontWeight: 400, textDecoration: 'line-through', color: 'var(--p-ink-muted)', marginLeft: 8 }}>
-                      ₹{plan.base_price.toLocaleString('en-IN')}
-                    </span>
+                  {sizeOverMax ? (
+                    <span style={{ fontSize: 14 }}>Contact us for a quote</span>
+                  ) : (
+                    <>
+                      ₹{(plan.price + sizeSurcharge).toLocaleString('en-IN')}
+                      {plan.base_price && plan.base_price > plan.price && (
+                        <span style={{ fontSize: 13, fontWeight: 400, textDecoration: 'line-through', color: 'var(--p-ink-muted)', marginLeft: 8 }}>
+                          ₹{plan.base_price.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
+                {/* Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered
+                    pricing: shows the split (plan + size surcharge) whenever
+                    the current plot size costs extra, so the price above
+                    isn't a mystery. Nothing shown for the standard size
+                    (surcharge 0), same as before this change. */}
+                {!sizeOverMax && sizeSurcharge > 0 && (
+                  <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginTop: 2 }}>
+                    ₹{plan.price.toLocaleString('en-IN')} plan + ₹{sizeSurcharge.toLocaleString('en-IN')} for plot size
+                  </p>
+                )}
                 <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>
                   {plan.visit_quantity} site visit{plan.visit_quantity === 1 ? '' : 's'}
                 </p>
@@ -332,10 +468,10 @@ export function ChoosePlanAndPay({
         <button
           className="btn btn-primary btn-block"
           type="button"
-          disabled={!selectedPlan || !method || isPending || opening}
+          disabled={!selectedPlan || !method || isPending || opening || sizeOverMax || plotSize <= 0}
           onClick={pay}
         >
-          {isPending ? 'Processing…' : selectedPlan ? `Pay ₹${selectedPlan.price.toLocaleString('en-IN')}` : 'Pay'}
+          {isPending ? 'Processing…' : selectedPlan ? `Pay ₹${totalPrice.toLocaleString('en-IN')}` : 'Pay'}
         </button>
       </div>
     </div>

@@ -99,6 +99,91 @@ export async function togglePlanActive(planId: string, isActive: boolean) {
   return { success: true };
 }
 
+// Redesign 2026-09 (follow-up, 2026-09-28, round 2) — Plot asked for a way
+// to delete a plan. A plan a customer has ever paid for is referenced by
+// payments.plan_id (foreign key, no cascade) — deleting it outright would
+// either fail outright or, worse, orphan/blank a real payment history row,
+// so this tries a real delete first and, only if Postgres refuses it over
+// that foreign key (error code 23503 — "foreign key violation"), falls
+// back to deactivating the plan instead. Deactivating already does what
+// Plot actually wants ("shouldn't show on the payment page") — is_active
+// is exactly what getActiveVisitPlans/getActivePlans filter the customer-
+// facing screen and this table on — so a plan with payment history still
+// ends up hidden from customers, just not erased from the database.
+export async function deletePlan(planId: string) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+
+  const { error } = await gate.supabase.from('subscription_plans').delete().eq('id', planId);
+  if (error) {
+    if (error.code === '23503') {
+      const { error: deactivateError } = await gate.supabase.from('subscription_plans').update({ is_active: false }).eq('id', planId);
+      if (deactivateError) return { error: deactivateError.message };
+      revalidatePath('/admin/plans');
+      return { success: true as const, deactivatedInstead: true as const };
+    }
+    return { error: error.message };
+  }
+  revalidatePath('/admin/plans');
+  return { success: true as const, deactivatedInstead: false as const };
+}
+
+// ---------- Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing ----------
+// See supabase/schema.sql, plot_size_price_tiers, and lib/plotSizePricing.ts
+// for the shape and reasoning. Not gated behind requireAdmin — customers
+// need to read these bands to see their price recalculate on the payment
+// screen, same as getActivePlans/getActiveVisitPlans above.
+export async function getPlotSizeTiers() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('plot_size_price_tiers')
+    .select('*')
+    .order('display_order', { ascending: true })
+    .order('min_size', { ascending: true });
+  return data ?? [];
+}
+
+export async function upsertPlotSizeTier(formData: FormData) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+
+  const id = String(formData.get('id') || '') || undefined;
+  const minSize = Number(formData.get('min_size'));
+  const maxSizeRaw = String(formData.get('max_size') || '').trim();
+  const maxSize = maxSizeRaw === '' ? null : Number(maxSizeRaw);
+  const extraPrice = Number(formData.get('extra_price')) || 0;
+  const displayOrder = Number(formData.get('display_order')) || 0;
+
+  if (Number.isNaN(minSize) || minSize < 0) return { error: 'Enter a valid minimum plot size.' };
+  if (maxSize !== null && (Number.isNaN(maxSize) || maxSize <= minSize)) {
+    return { error: 'Maximum plot size must be greater than the minimum, or left blank for no upper limit.' };
+  }
+  if (extraPrice < 0) return { error: 'Extra price cannot be negative.' };
+
+  const payload = {
+    min_size: minSize,
+    max_size: maxSize,
+    extra_price: extraPrice,
+    display_order: displayOrder,
+  };
+  const { error } = id
+    ? await gate.supabase.from('plot_size_price_tiers').update(payload).eq('id', id)
+    : await gate.supabase.from('plot_size_price_tiers').insert(payload);
+  if (error) return { error: error.message };
+
+  revalidatePath('/admin/plans');
+  return { success: true };
+}
+
+export async function deletePlotSizeTier(tierId: string) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error };
+  const { error } = await gate.supabase.from('plot_size_price_tiers').delete().eq('id', tierId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/plans');
+  return { success: true };
+}
+
 export async function getPaymentSettings() {
   const supabase = await createClient();
   const { data } = await supabase.from('payment_settings').select('*').limit(1).maybeSingle();
