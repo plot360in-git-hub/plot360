@@ -1,4 +1,16 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type Color } from 'pdf-lib';
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFPage,
+  type Color,
+  clip,
+  endPath,
+  rectangle as opRectangle,
+  pushGraphicsState,
+  popGraphicsState,
+} from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
@@ -365,29 +377,37 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
     ...data.photos.filter((p) => !BOUNDARY_ORDER.includes(p.boundarySide ?? '')),
   ];
 
-  const photoGap = 16;
-  const photoTileW = (contentWidth - photoGap) / 2;
-  const photoTileH = photoTileW * 0.75; // 4:3
+  // Redesign 2026-09 (follow-up, 2026-10-03) — Plot: wants photos a
+  // customer can print and keep as a physical record, not a thumbnail
+  // grid — exactly 2 photos per page now, each nearly full-width and
+  // roughly half the page's usable height (was a 2-column grid of up to
+  // 3 rows, 6 small photos/page). This means more pages for the same
+  // photo count, which is the point — nothing is dropped, same as
+  // before (orderedPhotos/photoPageCount still spread every photo
+  // across as many pages as it takes, never truncating).
+  const PHOTOS_PER_PAGE = 2;
+  const photoCaptionH = 16; // room reserved under each photo for its caption line
+  const photoGap = 22; // vertical gap between the two stacked photos
+  const photoTileW = contentWidth;
   const photoBottomLimit = 70;
-  const photoRowStride = photoTileH + 26;
   // Every photo page starts its grid at the same y, right under the
   // "Photographic record" title; only the first page also carries a
   // short note beneath the title (at most 2 lines), so it gets slightly
-  // less room than a continuation page.
+  // less room than a continuation page — and so a slightly shorter tile.
   const photoTitleStartY = PAGE_H - 90 - 16;
   const firstPhotoPageNoteBudget = 2 * 12 + 8 + 14; // pessimistic 2-line note + gaps
   const firstPhotoPageGridStartY = photoTitleStartY - firstPhotoPageNoteBudget;
   const continuationPhotoPageGridStartY = photoTitleStartY - 6;
-  const firstPhotoPageMaxRows = Math.max(1, Math.floor((firstPhotoPageGridStartY - photoBottomLimit) / photoRowStride) + 1);
-  const continuationPhotoPageMaxRows = Math.max(1, Math.floor((continuationPhotoPageGridStartY - photoBottomLimit) / photoRowStride) + 1);
-  const firstPhotoPageCapacity = firstPhotoPageMaxRows * 2;
-  const continuationPhotoPageCapacity = continuationPhotoPageMaxRows * 2;
+  // Tile height is derived from whatever vertical room each page type
+  // has, split across PHOTOS_PER_PAGE (with a caption reserved under
+  // each tile and one gap between them) — not the other way around.
+  const tileHeightFor = (gridStartY: number) =>
+    (gridStartY - photoBottomLimit - photoGap - PHOTOS_PER_PAGE * photoCaptionH) / PHOTOS_PER_PAGE;
+  const firstPhotoTileH = tileHeightFor(firstPhotoPageGridStartY);
+  const continuationPhotoTileH = tileHeightFor(continuationPhotoPageGridStartY);
   // Never truncates — always enough pages for every photo, minimum 1 page
   // even with zero photos (keeps the report's structure the same either way).
-  const photoPageCount =
-    orderedPhotos.length <= firstPhotoPageCapacity
-      ? 1
-      : 1 + Math.ceil((orderedPhotos.length - firstPhotoPageCapacity) / continuationPhotoPageCapacity);
+  const photoPageCount = Math.max(1, Math.ceil(orderedPhotos.length / PHOTOS_PER_PAGE));
   const totalPages = 2 + photoPageCount + (includeEcPage ? 1 : 0);
   const ecPageNumber = includeEcPage ? 2 + photoPageCount + 1 : null;
 
@@ -558,8 +578,8 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
   let photoCursor = 0;
   for (let p = 0; p < photoPageCount; p++) {
     const isFirstPhotoPage = p === 0;
-    const capacity = isFirstPhotoPage ? firstPhotoPageCapacity : continuationPhotoPageCapacity;
-    const pagePhotos = orderedPhotos.slice(photoCursor, photoCursor + capacity);
+    const tileH = isFirstPhotoPage ? firstPhotoTileH : continuationPhotoTileH;
+    const pagePhotos = orderedPhotos.slice(photoCursor, photoCursor + PHOTOS_PER_PAGE);
     const captionStartIndex = photoCursor;
     photoCursor += pagePhotos.length;
 
@@ -583,35 +603,56 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
       y -= 6;
     }
 
-    let col = 0;
+    // Redesign 2026-09 (follow-up, 2026-10-03) — one photo per row now
+    // (was 2 side by side), each nearly full-width — see the capacity/
+    // tile-height note above for why.
     let rowTopY = y;
     for (let i = 0; i < pagePhotos.length; i++) {
-      if (rowTopY - photoTileH < photoBottomLimit) break; // safety net; the capacity math above should already prevent this
+      if (rowTopY - tileH < photoBottomLimit) break; // safety net; the tile-height math above should already prevent this
       const photo = pagePhotos[i];
-      const x = MARGIN_X + col * (photoTileW + photoGap);
+      const x = MARGIN_X;
       const fetched = await fetchBytes(photo.url);
       const img = fetched ? await embedImageBytes(pdfDoc, fetched.bytes, fetched.contentType) : null;
       if (img) {
-        const scale = Math.min(photoTileW / img.width, photoTileH / img.height);
+        // Redesign 2026-09 (follow-up, 2026-10-03, round 2) — Plot: a
+        // portrait photo "contain"-fit inside this landscape-shaped
+        // tile left grey bars down both sides (it's height-constrained,
+        // so the scaled width never reaches the tile's full width).
+        // Fixed by "cover"-fitting instead — scale up so the photo
+        // fully fills the tile on every side, then clip away whatever
+        // overflows (the top/bottom for a portrait photo) rather than
+        // shrinking the photo to fit whole. pdf-lib has no built-in
+        // crop/cover mode for drawImage (only contain-fit or
+        // non-uniform stretch), so the clip is built by hand from the
+        // low-level path/clip operators pdf-lib exports from its root
+        // package, scoped to just this one drawImage call by the
+        // push/pop graphics-state pair around it.
+        const boxX = x;
+        const boxY = rowTopY - tileH;
+        const scale = Math.max(photoTileW / img.width, tileH / img.height);
         const drawW = img.width * scale;
         const drawH = img.height * scale;
-        photoPage.drawRectangle({ x, y: rowTopY - photoTileH, width: photoTileW, height: photoTileH, color: NEUTRAL_300 });
-        photoPage.drawImage(img, { x: x + (photoTileW - drawW) / 2, y: rowTopY - photoTileH + (photoTileH - drawH) / 2, width: drawW, height: drawH });
+        const drawX = boxX + (photoTileW - drawW) / 2;
+        const drawY = boxY + (tileH - drawH) / 2;
+        photoPage.drawRectangle({ x: boxX, y: boxY, width: photoTileW, height: tileH, color: NEUTRAL_300 });
+        photoPage.pushOperators(
+          pushGraphicsState(),
+          opRectangle(boxX, boxY, photoTileW, tileH),
+          clip(),
+          endPath(),
+        );
+        photoPage.drawImage(img, { x: drawX, y: drawY, width: drawW, height: drawH });
+        photoPage.pushOperators(popGraphicsState());
       } else {
-        photoPage.drawRectangle({ x, y: rowTopY - photoTileH, width: photoTileW, height: photoTileH, color: NEUTRAL_400 });
-        photoPage.drawText('Photo unavailable', { x: x + 8, y: rowTopY - photoTileH + 8, size: 8, font: fonts.regular, color: TEXT });
+        photoPage.drawRectangle({ x, y: rowTopY - tileH, width: photoTileW, height: tileH, color: NEUTRAL_400 });
+        photoPage.drawText('Photo unavailable', { x: x + 8, y: rowTopY - tileH + 8, size: 8, font: fonts.regular, color: TEXT });
       }
       const caption = photo.boundarySide
         ? `${BOUNDARY_LABELS[photo.boundarySide] ?? photo.boundarySide} boundary`
         : `Photograph ${String(captionStartIndex + i + 1).padStart(2, '0')}`;
-      photoPage.drawText(caption, { x, y: rowTopY - photoTileH - 12, size: 8, font: fonts.regular, color: TEXT });
+      photoPage.drawText(caption, { x, y: rowTopY - tileH - 12, size: 8, font: fonts.regular, color: TEXT });
 
-      if (col === 1) {
-        col = 0;
-        rowTopY -= photoRowStride;
-      } else {
-        col = 1;
-      }
+      rowTopY -= tileH + photoCaptionH + photoGap;
     }
 
     drawFooter(photoPage, fonts, 'Photographs are unedited and timestamped at capture', 2 + p + 1, totalPages);
@@ -648,24 +689,48 @@ export async function buildVisitReportPdf(data: VisitReportPdfInput): Promise<Ui
       if (fetched) {
         const isPdf = fetched.contentType.includes('pdf') || (fetched.bytes[0] === 0x25 && fetched.bytes[1] === 0x50 && fetched.bytes[2] === 0x44 && fetched.bytes[3] === 0x46);
         if (isPdf) {
+          // Redesign 2026-09 (follow-up, 2026-10-03) — Plot: this used to
+          // draw only an instructional sentence here ("reproduced ... as
+          // the page(s) immediately following this one") in an otherwise
+          // near-blank box, with the EC's real content starting on the
+          // NEXT page — a wasted page once printed. Now the EC's own
+          // first page is embedded directly as a vector object
+          // (pdfDoc.embedPage — not re-rastered, stays crisp at any print
+          // size) into this page's box, scaled to fit, so the annexure
+          // page itself shows real content. Only pages 2+ of the source
+          // PDF (if any) still get appended afterward as their own full,
+          // un-chromed pages — a single-page EC (the common case) needs
+          // no extra page at all.
           try {
             const ecDoc = await PDFDocument.load(fetched.bytes, { ignoreEncryption: true });
-            pdfPagesToAppend = await pdfDoc.copyPages(ecDoc, ecDoc.getPageIndices());
-            ecEmbedded = pdfPagesToAppend.length > 0;
+            const ecPageCount = ecDoc.getPageCount();
+            if (ecPageCount > 0) {
+              const [firstEcPage] = ecDoc.getPages();
+              const embeddedFirstEcPage = await pdfDoc.embedPage(firstEcPage);
+              const scale = Math.min(boxW / embeddedFirstEcPage.width, boxH / embeddedFirstEcPage.height);
+              const drawW = embeddedFirstEcPage.width * scale;
+              const drawH = embeddedFirstEcPage.height * scale;
+              page4.drawRectangle({ x: MARGIN_X, y: boxBottom, width: boxW, height: boxH, borderWidth: 1.4, borderColor: DIVIDER, color: WHITE });
+              page4.drawPage(embeddedFirstEcPage, {
+                x: MARGIN_X + (boxW - drawW) / 2,
+                y: boxBottom + (boxH - drawH) / 2,
+                width: drawW,
+                height: drawH,
+              });
+              ecEmbedded = true;
+
+              if (ecPageCount > 1) {
+                // A one-line caption in the gap below the box (not inside
+                // it, so it never sits over real certificate content) —
+                // only drawn for a multi-page EC; the remaining pages are
+                // appended right after this one as their own full pages.
+                const captionText = `Page 1 of ${ecPageCount} shown above — the remaining ${ecPageCount - 1} page${ecPageCount - 1 === 1 ? '' : 's'} follow immediately after this annexure.`;
+                drawParagraph(page4, captionText, { x: MARGIN_X, y: boxBottom - 12, size: 7.5, font: fonts.regular, color: INK_SOFT, maxWidth: contentWidth, lineHeight: 10 });
+                pdfPagesToAppend = await pdfDoc.copyPages(ecDoc, ecDoc.getPageIndices().slice(1));
+              }
+            }
           } catch {
             ecEmbedded = false;
-          }
-          if (ecEmbedded) {
-            page4.drawRectangle({ x: MARGIN_X, y: boxBottom, width: boxW, height: boxH, color: SURFACE });
-            drawParagraph(page4, 'Supplied as a PDF — reproduced in full, exactly as received, as the page(s) immediately following this one.', {
-              x: MARGIN_X + 20,
-              y: boxBottom + boxH - 26,
-              size: 10,
-              font: fonts.regular,
-              color: TEXT,
-              maxWidth: boxW - 40,
-              lineHeight: 14,
-            });
           }
         } else {
           const img = await embedImageBytes(pdfDoc, fetched.bytes, fetched.contentType);

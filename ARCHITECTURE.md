@@ -3895,3 +3895,66 @@ added); each card is now `display: flex, flexDirection: 'column', height:
 '100%'`; and a flex-spacer div (`flex: 1`) sits right before the button,
 absorbing whichever card has less content above it so both buttons land
 on the same line. `components/marketing/LandingPage.tsx`.
+
+## 68. Visit report PDF: 2 large print-quality photos per page, EC annexure shows its own content instead of a blank divider (2026-10-03)
+
+Plot: customers print this report and keep it as a physical record, so
+the photo grid needed to be print-quality rather than a thumbnail sheet,
+and the EC annexure page was mostly wasted space when printed. Both
+fixed in `lib/pdf/visitReportPdf.ts`, no other files touched:
+
+1. **Photo layout** — was a 2-column grid (up to 3 rows, 6 small photos
+   per page); now exactly 2 photos per page, stacked, each nearly
+   full-width and roughly half the page's usable height. Tile height is
+   now derived from however much vertical room a page type has (first
+   page has less, carrying the intro note) split across the fixed 2
+   slots, rather than computing how many small tiles fit — `PHOTOS_PER_PAGE
+   = 2` replaces the old capacity-from-available-space math.
+   `photoPageCount` is now simply `ceil(photoCount / 2)`. This means more
+   pages for the same photo count (by design — e.g. 8 photos is now 4
+   pages instead of 2), but nothing is ever dropped, same guarantee as
+   #64.
+2. **EC annexure page** — previously drew only an instructional sentence
+   ("Supplied as a PDF — reproduced in full ... as the page(s)
+   immediately following this one") inside an otherwise blank box, with
+   the EC's real content starting on the *next* page — a wasted printed
+   page even for a single-page EC (the common case). Now the EC's own
+   first page is embedded directly into that box via `pdfDoc.embedPage()`
+   (a vector form-XObject, not a re-rastered image — stays crisp at any
+   print size) and scaled to fit, so the annexure page itself shows real
+   content. Only pages 2+ of the source PDF, if any, still get appended
+   afterward as their own full, un-chromed pages (unchanged from before —
+   still not counted in the report's own page numbering, since they're
+   the customer's unmodified document); a single-page EC now needs no
+   extra page at all. A small caption below the box ("Page 1 of N shown
+   above — the remaining N−1 pages follow immediately after this
+   annexure") only appears for a genuinely multi-page EC.
+
+## 68b. Photo tile: "cover" crop instead of "contain" fit, so portrait photos fill the box (2026-10-03, round 2)
+
+#68's new photo tile is landscape-shaped (nearly full page width, much
+less tall) to fit exactly 2 per page. That's fine for a landscape
+photo, but a portrait photo (the common case for a phone held upright —
+confirmed from the screenshots Plot sent) was being "contain"-fit:
+scaled down just enough that its full height matched the tile's height,
+which left its width far short of the tile's width — grey bars down
+both the left and right sides, exactly what Plot reported ("the pciture
+is not cming complete half as it show grey to boith left and right").
+
+Fixed by scaling the photo to "cover" the tile instead of "contain"
+it — `scale` now uses `Math.max(photoTileW / img.width, tileH /
+img.height)` (previously `Math.min(...)`), so the photo is always at
+least as large as the tile in both dimensions; centering it the same as
+before now overflows the tile on one axis (top/bottom for a portrait
+photo) rather than leaving gaps. pdf-lib's `drawImage` has no built-in
+crop/cover mode (only contain-fit or non-uniform stretch), so the
+overflow is clipped away with pdf-lib's low-level content-stream
+operators — `pushGraphicsState()`, a rectangle path matching the tile
+box (`rectangle(...)`), `clip()`, `endPath()` — bracketed by a matching
+`popGraphicsState()` so the clip applies to that one `drawImage` call
+only and never affects the caption text or photos drawn after it. No
+new dependency — these operators are part of pdf-lib's own public
+export surface (verified against pdf-lib's source on GitHub before
+writing this, rather than assumed, since a wrong low-level operator call
+could produce a broken PDF with no way to catch it before the user
+tests the real output). `lib/pdf/visitReportPdf.ts`.
