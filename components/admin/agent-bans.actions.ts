@@ -97,8 +97,12 @@ export async function getVerifiedAgentsExcludingBanned() {
 // surfaces can never disagree (the README's "one source of truth" rule).
 export async function getAgentsForUsersTab(query?: string) {
   const supabase = await createClient();
+  // Redesign 2026-09 (follow-up, 2026-10-27) — Plot: added phone_country_
+  // code/phone_number here too (same columns the Assign screen and
+  // Payments already read) so UsersTable.tsx's Field agents tab can show
+  // phone + email as real columns, not just name/SRO/visits.
   const [{ data: agents }, banned] = await Promise.all([
-    supabase.from('agent_profiles').select('id, sro_name, sro_code, created_at, profiles(first_name, last_name, email)'),
+    supabase.from('agent_profiles').select('id, sro_name, sro_code, created_at, profiles(first_name, last_name, email, phone_country_code, phone_number)'),
     getBannedAgentIds(),
   ]);
   const list = agents ?? [];

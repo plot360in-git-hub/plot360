@@ -120,7 +120,7 @@ export function AuthScreen({ initialTab }: { initialTab: Tab }) {
           PLOT<span style={{ color: 'var(--color-accent)' }}>360</span>
         </div>
         <h1 style={{ fontSize: 30, lineHeight: 1.1, marginTop: 22 }}>
-          Someone stands on your land, so you don&apos;t have to.
+          Plot360 stands on your land, so you don&apos;t have to.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--p-ink-soft)', marginTop: 12, lineHeight: 1.5 }}>
           Sign in and a Plot360 representative takes it from there over WhatsApp.

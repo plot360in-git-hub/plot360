@@ -103,7 +103,7 @@ const PLANS: {
     name: '4 site visits',
     price: '₹7,497',
     was: '₹9,996',
-    tag: 'Most taken',
+    tag: 'Most popular',
     border: '2px solid var(--color-accent)',
     body: 'Four visits, usable any time within one year against the same property. Best for land you want watched through the year.',
     // Redesign 2026-09 (follow-up, 2026-09-29) — Plot: the 4-visit plan
@@ -264,8 +264,16 @@ export function LandingPage() {
             }}
           >
             <div>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', color: 'var(--color-accent-700)' }}>
-                Site visits across Ranga Reddy &amp; Hyderabad
+              {/* Redesign 2026-09 (follow-up, 2026-10-27) — Plot: was a
+                  single uppercase line ("Site visits across Ranga Reddy &
+                  Hyderabad"); replaced with a 3-line pitch, each on its own
+                  line rather than run together. */}
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--color-accent-700)' }}>
+                <div style={{ fontWeight: 700 }}>Property monitoring that keeps you informed. Protect what&rsquo;s yours.</div>
+                <div>See property risks sooner. Resolve them faster.</div>
+                <div style={{ textTransform: 'uppercase', letterSpacing: '.12em', fontSize: 11, marginTop: 4 }}>
+                  Site visits across GHMC &amp; ORR surroundings
+                </div>
               </div>
               <h1
                 style={{
@@ -276,7 +284,7 @@ export function LandingPage() {
                   color: 'var(--color-text)',
                 }}
               >
-                Someone stands on your land, so you don&rsquo;t have to.
+                Plot360 stands on your land, so you don&rsquo;t have to.
               </h1>
               <p style={{ fontSize: 16, lineHeight: 1.55, margin: '18px 0 0', maxWidth: '34em', color: 'var(--p-ink-soft)' }}>
                 A verified Plot360 agent visits your plot, photographs every boundary, records a video and answers ten fixed checks. You get a written report — and a

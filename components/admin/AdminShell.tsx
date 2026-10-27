@@ -43,6 +43,11 @@ const NAV: { id: string; label: string; href: string; ownerOnly?: boolean; group
   // like an ordinary bank-transfer-awaiting-confirmation row (see
   // getPaymentsQueue's own note on excluding these).
   { id: 'qCustomPlans', label: 'Custom plans', href: '/admin/queue/custom-plans', group: 'Queues' },
+  // Redesign 2026-09 (follow-up, 2026-10-27) — Plot: a property that's
+  // registered (even verified) but whose owner never completed payment
+  // had no trace anywhere else in this sidebar — see getAwaitingPayment
+  // Queue's own note (queues.actions.ts) for the full gap.
+  { id: 'qAwaitingPayment', label: 'Awaiting payment', href: '/admin/queue/awaiting-payment', group: 'Queues' },
   // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: a property with an
   // agent already assigned (or in progress, or submitted) wasn't
   // reachable from anywhere in this sidebar — the six queues above only
@@ -72,6 +77,7 @@ const TILE_BADGE: Record<string, string> = {
   qService: 'qService',
   qPayments: 'qPayments',
   qCustomPlans: 'qCustomPlans',
+  qAwaitingPayment: 'qAwaitingPayment',
 };
 
 export function AdminShell({

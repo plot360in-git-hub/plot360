@@ -35,9 +35,15 @@ export async function getAllUsers() {
   const { data: authData, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
   if (error) return { error: error.message, users: [] };
 
+  // Redesign 2026-09 (follow-up, 2026-10-27) — Plot: the Users screen's
+  // Customers tab had no phone number or email visible anywhere, only
+  // usable in search — added phone_country_code/phone_number here (same
+  // columns/format every other admin screen already reads, e.g.
+  // PaymentsOverview.tsx, AssignmentScreen.tsx) so UsersTable.tsx can show
+  // both as real columns.
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, first_name, last_name, username, email, is_admin, is_agent');
+    .select('id, first_name, last_name, username, email, is_admin, is_agent, phone_country_code, phone_number');
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
   const users = authData.users.map((u) => {
@@ -53,6 +59,8 @@ export async function getAllUsers() {
       lastName: profile?.last_name ?? '',
       isAdmin: profile?.is_admin ?? false,
       isAgent: profile?.is_agent ?? false,
+      phoneCountryCode: profile?.phone_country_code ?? '',
+      phoneNumber: profile?.phone_number ?? '',
     };
   });
 

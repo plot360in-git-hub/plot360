@@ -4084,3 +4084,74 @@ see its own header comment) rather than being hardcoded into
    (WhatsApp/Phone/Email/Hours) is untouched, still a single string.
    Scoped to the Contact section only, per what was asked — the
    footer's own "Hyderabad, Telangana" line is unchanged.
+
+## 71. Payment screen reorder, "Awaiting payment" admin queue, homepage hero/pricing copy, properties-count layout (2026-10-27, round 2)
+
+1. **Custom plan CTA moved** (`ChoosePlanAndPay.tsx`) — Plot: it sat below
+   the "Pay with" method cards and the Pay button, reading as an
+   afterthought. Moved to right after the standard plan cards (admin-
+   defined `subscription_plans`), before "Pay with" — now reads as a
+   genuine alternative to the plan list above it, not a footnote under
+   the payment method choice. No logic changed, purely a JSX reorder.
+2. **"Awaiting payment" admin queue** (NEW — `getAwaitingPaymentQueue`,
+   `queues.actions.ts`; `app/admin/queue/awaiting-payment/page.tsx`) —
+   Plot flagged a real gap: a property that's registered, and can even
+   already be admin-verified, but whose owner never actually completed
+   Step 2 (`ChoosePlanAndPay.tsx`) had no trace anywhere.
+   `purchaseVisitCredits` only inserts a `payments` row once the customer
+   taps Pay, so reaching that screen and going back to the dashboard
+   leaves zero record — invisible to Payments (nothing pending to
+   confirm), invisible to Job assignment
+   (`getEligiblePropertiesForAssignment` requires `status='verified' AND
+   expiration_date is not null`, and only a payment ever sets
+   `expiration_date`), and invisible to Custom plans (`requestCustomPlan`
+   inserts its own `payments` row, so that path is already covered). This
+   queue is the anti-join those others don't do: every non-rejected
+   property with zero `payments` rows at all, admin-verified ones flagged
+   urgent (the real blind spot — looks "done" everywhere else) and
+   still-unverified ones shown but not urgent (early in a normal flow).
+   Added as its own sidebar entry + dashboard tile (`qAwaitingPayment`,
+   `dashboard.actions.ts`, `AdminShell.tsx`) rather than folded into
+   Payments, same reasoning as Custom plans having its own queue. Clicking
+   a row opens the property's own admin page, same pattern as every other
+   queue here.
+3. **Homepage hero copy** (`LandingPage.tsx`) — the one-line uppercase
+   kicker ("Site visits across Ranga Reddy & Hyderabad") replaced with
+   Plot's 3-line pitch (property monitoring / see risks sooner / site
+   visits across GHMC & ORR surroundings), each its own line rather than
+   run together. Headline changed from "Someone stands on your land..."
+   to "Plot360 stands on your land..." — originally scoped to the
+   homepage only, then Plot asked for the same swap everywhere; the
+   matching headline on the /login · /signup screen (`AuthScreen.tsx`)
+   now reads "Plot360 stands" too. Both are the only two places this
+   headline exists in the codebase.
+4. **4-visit plan badge** — "Most taken" → "Most popular"
+   (`LandingPage.tsx`'s `PLANS` array). Copy only, same card/price logic.
+5. **Properties-under-watch count** (`CustomerHome.tsx`) — the count used
+   to sit at the far right of its row (`justify-content: space-between`
+   against the label, a wide empty gap between them on most screens).
+   Moved next to the "Properties under watch" label instead, joined by a
+   bold "—", e.g. "PROPERTIES UNDER WATCH **—** 2".
+
+## 72. Users screen: phone + email columns for both tabs; properties-under-watch line made bolder (2026-10-27, round 3)
+
+1. **Admin Users screen — Customers tab** (`UsersTable.tsx`,
+   `users.actions.ts`) — Plot: phone and email weren't visible anywhere in
+   the table, only usable in the search box. `getAllUsers` now also
+   selects `phone_country_code`/`phone_number` from `profiles` (same
+   columns every other admin screen already reads — PaymentsOverview.tsx,
+   AssignmentScreen.tsx, etc.) and returns them on each user; two new
+   columns ("Phone", "Email") added right after the customer's name.
+   Search also now matches on phone number, not just name/email.
+2. **Admin Users screen — Field agents tab** (same files,
+   `agent-bans.actions.ts`'s `getAgentsForUsersTab`) — same treatment:
+   `phone_country_code`/`phone_number` added to the existing `profiles`
+   join, two new "Phone"/"Email" columns next to the agent's name, search
+   now also matches phone/email.
+3. **Properties-under-watch line more prominent** (`CustomerHome.tsx`,
+   round 2 on top of #71.5 above) — Plot: wanted the whole "Properties
+   under watch — 4" line to stand out more, not read as a small eyebrow
+   label. Bumped from 10px/ink-soft throughout to a bolder, larger
+   treatment (label 12.5px/800 weight, the "—" and count 14px/800 weight),
+   full-strength text color (`--color-text`) instead of the muted
+   `--p-ink-soft` used everywhere else on this card.

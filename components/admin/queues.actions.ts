@@ -322,3 +322,56 @@ export async function getPaymentsQueue(opts: { query?: string; sort?: QueueSort;
 
   return finish(rows, opts.query ?? '', opts.sort ?? 'urgent', opts.page ?? 1);
 }
+
+// ---------- 7. Awaiting payment ----------
+
+// Redesign 2026-09 (follow-up, 2026-10-27) — Plot: a property that's
+// registered — and can even already be admin-verified — but whose owner
+// never actually completed Step 2 (ChoosePlanAndPay.tsx) had no trace
+// anywhere. purchaseVisitCredits only inserts a payments row once the
+// customer taps Pay, so an owner who reaches that screen and just goes
+// back to the dashboard leaves zero record: invisible to the Payments
+// queue (nothing pending to confirm), invisible to Job assignment
+// (getEligiblePropertiesForAssignment requires status='verified' AND
+// expiration_date set, and only a payment ever sets expiration_date), and
+// invisible to Custom plans (requestCustomPlan also inserts its own
+// payments row, so a customer who used that button is already covered
+// there). This queue is the anti-join those others don't do: every
+// property with zero payments rows at all, so admin has one place to go
+// nudge the customer — by phone, or toward the custom-plan option —
+// instead of the registration silently going nowhere forever.
+export async function getAwaitingPaymentQueue(opts: { query?: string; sort?: QueueSort; page?: number } = {}) {
+  const supabase = await createClient();
+  const [{ data: properties }, { data: paidPropertyRows }] = await Promise.all([
+    supabase
+      .from('properties')
+      .select('id, property_name, village_town, district, sro_code, created_at, status')
+      .neq('status', 'rejected')
+      .order('created_at', { ascending: true }),
+    supabase.from('payments').select('property_id'),
+  ]);
+
+  const paidPropertyIds = new Set((paidPropertyRows ?? []).map((p) => p.property_id));
+  const list = (properties ?? []).filter((p) => !paidPropertyIds.has(p.id));
+  if (list.length === 0) return { rows: [], total: 0, page: 1, pageCount: 1 };
+
+  const rows = list.map((p) => {
+    const verified = p.status === 'verified';
+    return {
+      id: p.id,
+      name: p.property_name,
+      place: [p.village_town, p.district, p.sro_code ? `SRO ${p.sro_code}` : null].filter(Boolean).join(' · '),
+      state: verified ? 'Verified · no payment yet' : 'Registered · no payment yet',
+      // Verified-but-unpaid is the real blind spot — it looks "done"
+      // everywhere else, with nothing else flagging it needs a nudge — so
+      // it's flagged urgent to sort to the top. A still-unverified
+      // registration is early in a normal flow and not yet urgent.
+      urgent: verified,
+      window: verified ? 'Verified' : 'Pending verification',
+      waitHours: hoursSince(p.created_at),
+      href: `/admin/${p.id}`,
+    };
+  });
+
+  return finish(rows, opts.query ?? '', opts.sort ?? 'urgent', opts.page ?? 1);
+}

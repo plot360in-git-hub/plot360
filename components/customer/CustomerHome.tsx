@@ -340,11 +340,19 @@ export function CustomerHome({
             just two matching eyebrow-style labels sharing a row. Restyled
             to match exactly instead of looking like a bolded section
             title next to an unrelated small number. */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)' }}>
+        {/* Redesign 2026-09 (follow-up, 2026-10-27) — Plot: the count used
+            to sit at the far right (justify-content: space-between), a
+            wide gap from the label it belongs to. Moved next to the label
+            instead, joined by a bold "—". Round 2 — Plot: wanted the whole
+            line more prominent, not just a small eyebrow-style label —
+            bumped size and weight and switched from the soft/muted ink
+            color to full-strength text color throughout. */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 16 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text)' }}>
             Properties under watch
           </div>
-          <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 10, color: 'var(--p-ink-soft)' }}>
+          <strong style={{ fontSize: 14, fontWeight: 800, color: 'var(--color-text)' }}>—</strong>
+          <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 14, fontWeight: 800, color: 'var(--color-text)' }}>
             {properties.length}
           </div>
         </div>

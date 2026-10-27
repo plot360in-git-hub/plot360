@@ -392,6 +392,25 @@ export function ChoosePlanAndPay({
           })}
         </div>
 
+        {/* Redesign 2026-09 (follow-up, 2026-10-27) — Plot: moved here
+            (was below the Pay button, after "Pay with") so the custom-plan
+            offer reads as an alternative to the standard plan cards right
+            above it, not as an afterthought tucked under the payment
+            method choice. */}
+        <div style={{ marginBottom: 28, paddingTop: 4, textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 8 }}>
+            Want weekly, monthly, or a different number of visits?
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-block"
+            disabled={isPending}
+            onClick={requestCustom}
+          >
+            {requestingCustomPlan ? 'Sending…' : "I'd like a custom plan — contact me"}
+          </button>
+        </div>
+
         <h3 style={{ fontSize: 16, marginBottom: 12 }}>Pay with</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
           <button
@@ -492,29 +511,6 @@ export function ChoosePlanAndPay({
         >
           {isPending && !requestingCustomPlan ? 'Processing…' : selectedPlan ? `Pay ₹${totalPrice.toLocaleString('en-IN')}` : 'Pay'}
         </button>
-
-        {/* Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans.
-            Plot: weekly/monthly/bi-monthly, or any other visit count/
-            price than what's on the plan cards above, should be
-            something the customer can ask for right here without typing
-            any numbers themselves — the real rate and visit count get
-            agreed by phone with admin/manager, who then sets it up on
-            this property (see requestCustomPlan's own note). Deliberately
-            no form, just the one button — the specifics come from the
-            call, not this screen. */}
-        <div style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--color-divider)', textAlign: 'center' }}>
-          <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 8 }}>
-            Want weekly, monthly, or a different number of visits?
-          </p>
-          <button
-            type="button"
-            className="btn btn-secondary btn-block"
-            disabled={isPending}
-            onClick={requestCustom}
-          >
-            {requestingCustomPlan ? 'Sending…' : "I'd like a custom plan — contact me"}
-          </button>
-        </div>
       </div>
     </div>
   );

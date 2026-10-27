@@ -14,6 +14,13 @@ function displayAgent(a: any) {
   const name = `${p?.first_name ?? ''} ${p?.last_name ?? ''}`.trim();
   return name || p?.email || 'Unknown';
 }
+// Redesign 2026-09 (follow-up, 2026-10-27) — same "code number" join
+// every other admin screen already uses (PaymentsOverview.tsx,
+// AssignmentScreen.tsx, etc.) rather than inventing a new format here.
+function displayPhone(countryCode?: string | null, number?: string | null) {
+  if (!number) return '—';
+  return `${countryCode ?? ''} ${number}`.trim();
+}
 
 export function UsersTable({ customers, agents }: { customers: any[]; agents: any[] }) {
   const router = useRouter();
@@ -22,8 +29,16 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
   const [pending, startTransition] = useTransition();
 
   const q = query.trim().toLowerCase();
-  const filteredCustomers = customers.filter((c) => !q || `${displayCustomer(c)} ${c.email ?? ''}`.toLowerCase().includes(q));
-  const filteredAgents = agents.filter((a) => !q || `${displayAgent(a)} ${a.sro_name ?? ''} ${a.sro_code ?? ''}`.toLowerCase().includes(q));
+  const filteredCustomers = customers.filter(
+    (c) => !q || `${displayCustomer(c)} ${c.email ?? ''} ${c.phoneNumber ?? ''}`.toLowerCase().includes(q)
+  );
+  const filteredAgents = agents.filter(
+    (a) =>
+      !q ||
+      `${displayAgent(a)} ${a.sro_name ?? ''} ${a.sro_code ?? ''} ${a.profiles?.email ?? ''} ${a.profiles?.phone_number ?? ''}`
+        .toLowerCase()
+        .includes(q)
+  );
 
   return (
     <div>
@@ -56,7 +71,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 16 }}>
           <thead>
             <tr>
-              {['Customer', 'Signed up', 'Email confirmed', 'Role', 'Status', ''].map((h) => (
+              {['Customer', 'Phone', 'Email', 'Signed up', 'Email confirmed', 'Role', 'Status', ''].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '8px 10px 8px 0', borderBottom: '2px solid var(--color-divider)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                   {h}
                 </th>
@@ -67,6 +82,8 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
             {filteredCustomers.map((c) => (
               <tr key={c.id} style={{ background: c.isBanned ? 'var(--p-tint)' : 'transparent' }}>
                 <td style={{ padding: '8px 10px 8px 0', borderBottom: '1px solid var(--color-divider)', fontWeight: 600 }}>{displayCustomer(c)}</td>
+                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{displayPhone(c.phoneCountryCode, c.phoneNumber)}</td>
+                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.email || '—'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.createdAt?.slice(0, 10)}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.emailConfirmed ? 'Yes' : 'No'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.isAdmin ? 'Admin' : 'Customer'}</td>
@@ -86,7 +103,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
             ))}
             {filteredCustomers.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
+                <td colSpan={8} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
                   No customers match "{query}".
                 </td>
               </tr>
@@ -97,7 +114,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 16 }}>
           <thead>
             <tr>
-              {['Agent', 'SRO', 'Visits done', 'Status', ''].map((h) => (
+              {['Agent', 'Phone', 'Email', 'SRO', 'Visits done', 'Status', ''].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '8px 10px 8px 0', borderBottom: '2px solid var(--color-divider)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                   {h}
                 </th>
@@ -108,6 +125,8 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
             {filteredAgents.map((a) => (
               <tr key={a.id} style={{ background: a.isBanned ? 'var(--p-tint)' : 'transparent' }}>
                 <td style={{ padding: '8px 10px 8px 0', borderBottom: '1px solid var(--color-divider)', fontWeight: 600 }}>{displayAgent(a)}</td>
+                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{displayPhone(a.profiles?.phone_country_code, a.profiles?.phone_number)}</td>
+                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{a.profiles?.email || '—'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{[a.sro_name, a.sro_code].filter(Boolean).join(' ')}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{a.visitsDone}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: a.isBanned ? 'var(--p-alert)' : 'var(--color-text)' }}>{a.isBanned ? 'Banned' : 'Active'}</td>
@@ -133,7 +152,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
             ))}
             {filteredAgents.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
+                <td colSpan={7} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
                   No agents match "{query}".
                 </td>
               </tr>

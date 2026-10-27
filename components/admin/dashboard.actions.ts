@@ -45,6 +45,8 @@ export async function getDashboardTiles(): Promise<DashboardTile[]> {
     { data: openRequests },
     { data: pendingPayments },
     { data: pendingCustomPlans },
+    { data: allProperties },
+    { data: allPaidPropertyRows },
   ] = await Promise.all([
     supabase.from('properties').select('created_at').eq('status', 'pending'),
     getLegacyAssignmentTargets(),
@@ -58,7 +60,18 @@ export async function getDashboardTiles(): Promise<DashboardTile[]> {
     // tile below, same reasoning as getPaymentsQueue's own exclusion.
     supabase.from('payments').select('created_at').eq('status', 'pending').eq('is_custom_plan', false),
     supabase.from('payments').select('created_at').eq('status', 'pending').eq('is_custom_plan', true).is('custom_plan_declined_at', null),
+    // Redesign 2026-09 (follow-up, 2026-10-27) — Awaiting payment tile:
+    // same anti-join as getAwaitingPaymentQueue (queues.actions.ts) —
+    // every property with zero payments rows at all, regardless of
+    // verification status. Computed from raw rows here (not by calling
+    // that function) so the "late" count below covers every matching
+    // property, not just one page of results.
+    supabase.from('properties').select('id, created_at').neq('status', 'rejected'),
+    supabase.from('payments').select('property_id'),
   ]);
+
+  const paidPropertyIds = new Set((allPaidPropertyRows ?? []).map((p) => p.property_id));
+  const awaitingPaymentProps = (allProperties ?? []).filter((p) => !paidPropertyIds.has(p.id));
 
   const lateCount = (items: (string | null | undefined)[]) => items.filter((iso) => isLate(hoursSince(iso))).length;
 
@@ -126,6 +139,14 @@ export async function getDashboardTiles(): Promise<DashboardTile[]> {
       late: lateCount((pendingCustomPlans ?? []).map((p) => p.created_at)),
       note: 'Customers waiting for a callback',
       href: '/admin/queue/custom-plans',
+    },
+    {
+      id: 'qAwaitingPayment',
+      label: 'Awaiting payment',
+      count: awaitingPaymentProps.length,
+      late: lateCount(awaitingPaymentProps.map((p) => p.created_at)),
+      note: 'Registered, never paid',
+      href: '/admin/queue/awaiting-payment',
     },
   ];
 }
