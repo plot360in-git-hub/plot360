@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { getPropertyForReview, getDocumentSignedUrl } from './admin.actions';
 import { getLatestPaymentForProperty } from '@/components/payments/payments.actions';
 import { getLatestVisitCreditBatch } from '@/components/payments/visitCredits.actions';
+import { getPendingCustomPlanRequest } from './customPlan.actions';
 import { TimelineOutboxPanel } from './TimelineOutboxPanel';
 import { PropertyVerificationActions } from './PropertyVerificationActions';
 import { LocationFieldsForm } from './LocationFieldsForm';
 import { ExtendCreditsForm } from './ExtendCreditsForm';
+import { CustomPlanForm } from './CustomPlanForm';
 import { DeletePropertyButton } from './DeletePropertyButton';
 import { SendInfoRequestButton } from './SendInfoRequestButton';
 import { hoursSince, formatWait } from '@/lib/adminQueue';
@@ -23,10 +25,11 @@ import { hoursSince, formatWait } from '@/lib/adminQueue';
 // documents route no longer exists (Plot asked for that whole step
 // removed); /admin/[id]/ownership is now the only, final edit step.
 export async function PropertyVerificationDetail({ propertyId }: { propertyId: string }) {
-  const [{ property, ownership, documents }, payment, creditBatch] = await Promise.all([
+  const [{ property, ownership, documents }, payment, creditBatch, pendingCustomPlanRequest] = await Promise.all([
     getPropertyForReview(propertyId),
     getLatestPaymentForProperty(propertyId),
     getLatestVisitCreditBatch(propertyId),
+    getPendingCustomPlanRequest(propertyId),
   ]);
 
   if (!property) return <p style={{ padding: 24 }}>Property not found.</p>;
@@ -152,6 +155,21 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
           <div>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)', marginTop: 24 }}>Visit credits</div>
             <VisitCreditsPanel propertyId={propertyId} creditBatch={creditBatch} />
+
+            {/* Redesign 2026-09 (follow-up, 2026-10-03) — custom visit
+                plans. Shown whenever the customer asked for one on the
+                payment screen (pendingCustomPlanRequest set — form opens
+                already expanded, ready to fill in what was agreed on the
+                call) and otherwise as a plain "Set up a custom plan"
+                button for an admin who's arranging one proactively with
+                no prior customer request. */}
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--p-ink-soft)', marginTop: 24 }}>Custom plan</div>
+            {pendingCustomPlanRequest && (
+              <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', borderTop: '1px solid var(--color-divider)', marginTop: 9, paddingTop: 10, marginBottom: 0 }}>
+                Customer asked for a custom plan on {pendingCustomPlanRequest.created_at?.slice(0, 10)} — fill in what you agreed on the call below.
+              </p>
+            )}
+            <CustomPlanForm propertyId={propertyId} existingPaymentId={pendingCustomPlanRequest?.id} />
           </div>
         }
       />

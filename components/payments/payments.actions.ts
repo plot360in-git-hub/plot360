@@ -88,6 +88,12 @@ export async function getPendingPayments() {
     .from('payments')
     .select('*, subscription_plans(name, price, validity_months), properties(id, property_name, owner_id, profiles(username, first_name, last_name, email))')
     .eq('status', 'pending')
+    // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans have
+    // their own admin queue/flow (customPlan.actions.ts) — this legacy
+    // screen's "Confirm payment" form assumes a subscription_plans row,
+    // so they're excluded here the same way getPaymentsQueue excludes
+    // them from the live queue it replaced.
+    .eq('is_custom_plan', false)
     .order('created_at', { ascending: true });
   return data ?? [];
 }

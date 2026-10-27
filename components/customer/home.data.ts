@@ -67,10 +67,15 @@ export async function getCustomerHomeData() {
       // status='pending' filter.
       // mismatch_reason added (follow-up, 2026-09-23, round 57) — see the
       // note on pendingPaymentByProperty below.
+      // custom_plan_declined_at added (follow-up, 2026-10-03, round 2) —
+      // a declined custom-plan request stays status='pending' on
+      // purpose (see schema.sql's note), so it's filtered out below in
+      // JS rather than in this query, which otherwise serves every
+      // pending payment, not just custom-plan ones.
       propertyIds.length > 0
         ? supabase
             .from('payments')
-            .select('property_id, amount, payment_method, created_at, mismatch_reason')
+            .select('property_id, amount, payment_method, created_at, mismatch_reason, is_custom_plan, custom_plan_declined_at')
             .in('property_id', propertyIds)
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
@@ -141,15 +146,25 @@ export async function getCustomerHomeData() {
   // show a distinct message when one is set.
   const pendingPaymentByProperty: Record<
     string,
-    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null }
+    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null; isCustomPlan: boolean }
   > = {};
   for (const p of pendingPayments ?? []) {
+    // A declined custom-plan request stays status='pending' on purpose
+    // (see schema.sql) but should disappear from the customer's Home
+    // card entirely, same as if it never happened — not show a stale
+    // "we'll call you" message for a request that was already declined.
+    if (p.is_custom_plan && p.custom_plan_declined_at) continue;
     if (!pendingPaymentByProperty[p.property_id]) {
       pendingPaymentByProperty[p.property_id] = {
         amount: p.amount,
         method: p.payment_method,
         createdAt: p.created_at,
         mismatchReason: p.mismatch_reason ?? null,
+        // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans:
+        // lets CustomerHome show "we'll call you" instead of the normal
+        // "payment submitted, awaiting confirmation" copy, since nothing
+        // was actually paid here yet — see requestCustomPlan.
+        isCustomPlan: !!p.is_custom_plan,
       };
     }
   }

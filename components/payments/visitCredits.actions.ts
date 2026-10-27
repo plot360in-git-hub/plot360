@@ -371,6 +371,66 @@ export async function getLatestVisitCreditBatch(propertyId: string) {
   return data ?? null;
 }
 
+// ---------- Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans ----------
+// Customer-facing half of the flow: "I'd like something custom" on the
+// payment screen, with no rate/count typed by them (Plot's call — the
+// real numbers get agreed by phone, then entered by an admin; see
+// components/admin/customPlan.actions.ts for that side). This records
+// the same shape of row purchaseVisitCredits does (a pending payments
+// row, status='pending') so it shows up on the customer's Home card the
+// same "awaiting confirmation" way — just tagged is_custom_plan so it
+// never enters the ordinary bank-transfer Payments queue, and routed to
+// its own admin queue instead (getCustomPlanQueue).
+export async function requestCustomPlan(propertyId: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: 'Not signed in.' };
+
+  const { data: property } = await supabase
+    .from('properties')
+    .select('owner_id, property_name')
+    .eq('id', propertyId)
+    .single();
+  if (!property || property.owner_id !== userData.user.id) return { error: 'Not authorized.' };
+
+  // Avoid piling up duplicate requests if the customer taps this more
+  // than once (e.g. navigates back to this screen) before an admin acts.
+  // Redesign 2026-09 (follow-up, 2026-10-03, round 2) — a request an
+  // admin declined (declineCustomPlanRequest) stays status='pending' on
+  // purpose (see schema.sql's note on custom_plan_declined_at), so this
+  // excludes those — otherwise a declined customer could never ask
+  // again, since this dedup check would keep matching that old row
+  // forever.
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('property_id', propertyId)
+    .eq('is_custom_plan', true)
+    .eq('status', 'pending')
+    .is('custom_plan_declined_at', null)
+    .maybeSingle();
+  if (existing) return { success: true as const, propertyName: property.property_name as string };
+
+  const { count: priorPayments } = await supabase
+    .from('payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('property_id', propertyId);
+  const paymentType: 'initial' | 'renewal' = (priorPayments ?? 0) === 0 ? 'initial' : 'renewal';
+
+  const { error } = await supabase.from('payments').insert({
+    property_id: propertyId,
+    payment_type: paymentType,
+    status: 'pending',
+    is_custom_plan: true,
+    payment_method: 'Custom plan (requested)',
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath('/dashboard');
+  revalidatePath(`/properties/${propertyId}`);
+  return { success: true as const, propertyName: property.property_name as string };
+}
+
 export async function cancelVisitRequest(requestId: string, propertyId: string) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();

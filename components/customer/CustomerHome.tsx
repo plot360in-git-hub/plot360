@@ -142,7 +142,7 @@ export function CustomerHome({
   openRequestCountByProperty: Record<string, number>;
   pendingPaymentByProperty: Record<
     string,
-    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null }
+    { amount: number | null; method: string | null; createdAt: string; mismatchReason: string | null; isCustomPlan: boolean }
   >;
   photoUrlByProperty?: Record<string, string | null>;
 }) {
@@ -539,6 +539,30 @@ export function CustomerHome({
                             {pendingPayment.amount ? `₹${Number(pendingPayment.amount).toLocaleString('en-IN')}` : 'Your payment'}
                             {pendingPayment.method ? ` via ${pendingPayment.method}` : ''} couldn&apos;t be confirmed:{' '}
                             {pendingPayment.mismatchReason}. Please contact support on WhatsApp.
+                          </p>
+                        </div>
+                      ) : pendingPayment?.isCustomPlan ? (
+                        // Redesign 2026-09 (follow-up, 2026-10-03) — custom
+                        // visit plans: this property has nothing actually
+                        // paid or pending confirmation yet (amount/method
+                        // are both unset on this row — see
+                        // requestCustomPlan), so the normal "Payment
+                        // submitted... awaiting confirmation" copy below
+                        // would be misleading. Shows the real status
+                        // instead — a callback is what's actually pending.
+                        <div
+                          style={{
+                            background: 'rgba(255,255,255,.08)',
+                            border: '1px solid rgba(255,255,255,.25)',
+                            padding: '10px 12px',
+                            marginBottom: 12,
+                          }}
+                        >
+                          <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.7, marginBottom: 3 }}>
+                            Custom plan requested
+                          </p>
+                          <p style={{ fontSize: 12.5 }}>
+                            We&apos;ll call you to agree the visit schedule and price, then set it up on this property.
                           </p>
                         </div>
                       ) : (

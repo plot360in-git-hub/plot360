@@ -36,6 +36,13 @@ const NAV: { id: string; label: string; href: string; ownerOnly?: boolean; group
   { id: 'qAgentVerify', label: 'Agent verification', href: '/admin/queue/agent-verification', group: 'Queues' },
   { id: 'qService', label: 'Service requests', href: '/admin/queue/service-requests', group: 'Queues' },
   { id: 'qPayments', label: 'Payments', href: '/admin/queue/payments', group: 'Queues' },
+  // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans: a
+  // customer who asked for one on the payment screen needs a callback,
+  // not a confirm-or-flag decision like the Payments queue above — kept
+  // as its own queue rather than folded into Payments so it never looks
+  // like an ordinary bank-transfer-awaiting-confirmation row (see
+  // getPaymentsQueue's own note on excluding these).
+  { id: 'qCustomPlans', label: 'Custom plans', href: '/admin/queue/custom-plans', group: 'Queues' },
   // Redesign 2026-09 (follow-up, 2026-09-26) — Plot: a property with an
   // agent already assigned (or in progress, or submitted) wasn't
   // reachable from anywhere in this sidebar — the six queues above only
@@ -64,6 +71,7 @@ const TILE_BADGE: Record<string, string> = {
   qAgentVerify: 'qAgentVerify',
   qService: 'qService',
   qPayments: 'qPayments',
+  qCustomPlans: 'qCustomPlans',
 };
 
 export function AdminShell({

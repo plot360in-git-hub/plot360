@@ -1554,3 +1554,44 @@ create policy "plot_size_price_tiers_write_admin" on plot_size_price_tiers for a
 -- payment made before this change, or one recorded with no plan_id.
 alter table payments add column if not exists plot_size_at_purchase numeric;
 alter table payments add column if not exists size_surcharge numeric;
+
+-- =========================================================
+-- Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans
+-- Plot: some customers want something the standard catalog
+-- (subscription_plans) doesn't offer — weekly/monthly/bi-monthly
+-- visits, or a specific count like 15 or 20 — at a rate admin/manager
+-- negotiates with that one customer by phone, not a price every
+-- customer sees. The customer only ever says "I'd like a custom plan"
+-- on the payment screen (no rate/count typed by them); admin/manager
+-- calls them, agrees the real numbers, and enters those against this
+-- one property. This reuses payments + visit_credits exactly like a
+-- normal plan purchase — the ledger, expiry-warning, and "schedule a
+-- visit" logic everywhere else in the app don't need to know a credit
+-- batch came from a custom plan rather than a catalog one. The only
+-- thing a custom plan skips is subscription_plans (plan_id stays null)
+-- and the standard checkout math (purchaseVisitCredits/recordPayment) —
+-- it's recorded directly by an admin instead.
+--
+-- is_custom_plan marks BOTH the pending "customer asked" signal (status
+-- 'pending', amount/payment_method not set yet) and, once admin fills
+-- it in, the resulting completed payment row — kept true in both cases
+-- so this stays easy to filter out of the ordinary bank-transfer
+-- Payments queue/tile (which assume a subscription_plans row — see
+-- getPaymentsQueue, PaymentDetail/PaymentDetailActions) at every stage,
+-- not just while pending.
+-- =========================================================
+alter table payments add column if not exists is_custom_plan boolean not null default false;
+create index if not exists idx_payments_custom_plan_pending on payments(is_custom_plan, status) where is_custom_plan;
+
+-- Redesign 2026-09 (follow-up, 2026-10-03, round 2) — Plot: a custom-plan
+-- request an admin decides not to pursue (customer went quiet, decided
+-- against it, etc.) needed a way to leave the queue other than
+-- fulfilling it. Deliberately a separate timestamp column rather than a
+-- third payments.status value — that CHECK constraint
+-- (status in ('pending','completed')) is read by several other
+-- queries/policies that only expect those two, and a declined request
+-- isn't really a payment outcome at all, just a dismissed request; the
+-- row stays status='pending' (so it's never mistaken for a completed
+-- payment anywhere) but is excluded from the custom-plan queue/tile
+-- once this is set. Null means "not declined" (the normal case).
+alter table payments add column if not exists custom_plan_declined_at timestamptz;

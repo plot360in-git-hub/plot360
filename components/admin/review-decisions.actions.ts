@@ -254,6 +254,38 @@ export async function confirmPaymentWithLog(paymentId: string, propertyId: strin
   return phone ? { ...result, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message } : result;
 }
 
+// Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans. Mirrors
+// confirmPaymentWithLog above exactly, just backed by fulfillCustomPlan
+// (customPlan.actions.ts) instead of recordPayment — same
+// buildPaymentConfirmedMessage, since a custom plan's confirmation
+// WhatsApp reads no differently to the customer than a catalog plan's.
+export async function fulfillCustomPlanWithLog(propertyId: string, formData: FormData, existingPaymentId?: string) {
+  const { fulfillCustomPlan } = await import('./customPlan.actions');
+  const result = await fulfillCustomPlan(propertyId, formData, existingPaymentId);
+  if ('error' in result) return result;
+
+  const supabase = await createClient();
+  const { data: property } = await supabase
+    .from('properties')
+    .select('property_name, profiles(first_name, last_name, username, phone_country_code, phone_number)')
+    .eq('id', propertyId)
+    .single();
+  const profile: any = (property as any)?.profiles;
+  const phone = phoneOf(profile);
+  const message = buildPaymentConfirmedMessage({
+    customerName: customerDisplayName(profile),
+    propertyName: property?.property_name ?? 'your property',
+    amount: result.amount,
+    visitQuantity: result.visitQuantity,
+    validUntil: result.validUntil,
+  });
+  if (phone) {
+    await logWhatsAppMessage({ relatedEntityType: 'payment', relatedEntityId: result.paymentId, recipientPhone: phone, body: message });
+  }
+  await logAdminAction({ entityType: 'payment', entityId: result.paymentId, action: 'Custom plan set up, credits released' });
+  return phone ? { ...result, phoneCountryCode: profile.phone_country_code ?? null, phoneNumber: profile.phone_number as string, message } : result;
+}
+
 export async function flagPaymentMismatchWithLog(paymentId: string, reasonText: string) {
   const result = await flagPaymentMismatch(paymentId, reasonText);
   if ('error' in result) return result;

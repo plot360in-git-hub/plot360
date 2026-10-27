@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { purchaseVisitCredits } from '@/components/payments/visitCredits.actions';
+import { purchaseVisitCredits, requestCustomPlan } from '@/components/payments/visitCredits.actions';
 import { buildUpiLinks } from '@/lib/upi';
 import { computePlotSizeSurcharge, plotSizeTierLabel, type PlotSizeTier } from '@/lib/plotSizePricing';
 import { ConfirmationScreen, type ConfirmationVariant } from './ConfirmationScreen';
@@ -68,6 +68,11 @@ export function ChoosePlanAndPay({
   // admin has real proof to check instead of only the simulated
   // UPI-<timestamp> placeholder (see purchaseVisitCredits).
   const [transactionId, setTransactionId] = useState('');
+  // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans: a
+  // separate pending state from the main "Pay" button's isPending, since
+  // this one shares no form state with it (no plan/method/size needed —
+  // see requestCustomPlan's own note on why nothing is typed here).
+  const [requestingCustomPlan, setRequestingCustomPlan] = useState(false);
 
   // Redesign 2026-09 (follow-up, 2026-09-28) — plot-size-tiered pricing.
   // The "standard" size is whichever band starts at 0 (today, admin's
@@ -152,6 +157,20 @@ export function ChoosePlanAndPay({
           paymentMethodLabel: 'bank transfer',
           plotSize,
         });
+    });
+  }
+
+  function requestCustom() {
+    setError(null);
+    setRequestingCustomPlan(true);
+    startTransition(async () => {
+      const result = await requestCustomPlan(propertyId);
+      setRequestingCustomPlan(false);
+      if ('error' in result) {
+        setError(result.error ?? null);
+        return;
+      }
+      setConfirmation({ kind: 'custom-plan', propertyName: result.propertyName });
     });
   }
 
@@ -471,8 +490,31 @@ export function ChoosePlanAndPay({
           disabled={!selectedPlan || !method || isPending || opening || sizeOverMax || plotSize <= 0}
           onClick={pay}
         >
-          {isPending ? 'Processing…' : selectedPlan ? `Pay ₹${totalPrice.toLocaleString('en-IN')}` : 'Pay'}
+          {isPending && !requestingCustomPlan ? 'Processing…' : selectedPlan ? `Pay ₹${totalPrice.toLocaleString('en-IN')}` : 'Pay'}
         </button>
+
+        {/* Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans.
+            Plot: weekly/monthly/bi-monthly, or any other visit count/
+            price than what's on the plan cards above, should be
+            something the customer can ask for right here without typing
+            any numbers themselves — the real rate and visit count get
+            agreed by phone with admin/manager, who then sets it up on
+            this property (see requestCustomPlan's own note). Deliberately
+            no form, just the one button — the specifics come from the
+            call, not this screen. */}
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--color-divider)', textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--p-ink-soft)', marginBottom: 8 }}>
+            Want weekly, monthly, or a different number of visits?
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-block"
+            disabled={isPending}
+            onClick={requestCustom}
+          >
+            {requestingCustomPlan ? 'Sending…' : "I'd like a custom plan — contact me"}
+          </button>
+        </div>
       </div>
     </div>
   );

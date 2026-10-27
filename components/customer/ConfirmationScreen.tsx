@@ -47,7 +47,12 @@ export type ConfirmationVariant =
       // omitted entirely by any caller that doesn't have it.
       plotSize?: number;
     }
-  | { kind: 'sched'; propertyName: string; windowText: string; creditsRemaining: number; expiresAt: string };
+  | { kind: 'sched'; propertyName: string; windowText: string; creditsRemaining: number; expiresAt: string }
+  // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans: shown
+  // after requestCustomPlan (visitCredits.actions.ts) instead of the
+  // normal reg-bank variant, since no plan/amount was actually chosen or
+  // paid here — the customer only asked for a callback.
+  | { kind: 'custom-plan'; propertyName: string };
 
 function formatRupees(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`;
@@ -90,6 +95,18 @@ function content(v: ConfirmationVariant): DoneContent {
           : 'You can close the app. Credits and scheduling unlock once the transfer is confirmed.',
       };
     }
+    case 'custom-plan':
+      return {
+        tone: 'pending',
+        kicker: 'Request sent',
+        title: "We'll call you about a custom plan.",
+        body: 'Your property is registered and held — nothing to pay here right now. A Plot360 representative will call you to agree the visit schedule and price, then set it up on this property.',
+        rows: [
+          { k: 'Property', v: v.propertyName },
+          { k: 'Status', v: 'Custom plan requested' },
+        ],
+        next: 'You can close the app. We will set up your plan once the details are agreed on the call.',
+      };
     case 'sched':
       return {
         tone: 'success',

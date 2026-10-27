@@ -298,6 +298,12 @@ export async function getPaymentsQueue(opts: { query?: string; sort?: QueueSort;
     .from('payments')
     .select('id, amount, transaction_reference, mismatch_reason, created_at, properties(property_name, profiles(first_name, last_name, email))')
     .eq('status', 'pending')
+    // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans: these
+    // have no subscription_plans row and no real bank-transfer proof to
+    // confirm/flag, so PaymentDetail/PaymentDetailActions (built for the
+    // catalog-plan shape) are the wrong screen for them — they get their
+    // own queue instead (getCustomPlanQueue, customPlan.actions.ts).
+    .eq('is_custom_plan', false)
     .order('created_at', { ascending: true });
 
   const rows = (data ?? []).map((p: any) => {

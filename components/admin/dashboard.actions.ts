@@ -35,17 +35,30 @@ export async function getDashboardTiles(): Promise<DashboardTile[]> {
   const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).single();
   if (!profile?.is_admin) return [];
 
-  const [{ data: pendingProps }, legacyTargets, visitRequestTargets, stuckTargets, { data: submittedJobs }, { data: pendingAgents }, { data: openRequests }, { data: pendingPayments }] =
-    await Promise.all([
-      supabase.from('properties').select('created_at').eq('status', 'pending'),
-      getLegacyAssignmentTargets(),
-      getVisitRequestAssignmentTargets(),
-      getStuckAssignmentTargets(),
-      supabase.from('monitoring_jobs').select('submitted_at').eq('status', 'submitted'),
-      supabase.from('agent_profiles').select('created_at').eq('status', 'pending'),
-      supabase.from('service_requests').select('updated_at').eq('status', 'open'),
-      supabase.from('payments').select('created_at').eq('status', 'pending'),
-    ]);
+  const [
+    { data: pendingProps },
+    legacyTargets,
+    visitRequestTargets,
+    stuckTargets,
+    { data: submittedJobs },
+    { data: pendingAgents },
+    { data: openRequests },
+    { data: pendingPayments },
+    { data: pendingCustomPlans },
+  ] = await Promise.all([
+    supabase.from('properties').select('created_at').eq('status', 'pending'),
+    getLegacyAssignmentTargets(),
+    getVisitRequestAssignmentTargets(),
+    getStuckAssignmentTargets(),
+    supabase.from('monitoring_jobs').select('submitted_at').eq('status', 'submitted'),
+    supabase.from('agent_profiles').select('created_at').eq('status', 'pending'),
+    supabase.from('service_requests').select('updated_at').eq('status', 'open'),
+    // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans:
+    // excludes is_custom_plan rows now that those have their own queue/
+    // tile below, same reasoning as getPaymentsQueue's own exclusion.
+    supabase.from('payments').select('created_at').eq('status', 'pending').eq('is_custom_plan', false),
+    supabase.from('payments').select('created_at').eq('status', 'pending').eq('is_custom_plan', true).is('custom_plan_declined_at', null),
+  ]);
 
   const lateCount = (items: (string | null | undefined)[]) => items.filter((iso) => isLate(hoursSince(iso))).length;
 
@@ -105,6 +118,14 @@ export async function getDashboardTiles(): Promise<DashboardTile[]> {
       late: lateCount((pendingPayments ?? []).map((p) => p.created_at)),
       note: 'Bank transfers to confirm',
       href: '/admin/queue/payments',
+    },
+    {
+      id: 'qCustomPlans',
+      label: 'Custom plans',
+      count: pendingCustomPlans?.length ?? 0,
+      late: lateCount((pendingCustomPlans ?? []).map((p) => p.created_at)),
+      note: 'Customers waiting for a callback',
+      href: '/admin/queue/custom-plans',
     },
   ];
 }

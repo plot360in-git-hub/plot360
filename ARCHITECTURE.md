@@ -3958,3 +3958,105 @@ export surface (verified against pdf-lib's source on GitHub before
 writing this, rather than assumed, since a wrong low-level operator call
 could produce a broken PDF with no way to catch it before the user
 tests the real output). `lib/pdf/visitReportPdf.ts`.
+
+## 69. Custom visit plans (2026-10-03)
+
+Plot: some customers want something the standard catalog
+(subscription_plans — 1/2/4 visits, fixed prices) doesn't offer —
+weekly/monthly/bi-monthly visits, or a specific count like 15 or 20 —
+at a rate negotiated by phone, not a price every customer sees. Built
+per the answers to a clarifying round (recommended options on all
+four): the customer only ever asks for a callback on the payment
+screen, with no rate/count typed by them; admin/manager agrees the real
+numbers by phone and enters them against that one property; weekly/
+monthly/bi-monthly is just how admin arrives at a total visit count
+(no new recurring-scheduling engine — the customer still taps "Schedule
+a visit" manually, same as every other plan); and admin can act on it
+from either a new queue list or directly from the property's own admin
+page.
+
+1. **Schema** — `payments.is_custom_plan` (boolean, default false).
+   Marks both the pending "customer asked" row and, once admin fills it
+   in, the resulting completed payment — same row throughout, so the
+   audit trail keeps when the customer first asked. Deliberately reuses
+   `payments` + `visit_credits` exactly like a normal plan purchase
+   (`plan_id` just stays null) rather than adding new tables — every
+   other screen that reads visit credits (expiry warnings, "schedule a
+   visit", the property's credit panel) needed zero changes, since a
+   custom plan's credit batch looks identical to a catalog plan's.
+   `supabase/schema.sql`.
+2. **Customer side** — `requestCustomPlan` (`visitCredits.actions.ts`)
+   inserts a pending, amount-less payments row tagged `is_custom_plan`
+   when the customer taps "I'd like a custom plan — contact me" on the
+   payment screen (`ChoosePlanAndPay.tsx`, below the plan cards/Pay
+   button — no form, per the clarifying answer). Refuses a second
+   request while one is already pending. Shows a new `ConfirmationScreen`
+   variant ("We'll call you about a custom plan") instead of the normal
+   payment-pending one, since nothing was actually paid. The customer's
+   Home card (`CustomerHome.tsx`/`home.data.ts`) shows "Custom plan
+   requested — we'll call you" instead of the generic "Payment
+   submitted" box for this same reason.
+3. **Admin side** — `components/admin/customPlan.actions.ts`:
+   `getCustomPlanQueue` (a new "Custom plans" queue, `/admin/queue/
+   custom-plans`, linked from the sidebar + a dashboard tile, both
+   alongside Payments) lists pending requests; `getPendingCustomPlanRequest`
+   surfaces the one pending request (if any) on a property's own admin
+   page; `fulfillCustomPlan` is the core action — admin enters the
+   agreed rate, visit count, validity (months), payment method, date,
+   and an optional free-text note (reuses `payments.notes`, no new
+   column) via `CustomPlanForm.tsx`, added to `PropertyVerificationDetail.tsx`
+   right under the existing Visit credits panel. Updates the existing
+   pending row in place when fulfilling a real request; inserts a new,
+   already-completed row directly when an admin sets one up proactively
+   with no prior request. Sets `properties.expiration_date` and issues
+   the `visit_credits` batch exactly like `recordPayment` does for a
+   catalog plan — deliberately not built on top of `recordPayment`
+   itself, since that function derives both the visit quantity and
+   validity from a `subscription_plans` row a custom plan doesn't have.
+   `fulfillCustomPlanWithLog` (`review-decisions.actions.ts`) wraps it
+   with the same WhatsApp-confirmation + admin-timeline logging every
+   other decision action already has, reusing `buildPaymentConfirmedMessage`
+   unchanged — the confirmation text reads no differently to the
+   customer than a catalog plan's.
+4. **Keeping the two kinds of payment apart** — a custom-plan request
+   has no `subscription_plans` row and no real bank-transfer proof to
+   confirm or flag, so the existing Payments queue/screen
+   (`PaymentDetail`/`PaymentDetailActions`, built for the catalog-plan
+   shape) is the wrong place for it. `getPaymentsQueue`, the legacy
+   `getPendingPayments` (`payments.actions.ts`), and the dashboard's
+   "Payments" tile count (`dashboard.actions.ts`) all now exclude
+   `is_custom_plan` rows; the new queue/tile picks them up instead.
+5. **Known limitation (resolved, #69b below)** — there's no "decline/
+   dismiss a request" action yet, only fulfilling one; a request an
+   admin never acts on just sits in the queue. Flagged to Plot rather
+   than built speculatively, since it wasn't part of what was asked.
+
+## 69b. Custom visit plans: decline/dismiss a request (2026-10-03, round 2)
+
+Plot asked for the decline/dismiss button flagged as missing above.
+`payments.custom_plan_declined_at` (nullable timestamptz) — deliberately
+a separate column rather than a third `payments.status` value. That
+CHECK constraint (`status in ('pending','completed')`) is read by other
+queries/policies that only expect those two, and a declined request
+isn't really a payment outcome at all, just a dismissed one; the row
+stays `status='pending'` (never mistaken for a completed payment
+anywhere) but is excluded once this timestamp is set.
+`declineCustomPlanRequest` (`customPlan.actions.ts`) sets it, logs an
+admin-timeline entry, and — unlike fulfilling a request — sends no
+WhatsApp, since there's no agreed plan to confirm to the customer. The
+"Decline request" button sits next to "Save custom plan" in
+`CustomPlanForm.tsx`, shown only when there's an actual pending request
+to decide on (not for the proactive "set one up with no prior request"
+case, where there's nothing to decline), behind a confirm dialog.
+`getCustomPlanQueue`, `getPendingCustomPlanRequest`, and the dashboard's
+"Custom plans" tile count all now also exclude declined rows. Two
+knock-on fixes needed so a decline doesn't leave stale traces behind:
+`requestCustomPlan` (`visitCredits.actions.ts`) excludes a declined row
+from its "already has a pending request" dedup check — otherwise a
+declined customer could never ask again, since that old row would keep
+matching forever; and the customer's Home card data (`home.data.ts`)
+filters declined rows out of `pendingPaymentByProperty` in JS (that
+query serves every pending payment, not just custom-plan ones, so the
+filter couldn't just live in the query's own `.eq('status', 'pending')`)
+so a declined request's "we'll call you" banner doesn't keep showing
+forever either.
