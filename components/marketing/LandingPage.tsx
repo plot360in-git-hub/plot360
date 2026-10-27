@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { submitEnquiry } from './enquiries.actions';
-import { WA_LINK, TEL_LINK, DISPLAY_PHONE, SUPPORT_EMAIL } from '@/lib/contact';
+import { WA_LINK, TEL_LINK, DISPLAY_PHONE, SUPPORT_EMAIL, COMPANY_NAME, COMPANY_ADDRESS_LINES } from '@/lib/contact';
 
 // Redesign 2026-09 — public landing page (design_handoff_plot360_redesign/
 // design/Plot360 Landing.dc.html). Ported 1:1 for copy, structure and the
@@ -159,11 +159,16 @@ const FAQS: [string, string][] = [
   ],
 ];
 
-const CONTACT_ROWS = [
+// Redesign 2026-09 (follow-up, 2026-10-27) — Plot: added the registered
+// office (NSR VENTURES LLP). v can be a single line (string) or several
+// (string[]) — the address renders as a proper multi-line block instead
+// of one run-on sentence; every other row stays exactly as before.
+const CONTACT_ROWS: { k: string; v: string | string[] }[] = [
   { k: 'WhatsApp', v: DISPLAY_PHONE },
   { k: 'Phone', v: DISPLAY_PHONE },
   { k: 'Email', v: SUPPORT_EMAIL },
   { k: 'Hours', v: 'Monday to Saturday, 9:30 to 18:30 IST' },
+  { k: 'Address', v: [COMPANY_NAME, ...COMPANY_ADDRESS_LINES] },
 ];
 
 export function LandingPage() {
@@ -477,7 +482,15 @@ export function LandingPage() {
               {CONTACT_ROWS.map((c) => (
                 <div key={c.k} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 110px) minmax(0, 1fr)', gap: 14, padding: '11px 0', borderBottom: '1px solid var(--p-on-dark-rule)', fontSize: 13.5 }}>
                   <div style={{ opacity: 0.7 }}>{c.k}</div>
-                  <div>{c.v}</div>
+                  <div>
+                    {Array.isArray(c.v)
+                      ? c.v.map((line, i) => (
+                          <div key={i} style={i === 0 ? { fontWeight: 700 } : undefined}>
+                            {line}
+                          </div>
+                        ))
+                      : c.v}
+                  </div>
                 </div>
               ))}
             </div>

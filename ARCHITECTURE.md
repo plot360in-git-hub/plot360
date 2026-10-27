@@ -4060,3 +4060,27 @@ query serves every pending payment, not just custom-plan ones, so the
 filter couldn't just live in the query's own `.eq('status', 'pending')`)
 so a declined request's "we'll call you" banner doesn't keep showing
 forever either.
+
+## 70. Homepage Contact: registered office address, real support email (2026-10-27)
+
+Plot sent the registered business entity's details to add to the
+landing page's Contact section, and a real support inbox to replace the
+support@plot360.in placeholder. Both go through `lib/contact.ts` (the
+one shared constants file every redesigned screen already reads from —
+see its own header comment) rather than being hardcoded into
+`LandingPage.tsx` directly:
+
+1. `SUPPORT_EMAIL` changed to `plot360.in@gmail.com` — picked up
+   automatically by the Contact section, the footer, and the visit
+   report PDF (`lib/pdf/visitReportPdf.ts`), since all three already
+   read this one constant.
+2. New `COMPANY_NAME` ("NSR VENTURES LLP") and `COMPANY_ADDRESS_LINES`
+   (the registered office, one array entry per line) constants. Added
+   as a new "Address" row to the Contact section's `CONTACT_ROWS`
+   (`LandingPage.tsx`) — its value type is now `string | string[]`
+   rather than just `string`, and the row renderer prints an array as
+   a proper multi-line block (company name bolded, each address line
+   on its own line) instead of one run-on sentence; every existing row
+   (WhatsApp/Phone/Email/Hours) is untouched, still a single string.
+   Scoped to the Contact section only, per what was asked — the
+   footer's own "Hyderabad, Telangana" line is unchanged.
