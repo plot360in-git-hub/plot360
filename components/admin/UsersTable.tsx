@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { toggleUserBan } from './users.actions';
 import { toggleAgentBan } from './agent-bans.actions';
 
@@ -81,7 +82,16 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
           <tbody>
             {filteredCustomers.map((c) => (
               <tr key={c.id} style={{ background: c.isBanned ? 'var(--p-tint)' : 'transparent' }}>
-                <td style={{ padding: '8px 10px 8px 0', borderBottom: '1px solid var(--color-divider)', fontWeight: 600 }}>{displayCustomer(c)}</td>
+                <td style={{ padding: '8px 10px 8px 0', borderBottom: '1px solid var(--color-divider)', fontWeight: 600 }}>
+                  {/* Redesign 2026-09 (follow-up, 2026-11-04) — Plot: "a
+                      place to check a user and his registered property
+                      list" — the name now opens the new customer detail
+                      screen (CustomerDetail.tsx) instead of being plain
+                      text. */}
+                  <Link href={`/admin/users/customers/${c.id}`} className="nav-link" style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                    {displayCustomer(c)}
+                  </Link>
+                </td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{displayPhone(c.phoneCountryCode, c.phoneNumber)}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.email || '—'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.createdAt?.slice(0, 10)}</td>

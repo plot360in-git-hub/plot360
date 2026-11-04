@@ -4155,3 +4155,31 @@ see its own header comment) rather than being hardcoded into
    treatment (label 12.5px/800 weight, the "—" and count 14px/800 weight),
    full-strength text color (`--color-text`) instead of the muted
    `--p-ink-soft` used everywhere else on this card.
+
+## 73. Admin: customer detail screen — a user's registered properties, each opening into its own admin page (2026-11-04)
+
+Plot: "a place to check user and his registered property list and option
+to open each property." `properties.owner_id` has always linked a
+property to its owner, but nothing in the admin console ever queried it
+from the customer's side — there was no way to go from "this customer" to
+"what do they actually own."
+
+1. **`getCustomerDetail(userId)`** (NEW, `users.actions.ts`) —
+   owner-gated like every other function in this file. Looks up the
+   customer's basic info (name/phone from `profiles`, email/confirmation/
+   ban status via the Auth Admin API, same lookup `getAllUsers` already
+   does) plus every property with that `owner_id`, newest first.
+2. **`CustomerDetail.tsx`** (NEW) — a header card (name, email + confirmed
+   state, phone, banned/admin flags, signup date) followed by a
+   Property / Location / Status / Registered table. Each row's "Open →"
+   link goes straight to that property's own existing admin page
+   (`/admin/[id]`) — the same screen every queue already opens into, not
+   a new one. Mirrors `AgentVerificationDetail.tsx`'s layout (header card
+   + "← Back" link) since no customer-side admin detail screen existed
+   before this.
+3. **Route**: `app/admin/users/customers/[id]/page.tsx`, owner-only —
+   same gate as `app/admin/users/page.tsx`, since this is reached from
+   that screen and reads the same Auth Admin API data.
+4. **Entry point** (`UsersTable.tsx`) — a customer's name in the
+   Customers tab is now a link into this new screen instead of plain
+   text; phone/email columns and the Ban button are untouched.

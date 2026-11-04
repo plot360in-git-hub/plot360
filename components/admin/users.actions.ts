@@ -67,6 +67,60 @@ export async function getAllUsers() {
   return { users, error: null };
 }
 
+// Redesign 2026-09 (follow-up, 2026-11-04) — Plot: asked for "a place to
+// check a user and his registered property list" with an option to open
+// each one. The Users screen's Customers tab had no way to drill from a
+// customer into what they actually own — properties.owner_id has always
+// linked them, nothing just queried it from here. Powers the new
+// app/admin/users/customers/[id] detail page: the customer's own basic
+// info (name/email/phone/status, same Auth Admin API lookup getAllUsers
+// already does) plus every property they own, each row opening straight
+// into that property's own admin page (/admin/[id]) — the same existing
+// screen, not a new one, so a property here behaves exactly like a
+// property reached from any other queue.
+export async function getCustomerDetail(userId: string) {
+  const gate = await requireAdmin();
+  if (!gate.ok) return { error: gate.error, profile: null, properties: [] };
+
+  const admin = createAdminClient();
+  const supabase = await createClient();
+
+  const [{ data: authUser }, { data: profile }, { data: properties }] = await Promise.all([
+    admin.auth.admin.getUserById(userId),
+    supabase
+      .from('profiles')
+      .select('first_name, last_name, email, phone_country_code, phone_number, is_admin')
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase
+      .from('properties')
+      .select('id, property_name, village_town, district, sro_code, status, created_at')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  const u = authUser?.user;
+  if (!u && !profile) return { error: 'Customer not found.', profile: null, properties: [] };
+  const isBanned = !!u?.banned_until && new Date(u.banned_until) > new Date();
+
+  return {
+    error: null,
+    profile: {
+      id: userId,
+      firstName: profile?.first_name ?? '',
+      lastName: profile?.last_name ?? '',
+      email: profile?.email ?? u?.email ?? '',
+      phoneCountryCode: profile?.phone_country_code ?? '',
+      phoneNumber: profile?.phone_number ?? '',
+      isAdmin: profile?.is_admin ?? false,
+      isBanned,
+      emailConfirmed: !!u?.email_confirmed_at,
+      createdAt: u?.created_at ?? null,
+    },
+    properties: properties ?? [],
+  };
+}
+
 // Bans (disables login) or unbans a user via the Auth Admin API. Supabase
 // doesn't have a simple boolean "disabled" flag — banning for a very long
 // duration is the standard way to achieve "disabled until manually
