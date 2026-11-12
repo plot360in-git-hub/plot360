@@ -100,7 +100,7 @@ function LedgerTab({ ledger }: { ledger: { rows: LedgerRow[]; totals: { complete
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <thead>
             <tr>
-              {['Property', 'Customer', 'Type', 'Method', 'Status', 'Amount', 'Reference / paid'].map((h) => (
+              {['Property', 'Customer', 'Type', 'Method', 'Status', 'Amount', 'Reference / paid', 'Invoice'].map((h) => (
                 <th
                   key={h}
                   style={{
@@ -151,11 +151,26 @@ function LedgerTab({ ledger }: { ledger: { rows: LedgerRow[]; totals: { complete
                 <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--color-divider)', fontSize: 11.5, color: 'var(--p-ink-soft)' }}>
                   {r.reference || (r.paidAt ? `Paid ${r.paidAt}` : '—')}
                 </td>
+                <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--color-divider)' }}>
+                  {/* Redesign 2026-09 (follow-up, 2026-11-04) — invoice
+                      generation. This ledger (any payment, any property,
+                      any time) is the durable place to redownload an
+                      invoice from — the only other link to it lived in a
+                      one-time success panel right after confirming, with
+                      no way back to it afterwards. */}
+                  {r.status === 'completed' ? (
+                    <a href={`/admin/payments/${r.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline', fontSize: 11.5 }}>
+                      Download
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </td>
               </tr>
             ))}
             {ledger.rows.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ padding: '20px 0', color: 'var(--p-ink-soft)' }}>
+                <td colSpan={8} style={{ padding: '20px 0', color: 'var(--p-ink-soft)' }}>
                   No payments recorded yet.
                 </td>
               </tr>

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { profileDisplayName } from './displayName';
 import { hoursSince, formatWait, isLate, matchesQuery, paginate, PAGE_SIZE } from '@/lib/adminQueue';
 import { logAdminAction } from './timeline.actions';
+import { assignInvoiceNumber } from '@/lib/invoiceNumbering';
 import type { QueueRow } from './queues.actions';
 
 // Redesign 2026-09 (follow-up, 2026-10-03) — custom visit plans, admin
@@ -205,6 +206,13 @@ export async function fulfillCustomPlan(propertyId: string, formData: FormData, 
     if (error) return { error: error.message };
     paymentId = inserted.id;
   }
+
+  // Redesign 2026-09 (follow-up, 2026-11-04) — invoice generation. Same
+  // real sequential invoice number recordPayment assigns for catalog-plan
+  // payments (payments.actions.ts) — a custom plan is confirmed exactly
+  // like any other payment, so it gets one too, right here at
+  // confirmation time. Best-effort, same reasoning as recordPayment's.
+  await assignInvoiceNumber(supabase, paymentId as string);
 
   const { data: property, error: propertyError } = await supabase
     .from('properties')

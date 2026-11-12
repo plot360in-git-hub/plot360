@@ -61,6 +61,21 @@ export async function PropertyVerificationDetail({ propertyId }: { propertyId: s
         <h2 style={{ fontSize: 24, letterSpacing: '-0.02em', margin: '12px 0 0' }}>{property.property_name}</h2>
         <div style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginTop: 4 }}>
           registered {property.created_at?.slice(0, 10)} · {planNote} · waiting {formatWait(waitHours)}
+          {/* Redesign 2026-09 (follow-up, 2026-11-04) — invoice
+              generation. Used to only be reachable from the one-time
+              success panel right after confirming a payment — once an
+              admin clicked "Done" there was no way back to it. This
+              property page is always reachable (queues, search, the
+              customer detail screen's "Open →"), so it's the durable spot
+              to redownload the latest payment's invoice. */}
+          {payment?.status === 'completed' && (
+            <>
+              {' · '}
+              <a href={`/admin/payments/${payment.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                Download invoice (PDF)
+              </a>
+            </>
+          )}
         </div>
         {/* Redesign 2026-09 (follow-up, round 17) — Plot asked for the
             customer's name and phone number on this page: the property

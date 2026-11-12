@@ -31,22 +31,45 @@ export function PaymentDetailActions({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [waLink, setWaLink] = useState<string | null>(null);
+  // Redesign 2026-09 (follow-up, 2026-11-04) — invoice generation. Used
+  // to be: this success panel (and the only place to reach anything after
+  // confirming) only appeared when the customer had a phone number on
+  // file — anyone else got redirected away immediately with no chance to
+  // do anything else, including now downloading the invoice. Tracked
+  // separately from waLink so the panel always shows once confirmed,
+  // phone or no phone.
+  const [confirmed, setConfirmed] = useState(false);
 
-  if (waLink) {
+  if (confirmed) {
     return (
       <div style={{ marginTop: 18, paddingTop: 16, borderTop: '2px solid var(--color-divider)' }}>
-        <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginBottom: 10 }}>Saved. Now send the customer their WhatsApp:</p>
-        <a href={waLink} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', textDecoration: 'none', display: 'inline-flex' }}>
-          Send via WhatsApp
-        </a>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', marginLeft: 10 }}
-          onClick={() => router.push('/admin/queue/payments')}
-        >
-          Done
-        </button>
+        <p style={{ fontSize: 12.5, color: 'var(--p-ink-soft)', marginBottom: 10 }}>
+          Saved.{waLink ? ' Now send the customer their WhatsApp:' : ''}
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {waLink && (
+            <a href={waLink} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', textDecoration: 'none', display: 'inline-flex' }}>
+              Send via WhatsApp
+            </a>
+          )}
+          <a
+            href={`/admin/payments/${paymentId}/invoice`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-secondary"
+            style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px', textDecoration: 'none', display: 'inline-flex' }}
+          >
+            Download invoice (PDF)
+          </a>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ minHeight: 44, fontSize: 13.5, padding: '0 18px' }}
+            onClick={() => router.push('/admin/queue/payments')}
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }
@@ -75,9 +98,12 @@ export function PaymentDetailActions({
               formData.set('amount', amount);
               formData.set('transaction_reference', reference);
               const result = await confirmPaymentWithLog(paymentId, propertyId, formData);
-              if ('error' in result) setError(result.error ?? null);
-              else if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
-              else router.push('/admin/queue/payments');
+              if ('error' in result) {
+                setError(result.error ?? null);
+                return;
+              }
+              if ('phoneNumber' in result && result.phoneNumber) setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
+              setConfirmed(true);
             })
           }
         >

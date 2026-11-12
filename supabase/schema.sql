@@ -1595,3 +1595,18 @@ create index if not exists idx_payments_custom_plan_pending on payments(is_custo
 -- payment anywhere) but is excluded from the custom-plan queue/tile
 -- once this is set. Null means "not declined" (the normal case).
 alter table payments add column if not exists custom_plan_declined_at timestamptz;
+
+-- Redesign 2026-09 (follow-up, 2026-11-04) — Plot: invoice generation.
+-- A sequential, human-readable number for accounting tracking (INV-
+-- 000001, INV-000002, ...), assigned once a payment is confirmed
+-- (recordPayment, fulfillCustomPlan) rather than left null until
+-- someone happens to download the PDF — so the sequence reflects
+-- confirmation order, not download order, which matters for bookkeeping.
+-- See lib/invoiceNumbering.ts's assignInvoiceNumber for how it's filled
+-- in (plain count-and-retry, no Postgres sequence — this app has never
+-- called a Postgres function via supabase.rpc() before, and a unique
+-- constraint plus a retry loop is enough at this admin team's scale).
+-- Nullable: every payment completed before this column existed has none
+-- until the first time someone downloads that one invoice (same
+-- function, called lazily as a fallback from getInvoicePdfData).
+alter table payments add column if not exists invoice_number text unique;

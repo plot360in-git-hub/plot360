@@ -4183,3 +4183,99 @@ from the customer's side — there was no way to go from "this customer" to
 4. **Entry point** (`UsersTable.tsx`) — a customer's name in the
    Customers tab is now a link into this new screen instead of plain
    text; phone/email columns and the Ban button are untouched.
+
+## 74. Payment invoices — PDF generation after a payment is confirmed (2026-11-04)
+
+Plot: "After payment confirmation there should be an option a button or
+link to generate an invoice... use existing design, colors, text that we
+are using for Verification report." Built in two steps, both confirmed
+by Plot before writing the step's code — first the template (reusing the
+visit-report PDF's design system), then the confirmation-flow wiring
+below, with Plot's follow-up instructions baked in: a real sequential
+invoice number for accounting tracking, no GST/tax content anywhere
+(NSR Ventures LLP isn't GST-registered), and the button placed right in
+the existing post-confirmation panels.
+
+1. **`payments.invoice_number`** (schema change, `supabase/schema.sql`) —
+   `alter table payments add column if not exists invoice_number text
+   unique;`. Nullable: every payment confirmed before this column existed
+   has none until the first time someone downloads that one invoice (see
+   `getInvoicePdfData`'s lazy fallback below).
+2. **`lib/invoiceNumbering.ts`** (NEW) — `assignInvoiceNumber(supabase,
+   paymentId)`. Plain count-and-retry (count existing non-null
+   `invoice_number`s + 1, `INV-000001` format, retry up to 5 times on a
+   unique-constraint collision, checking in between whether a concurrent
+   call already assigned one), not a Postgres sequence/function — this
+   codebase has never called a Postgres function via `supabase.rpc()`
+   before, and at this admin team's scale (one or a few admins,
+   confirming payments one at a time) a unique constraint plus a short
+   retry loop is enough. Falls back to a still-unique, id-derived number
+   in the practically-unreachable case all 5 attempts collide.
+3. **Assigned at confirmation time, not download time** — called from
+   both places a payment flips to `'completed'`: `recordPayment`
+   (`payments.actions.ts`) and `fulfillCustomPlan`
+   (`customPlan.actions.ts`, both its "fill in an existing pending
+   request" and "insert a new completed row" branches). This way the
+   sequence reflects confirmation order, which is what "accounting
+   tracking" needs — not download order, which would scramble it if two
+   invoices are downloaded out of order later.
+4. **`lib/pdf/invoicePdf.ts`** (NEW) — `buildInvoicePdf(data)`.
+   Deliberately mirrors `visitReportPdf.ts`'s design tokens and drawing
+   helpers (masthead banner, divider rules, the summary strip, the
+   SURFACE+accent-bar highlight box, the footer) as a self-contained
+   file rather than importing them, same reasoning as that file being
+   self-contained itself — one report's layout can't accidentally shift
+   the other. Single A4 page: masthead, invoice number + issue date,
+   "Billed by / Billed to" two-column block, a four-up summary strip
+   (plan / visits / valid until / status), a line-items table with a
+   bold "TOTAL PAID" in accent color, and a "Payment details" box
+   (method, reference, paid-on, valid-from dates) — no GST/tax line
+   anywhere, by design.
+5. **`components/admin/invoice.actions.ts`** (NEW) —
+   `getInvoicePdfData(paymentId)`, admin-gated. Joins the payment with
+   its property/owner profile and the plan name (catalog plans only);
+   reads `visit_credits.quantity_purchased` for the visit count, since
+   that's the one place both catalog-plan and custom-plan payments store
+   it uniformly (`subscription_plans.visit_quantity` only exists for
+   catalog plans). One line item for the full amount actually paid
+   ("Custom visit plan — <property>" for a custom plan, the plan's name
+   otherwise) — doesn't try to split a catalog payment into a base price
+   + plot-size-surcharge line, since `payments.amount` only ever stores
+   the final confirmed total, not a breakdown, and inventing a split
+   risked showing numbers that don't reconcile. Returns `null` for
+   "nothing to show" (not found, not completed yet, or not an admin).
+6. **`app/admin/payments/[id]/invoice/route.ts`** (NEW) — a GET route
+   handler, mirroring the visit-report PDF route's pattern exactly: its
+   own admin check (route handlers aren't covered by
+   `app/admin/layout.tsx`'s gate, only pages are) before calling
+   `getInvoicePdfData` + `buildInvoicePdf`, streamed with
+   `Content-Disposition: inline`.
+7. **Button placement** (`PaymentDetailActions.tsx`,
+   `CustomPlanForm.tsx`) — a "Download invoice (PDF)" link added to each
+   component's existing post-confirmation success panel, alongside
+   "Send via WhatsApp" and "Done". Fixed a pre-existing gap in both while
+   doing this: that success panel used to only appear when the customer
+   had a phone number on file (`waLink` doubled as both "show this panel"
+   and "there's a WhatsApp link") — anyone with no phone was redirected
+   away the instant the payment was confirmed, with no way to reach
+   anything else, including now the invoice. Both panels always show
+   once confirmed; "Send via WhatsApp" stays conditional on a phone
+   actually being on file.
+8. **Follow-up (2026-11-04) — redownloading an invoice later.** Plot:
+   that success panel was the *only* place the invoice link ever
+   appeared — once an admin clicked "Done" and moved on, there was no
+   way back to it for that payment, ever. Two durable, always-reachable
+   places added, both read-only (no new action, just links into the
+   existing `/admin/payments/[id]/invoice` route):
+   - **`PropertyVerificationDetail.tsx`** (`/admin/[id]`) — "Download
+     invoice (PDF)" next to the existing "paid ₹X" note, whenever that
+     property's latest payment is completed. This page is reachable from
+     everywhere (every queue, search, the customer detail screen's
+     "Open →"), so it covers the everyday "resend this customer their
+     invoice" case for either plan type.
+   - **`AccountingTabs.tsx`**'s Payments-received ledger (`/admin/
+     accounting`, owner role only) — a new "Invoice" column, one
+     "Download" link per completed row. This is every payment ever
+     recorded, any property, any date, so it's the one place that
+     covers a payment from months ago too, not just the latest one per
+     property.

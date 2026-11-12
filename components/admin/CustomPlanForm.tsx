@@ -22,6 +22,14 @@ export function CustomPlanForm({ propertyId, existingPaymentId }: { propertyId: 
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [waLink, setWaLink] = useState<string | null>(null);
+  // Redesign 2026-09 (follow-up, 2026-11-04) — invoice generation. Same
+  // fix as PaymentDetailActions.tsx: used to skip any success panel (and
+  // thus any way to reach the invoice) whenever the customer had no
+  // phone on file. confirmedPaymentId doubles as "show the success panel"
+  // and as the id the invoice link needs — fulfillCustomPlanWithLog
+  // always returns paymentId, whether this filled in an existing pending
+  // request or inserted a brand-new completed one.
+  const [confirmedPaymentId, setConfirmedPaymentId] = useState<string | null>(null);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -33,10 +41,8 @@ export function CustomPlanForm({ propertyId, existingPaymentId }: { propertyId: 
       }
       if ('phoneNumber' in result && result.phoneNumber) {
         setWaLink(buildWhatsAppLink(result.phoneCountryCode, result.phoneNumber, result.message));
-      } else {
-        setOpen(false);
-        router.refresh();
       }
+      setConfirmedPaymentId(result.paymentId);
     });
   }
 
@@ -60,31 +66,47 @@ export function CustomPlanForm({ propertyId, existingPaymentId }: { propertyId: 
     });
   }
 
-  if (waLink) {
+  if (confirmedPaymentId) {
     return (
       <div style={{ borderTop: '1px solid var(--color-divider)', marginTop: 9, paddingTop: 10 }}>
-        <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginBottom: 8 }}>Saved. Now send the customer their WhatsApp:</p>
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noreferrer"
-          className="btn btn-primary"
-          style={{ minHeight: 34, fontSize: 11.5, padding: '0 12px', textDecoration: 'none', display: 'inline-flex' }}
-        >
-          Send via WhatsApp
-        </a>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ minHeight: 34, fontSize: 11.5, padding: '0 12px', marginLeft: 8 }}
-          onClick={() => {
-            setWaLink(null);
-            setOpen(false);
-            router.refresh();
-          }}
-        >
-          Done
-        </button>
+        <p style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginBottom: 8 }}>
+          Saved.{waLink ? ' Now send the customer their WhatsApp:' : ''}
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {waLink && (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary"
+              style={{ minHeight: 34, fontSize: 11.5, padding: '0 12px', textDecoration: 'none', display: 'inline-flex' }}
+            >
+              Send via WhatsApp
+            </a>
+          )}
+          <a
+            href={`/admin/payments/${confirmedPaymentId}/invoice`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-secondary"
+            style={{ minHeight: 34, fontSize: 11.5, padding: '0 12px', textDecoration: 'none', display: 'inline-flex' }}
+          >
+            Download invoice (PDF)
+          </a>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ minHeight: 34, fontSize: 11.5, padding: '0 12px' }}
+            onClick={() => {
+              setWaLink(null);
+              setConfirmedPaymentId(null);
+              setOpen(false);
+              router.refresh();
+            }}
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }

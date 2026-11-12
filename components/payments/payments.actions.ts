@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { sendReceiptEmail } from './email';
+import { assignInvoiceNumber } from '@/lib/invoiceNumbering';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -178,6 +179,13 @@ export async function recordPayment(paymentId: string, propertyId: string, formD
     })
     .eq('id', paymentId);
   if (paymentError) return { error: paymentError.message };
+
+  // Redesign 2026-09 (follow-up, 2026-11-04) — invoice generation. A real
+  // sequential number for accounting tracking, assigned the moment the
+  // payment is confirmed so the sequence reflects confirmation order (see
+  // lib/invoiceNumbering.ts). Best-effort — a hiccup here shouldn't undo
+  // an already-successful payment confirmation.
+  await assignInvoiceNumber(supabase, paymentId);
 
   const propertyPatch: Record<string, unknown> = { expiration_date: validUntil };
   // First payment starts the twice-yearly monitoring clock; renewal
