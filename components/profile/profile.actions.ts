@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { sendNotificationEmail } from '@/lib/email';
+import { toE164, samePhone } from '@/lib/phone';
 
 // Redesign 2026-09 (follow-up, round 11) — Plot asked for the old Edit
 // Profile page (address pair, identity proof, profile picture — none of
@@ -27,7 +28,15 @@ export async function getMyProfile() {
   // at signup or later) and the change-password section should show.
   const hasPassword = (userData.user.identities ?? []).some((i) => i.provider === 'email');
 
-  return { profile, hasPassword };
+  // Redesign 2026-09 (follow-up, 2026-11-12) — phone verification.
+  // Whatever phone number is already verified on this auth user (set by
+  // phoneVerification.actions.ts, or by a "Continue with WhatsApp OTP"
+  // signup) — passed to ProfileEditForm/PhoneVerifyPanel so re-typing the
+  // SAME number already on file doesn't demand a fresh code; only an
+  // actual change to a different number does.
+  const phoneVerifiedE164 = userData.user.phone_confirmed_at ? (userData.user.phone ?? null) : null;
+
+  return { profile, hasPassword, phoneVerifiedE164 };
 }
 
 export async function updateMyProfile(formData: FormData) {
@@ -51,6 +60,26 @@ export async function updateMyProfile(formData: FormData) {
     const { error: emailError } = await supabase.auth.updateUser({ email: newEmail });
     if (emailError) return { error: emailError.message };
     emailChangeRequested = true;
+  }
+
+  // Redesign 2026-09 (follow-up, 2026-11-12) — phone verification. Only
+  // block on this when the phone actually changed from what's already
+  // saved — comparing against Supabase's own auth.users.phone (never the
+  // client's say-so) the same way saveCustomerRegistration does.
+  // Deliberately NOT requiring this for a re-save of the unchanged
+  // number: Plot asked existing users be left alone, not re-prompted for
+  // a number they never had to verify in the first place.
+  const { data: currentProfile } = await supabase
+    .from('profiles')
+    .select('phone_country_code, phone_number')
+    .eq('id', userData.user.id)
+    .single();
+  const phoneChanged = currentProfile?.phone_country_code !== phoneCountryCode || currentProfile?.phone_number !== phoneNumber;
+  if (phoneChanged) {
+    const e164 = toE164(phoneCountryCode, phoneNumber);
+    if (!samePhone(userData.user.phone, e164) || !userData.user.phone_confirmed_at) {
+      return { error: 'Please verify your new phone number via WhatsApp before saving.', needsPhoneVerification: true };
+    }
   }
 
   const patch = {

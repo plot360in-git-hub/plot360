@@ -54,6 +54,12 @@ export async function getAllUsers() {
       email: u.email,
       createdAt: u.created_at,
       emailConfirmed: !!u.email_confirmed_at,
+      // Redesign 2026-09 (follow-up, 2026-11-12) — phone verification,
+      // customers only. Same Auth Admin API field emailConfirmed already
+      // reads, just the phone equivalent — set once a customer verifies
+      // their number via WhatsApp (components/auth/phoneVerification.
+      // actions.ts) at registration or when changing it later.
+      phoneConfirmed: !!u.phone_confirmed_at,
       isBanned,
       firstName: profile?.first_name ?? '',
       lastName: profile?.last_name ?? '',
@@ -115,6 +121,7 @@ export async function getCustomerDetail(userId: string) {
       isAdmin: profile?.is_admin ?? false,
       isBanned,
       emailConfirmed: !!u?.email_confirmed_at,
+      phoneConfirmed: !!u?.phone_confirmed_at,
       createdAt: u?.created_at ?? null,
     },
     properties: properties ?? [],

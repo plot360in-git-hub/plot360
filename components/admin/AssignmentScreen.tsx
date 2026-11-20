@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getAssignmentTarget, getSuggestedAgents, getAllAgentsForOverride } from './assignment.actions';
+import { getAssignmentTarget, getSuggestedAgents, getAllAgentsForOverride, getPriorVisitCountsForProperty } from './assignment.actions';
 import { profileDisplayName } from './displayName';
 import { AssignAgentButtons } from './AssignAgentButtons';
 
@@ -19,7 +19,11 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
   const target = await getAssignmentTarget(kind, id);
   if (!target) return <p style={{ padding: 24 }}>This visit is no longer waiting for assignment.</p>;
 
-  const [suggested, allAgents] = await Promise.all([getSuggestedAgents(target.sroCode), getAllAgentsForOverride(target.sroCode)]);
+  const [suggested, allAgents, priorVisitCounts] = await Promise.all([
+    getSuggestedAgents(target.sroCode),
+    getAllAgentsForOverride(target.sroCode),
+    getPriorVisitCountsForProperty(target.propertyId),
+  ]);
   const suggestedIds = new Set(suggested.map((a: any) => a.id));
   const overrideAgents = allAgents.filter((a: any) => !suggestedIds.has(a.id));
 
@@ -52,6 +56,11 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
               <div style={{ fontSize: 11.5, color: 'var(--p-ink-soft)', marginTop: 2 }}>
                 SRO {a.sro_name} {a.sro_code} · {a.completedVisits} visits completed
               </div>
+              {!!priorVisitCounts[a.id] && (
+                <div style={{ fontSize: 11, color: 'var(--p-alert)', fontWeight: 600, marginTop: 2 }}>
+                  ⚠ Already visited this property{priorVisitCounts[a.id] > 1 ? ` (${priorVisitCounts[a.id]}×)` : ''}
+                </div>
+              )}
             </div>
             <div style={{ width: 120, flex: 'none', fontSize: 11.5, color: 'var(--p-ink-soft)' }}>{a.openJobs} open job{a.openJobs === 1 ? '' : 's'}</div>
             <AssignAgentButtons kind={kind} targetId={id} agentId={a.id} label="Assign" primary />
@@ -73,6 +82,11 @@ export async function AssignmentScreen({ kind, id }: { kind: 'legacy' | 'visit_r
                 )}
               </div>
               <div style={{ fontSize: 11, color: 'var(--p-ink-soft)', marginTop: 2 }}>SRO {a.sro_name} {a.sro_code}</div>
+              {!!priorVisitCounts[a.id] && (
+                <div style={{ fontSize: 11, color: 'var(--p-alert)', fontWeight: 600, marginTop: 2 }}>
+                  ⚠ Already visited this property{priorVisitCounts[a.id] > 1 ? ` (${priorVisitCounts[a.id]}×)` : ''}
+                </div>
+              )}
             </div>
             <div style={{ width: 130, flex: 'none', fontSize: 11, color: a.sroMatches ? 'var(--p-ink-soft)' : 'var(--p-alert)' }}>{a.sroMatches ? 'SRO match' : 'SRO — no match'}</div>
             <AssignAgentButtons kind={kind} targetId={id} agentId={a.id} label="Assign anyway" />

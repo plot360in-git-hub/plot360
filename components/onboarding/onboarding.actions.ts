@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { toE164, samePhone } from '@/lib/phone';
 
 // Redesign 2026-09 (follow-up, round 10) — this used to also handle
 // address (current + permanent), date of birth, gender, a profile
@@ -32,6 +33,17 @@ export async function saveCustomerRegistration(formData: FormData) {
   if (!phoneCountryCode || !phoneNumber) return { error: 'A phone number is required.' };
   if (!termsAccepted || !privacyAccepted) {
     return { error: 'You must accept the Terms & Conditions and Privacy Policy.' };
+  }
+
+  // Redesign 2026-09 (follow-up, 2026-11-12) — phone verification. The
+  // client-side PhoneVerifyPanel already gates the Submit button on this,
+  // but that's just UX — the real gate is here, server-side, checked
+  // against Supabase's own auth.users.phone/phone_confirmed_at (set by
+  // phoneVerification.actions.ts's confirmPhoneVerificationCode), never
+  // trusting anything the client claims about its own verified state.
+  const e164 = toE164(phoneCountryCode, phoneNumber);
+  if (!samePhone(userData.user.phone, e164) || !userData.user.phone_confirmed_at) {
+    return { error: 'Please verify your phone number via WhatsApp before completing registration.' };
   }
 
   const payload = {

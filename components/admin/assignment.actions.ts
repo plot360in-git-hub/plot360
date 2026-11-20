@@ -207,6 +207,28 @@ export async function getSuggestedAgents(sroCode: string | null) {
     .sort((a, b) => a.openJobs - b.openJobs || b.completedVisits - a.completedVisits);
 }
 
+// Redesign 2026-09 (follow-up, 2026-11-12) — Plot: "find if an agent has
+// visited already property if yes can this be notified or alerted when
+// assigning the property to the same agent ... so we can avoid same
+// agent again for the same property." Counts, per agent, how many
+// COMPLETED visits (status approved/ec_pending — same definition
+// getVisitReportPdfData uses in monitoring.actions.ts for "has a visit
+// report") they already have at this one property. Queried by
+// property_id alone (not also by agent_id) so it can run in the same
+// Promise.all as getSuggestedAgents/getAllAgentsForOverride in
+// AssignmentScreen.tsx without first needing their results.
+export async function getPriorVisitCountsForProperty(propertyId: string): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('monitoring_jobs')
+    .select('agent_id')
+    .eq('property_id', propertyId)
+    .in('status', ['approved', 'ec_pending']);
+  const counts: Record<string, number> = {};
+  for (const j of data ?? []) counts[j.agent_id] = (counts[j.agent_id] ?? 0) + 1;
+  return counts;
+}
+
 // "All agents — manual override": every verified, non-banned agent,
 // noting whether their SRO matches the target property. "Assigning
 // outside the SRO is allowed and recorded" per the design.
@@ -318,10 +340,27 @@ export async function assignAgentToTarget(kind: 'legacy' | 'visit_request' | 'st
     await logWhatsAppMessage({ relatedEntityType: 'monitoring_job', relatedEntityId: jobId, recipientPhone: phone, body: message });
   }
 
+  // Redesign 2026-09 (follow-up, 2026-11-12) — same "already visited this
+  // property" check as the warning badge in AssignmentScreen.tsx, run
+  // again here so the fact an admin went ahead with a repeat agent is
+  // permanently on the record even if the UI warning is dismissed/missed.
+  // Excludes this job's own id — for the visit_request path jobId was
+  // just inserted as 'assigned' so it wouldn't match approved/ec_pending
+  // anyway, but the legacy/stuck paths reuse an existing jobId and this
+  // keeps the count honest either way.
+  const { count: priorVisitCount } = await supabase
+    .from('monitoring_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('property_id', propertyId)
+    .eq('agent_id', agentId)
+    .in('status', ['approved', 'ec_pending'])
+    .neq('id', jobId);
+
+  const baseAction = kind === 'stuck' ? 'Reassigned (previous agent stuck)' : kind === 'visit_request' ? 'Assigned from customer visit request' : 'Assigned (SRO/due-date match)';
   await logAdminAction({
     entityType: 'monitoring_job',
     entityId: jobId,
-    action: kind === 'stuck' ? 'Reassigned (previous agent stuck)' : kind === 'visit_request' ? 'Assigned from customer visit request' : 'Assigned (SRO/due-date match)',
+    action: priorVisitCount ? `${baseAction} — repeat agent, already visited this property (${priorVisitCount}×)` : baseAction,
   });
 
   return message ? { success: true as const, jobId, propertyId, phoneCountryCode, phoneNumber, message } : { success: true as const, jobId, propertyId };

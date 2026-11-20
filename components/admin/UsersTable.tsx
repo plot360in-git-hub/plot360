@@ -72,7 +72,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 16 }}>
           <thead>
             <tr>
-              {['Customer', 'Phone', 'Email', 'Signed up', 'Email confirmed', 'Role', 'Status', ''].map((h) => (
+              {['Customer', 'Phone', 'Phone confirmed', 'Email', 'Signed up', 'Email confirmed', 'Role', 'Status', ''].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '8px 10px 8px 0', borderBottom: '2px solid var(--color-divider)', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                   {h}
                 </th>
@@ -93,6 +93,11 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
                   </Link>
                 </td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{displayPhone(c.phoneCountryCode, c.phoneNumber)}</td>
+                {/* Redesign 2026-09 (follow-up, 2026-11-12) — phone
+                    verification, customers only. Same read-only pattern
+                    as "Email confirmed" next to it — sourced from
+                    auth.users.phone_confirmed_at (users.actions.ts). */}
+                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: c.phoneConfirmed ? 'var(--p-ink-soft)' : 'var(--p-alert)' }}>{c.phoneConfirmed ? 'Yes' : 'No'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.email || '—'}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.createdAt?.slice(0, 10)}</td>
                 <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', color: 'var(--p-ink-soft)' }}>{c.emailConfirmed ? 'Yes' : 'No'}</td>
@@ -113,7 +118,7 @@ export function UsersTable({ customers, agents }: { customers: any[]; agents: an
             ))}
             {filteredCustomers.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
+                <td colSpan={9} style={{ padding: '20px 0', borderBottom: '1px solid var(--color-divider)', fontSize: 12.5, color: 'var(--p-ink-soft)' }}>
                   No customers match "{query}".
                 </td>
               </tr>

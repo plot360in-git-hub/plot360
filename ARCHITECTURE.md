@@ -4231,6 +4231,12 @@ the existing post-confirmation panels.
    bold "TOTAL PAID" in accent color, and a "Payment details" box
    (method, reference, paid-on, valid-from dates) — no GST/tax line
    anywhere, by design.
+   **Hotfix (2026-11-04):** the first real download 500'd —
+   `formatRupees` used "₹" (U+20B9), and `public/fonts/` has no real
+   Archivo files yet (just its own README), so every draw falls back to
+   pdf-lib's standard Helvetica, whose WinAnsi encoding has no rupee
+   sign at all; pdf-lib throws rather than drop it. Now prints "Rs."
+   instead — plain ASCII, no font dependency.
 5. **`components/admin/invoice.actions.ts`** (NEW) —
    `getInvoicePdfData(paymentId)`, admin-gated. Joins the payment with
    its property/owner profile and the plan name (catalog plans only);
@@ -4279,3 +4285,143 @@ the existing post-confirmation panels.
      recorded, any property, any date, so it's the one place that
      covers a payment from months ago too, not just the latest one per
      property.
+
+## 75. Phone verification at registration and on change — customers (2026-11-12)
+
+Plot: verify both email and phone "at the time of registration and if
+user changes their email or phone number after registration," phone via
+a WhatsApp message to confirm. Customers only (field agents untouched),
+and blocking — registration can't finish, and a changed phone number
+isn't saved, until the WhatsApp code is confirmed. Existing customers'
+already-on-file numbers are left alone; they only go through this the
+next time they actually change it.
+
+**Email needed nothing new** — it was already fully built: Supabase's
+own confirmation-link flow fires at signup (`auth.actions.ts`, `signUp`)
+and again on any later change (`profile.actions.ts`, `updateMyProfile`
+→ `auth.updateUser({ email })`), and `email_confirmed_at` was already
+surfaced read-only in `UsersTable.tsx`.
+
+**Phone had zero verification before this** — a number typed into
+either form was written straight to `profiles.phone_number`. Built on
+the SAME Supabase mechanism the existing, unused "Continue with
+WhatsApp OTP" login button (`auth.actions.ts`'s `sendPhoneOtp`/
+`verifyPhoneOtp`) already depends on — a Phone provider (Twilio Verify,
+Message Channel set to WhatsApp) configured once in the Supabase
+dashboard — rather than building a second, custom OTP system. No schema
+change: `auth.users.phone`/`phone_confirmed_at` (Supabase's own built-in
+columns) are the one source of truth for "is this number verified."
+
+1. **`lib/phone.ts`** (NEW) — `toE164(countryCode, number)` turns the
+   app's split `{ phone_country_code, phone_number }` fields into the
+   single E.164 string Supabase's phone auth needs; `samePhone(a, b)`
+   compares two phone strings digit-only (Supabase/GoTrue has stored
+   `auth.users.phone` with or without a leading "+" across versions —
+   this makes the verified-or-not check correct either way instead of
+   betting the whole gate on guessing right); `looksLikePhoneNumber`
+   is a loose pre-send sanity check.
+2. **`components/auth/phoneVerification.actions.ts`** (NEW) —
+   `sendPhoneVerificationCode`/`confirmPhoneVerificationCode`. The other
+   half of the mechanism `sendPhoneOtp`/`verifyPhoneOtp` already use:
+   changing the phone of an ALREADY signed-in user (`auth.updateUser({
+   phone })` + `auth.verifyOtp({ type: 'phone_change' })`) rather than
+   signing in with one (`type: 'sms'`) — exactly parallel to how
+   `updateMyProfile` already calls `auth.updateUser({ email })` for an
+   email change while staying signed in.
+3. **`components/auth/PhoneVerifyPanel.tsx`** (NEW) — the shared
+   client-side "Verify this number via WhatsApp" → code input →
+   "Verified ✓" widget, used by both forms below. Takes a
+   `verifiedE164` prop so re-typing a number ALREADY verified on the
+   account (at last registration/change, or because the account signed
+   up via "Continue with WhatsApp OTP" in the first place) is
+   recognized without asking for a second code; typing any other number
+   reverts to needing a fresh one.
+4. **`saveCustomerRegistration`** (`onboarding.actions.ts`) and
+   **`updateMyProfile`** (`profile.actions.ts`) — the real gate, server-
+   side: the submitted phone (normalized) must equal `auth.users.phone`
+   with `phone_confirmed_at` set, never trusting the client's own
+   "verified" state. `updateMyProfile` only requires this when the
+   phone actually changed from what's already saved (fetched fresh, not
+   trusted from the form) — re-saving an unchanged, never-verified
+   legacy number (everyone today) still works with no friction, per
+   Plot's "leave existing users be."
+5. **`CustomerRegistrationForm.tsx`** / **`ProfileEditForm.tsx`** — both
+   embed `PhoneVerifyPanel` right under the phone field; Submit/Save is
+   disabled client-side until verified (UX only — #4 is the real gate).
+   `app/onboarding/page.tsx` and `getMyProfile()` each pass down
+   whatever's already verified on the signed-in user, so a "Continue
+   with WhatsApp OTP" signup or an unchanged saved number never asks
+   twice.
+6. **Admin visibility** — `users.actions.ts`'s `getAllUsers`/
+   `getCustomerDetail` now also read `phone_confirmed_at` off the Auth
+   Admin API, same as `emailConfirmed` already does. Surfaced as a new
+   "Phone confirmed" column in `UsersTable.tsx`'s Customers tab (not the
+   Field agents tab — out of scope) and a "(confirmed/not confirmed)"
+   note next to the phone line in `CustomerDetail.tsx`, mirroring the
+   existing email display exactly.
+
+**Setup Plot still has to do outside this code** (same note as
+`sendPhoneOtp` already carried, now corrected — Twilio changed WhatsApp
+Verify requirements since that comment was written): a Phone provider
+must be enabled in the Supabase dashboard (Authentication → Providers →
+Phone → Twilio Verify, Message Channel set to WhatsApp) backed by a
+real Twilio Verify Service, and since March 2024 Twilio requires
+"Bring Your Own Sender" for Verify's WhatsApp channel — NSR Ventures
+LLP's own WhatsApp Business Account, connected to a Messaging Service,
+connected to the Verify Service, which needs Meta business verification
+(Twilio's own estimate: 1–2 weeks) — there's no instant free sandbox
+for this specific path anymore. See the chat reply for the full
+walkthrough and a same-day SMS-channel fallback while that's pending.
+Once configured, both this feature and the pre-existing "Continue with
+WhatsApp OTP" login button start working together — same dashboard
+setting, no further code change either way.
+
+## 76. Warn when assigning a repeat agent to a property (2026-11-12)
+
+Plot: "Find if an agent has visted already property if yes can this be
+notified or alerted when assigning the property to the same agent with
+this validation check so we can avoid same agent again for the same
+property."
+
+A property (`monitoring_jobs.property_id`, no unique constraint) can
+accumulate many job rows over its lifetime — one per visit cycle,
+numbered by `visit_number` — and nothing previously stopped the same
+agent from being picked again for a later visit at a property they'd
+already completed one at. Asked Plot how strict the check should be;
+answer was a visible warning that still allows assigning (not a
+confirm step, not a hard block), shown in both the Suggested and
+manual-override lists rather than hiding the agent from Suggested.
+
+1. **`getPriorVisitCountsForProperty(propertyId)`**
+   (`assignment.actions.ts`) — new. Queries `monitoring_jobs` by
+   `property_id` alone (not also by agent, so it needs no agent list
+   first) for rows with `status in ('approved', 'ec_pending')` — the
+   same "has a completed visit" definition `getVisitReportPdfData`
+   already uses (`monitoring.actions.ts`) — and counts them per
+   `agent_id`. Runs in the same `Promise.all` as `getSuggestedAgents`/
+   `getAllAgentsForOverride` in `AssignmentScreen.tsx`, so it's one
+   extra query, not three (one per listed agent).
+2. **`AssignmentScreen.tsx`** — both the Suggested row and the manual-
+   override row now show "⚠ Already visited this property" (with a
+   "(N×)" suffix past the first) under the agent's SRO/visit-count
+   line when `priorVisitCounts[agent.id]` is non-zero. Purely a label —
+   the existing `AssignAgentButtons` next to it is untouched, so
+   assigning a flagged agent still works in one click, same as
+   assigning outside the SRO already did.
+3. **`assignAgentToTarget`** (`assignment.actions.ts`) — re-checks the
+   same thing server-side right before writing the admin-action log
+   entry (excluding the job's own id, so a job just being
+   created/reassigned never counts itself), and appends "— repeat
+   agent, already visited this property (N×)" to the logged action
+   when it's non-zero. This is the part that actually satisfies
+   "alerted" durably: the UI badge can be missed or the admin can
+   decide a repeat visit is intentional (re-verification, a follow-up
+   visit after a flagged issue, etc.) and the timeline keeps a
+   permanent, honest record either way — nothing is blocked, nothing
+   silently hidden.
+
+Deliberately left the older, nav-unreferenced `AssignAgentForm.tsx`/
+`ReassignAgentForm.tsx` (still reachable only from the unlinked
+`MonitoringOverview.tsx`) without this warning — same "not the live
+assignment path" reasoning §11 already gives for not maintaining it
+further.

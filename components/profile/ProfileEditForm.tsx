@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateMyProfile, changeMyPassword } from './profile.actions';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_DIAL } from '@/lib/countryCodes';
+import { PhoneVerifyPanel } from '@/components/auth/PhoneVerifyPanel';
 import type { Profile } from '@/types/database.types';
 
 // Redesign 2026-09 (follow-up, round 11) — full rebuild. The old form
@@ -19,13 +20,32 @@ import type { Profile } from '@/types/database.types';
 // "your password was changed" notice, same as the existing reset-password
 // flow. Address/identity-proof/profile-picture are dropped along with the
 // fields that collected them — see profile.actions.ts for the same note.
-export function ProfileEditForm({ profile, hasPassword }: { profile: Profile; hasPassword: boolean }) {
+// Redesign 2026-09 (follow-up, 2026-11-12) — phone verification.
+// phoneVerifiedE164 is whatever's already verified on this auth user
+// (profile.actions.ts, getMyProfile) — PhoneVerifyPanel treats re-typing
+// that same number as already-verified, so editing just your name still
+// saves in one click; typing a DIFFERENT number is what triggers the
+// WhatsApp code step, and the server (updateMyProfile) is the real gate
+// either way, not this client-side disable.
+export function ProfileEditForm({
+  profile,
+  hasPassword,
+  phoneVerifiedE164,
+}: {
+  profile: Profile;
+  hasPassword: boolean;
+  phoneVerifiedE164?: string | null;
+}) {
   const router = useRouter();
 
   // ---- profile details (name, phone, email) ----
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [phoneCountryCode, setPhoneCountryCode] = useState(profile.phone_country_code || DEFAULT_COUNTRY_DIAL);
+  const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const phoneUnchanged = phoneCountryCode === (profile.phone_country_code || DEFAULT_COUNTRY_DIAL) && phoneNumber === (profile.phone_number ?? '');
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -106,7 +126,8 @@ export function ProfileEditForm({ profile, hasPassword }: { profile: Profile; ha
                 className="input"
                 name="phone_country_code"
                 required
-                defaultValue={profile.phone_country_code || DEFAULT_COUNTRY_DIAL}
+                value={phoneCountryCode}
+                onChange={(e) => setPhoneCountryCode(e.target.value)}
               >
                 {COUNTRY_CODES.map((c) => (
                   <option key={c.name} value={c.dial}>
@@ -119,9 +140,25 @@ export function ProfileEditForm({ profile, hasPassword }: { profile: Profile; ha
               <label>
                 Phone number <span style={{ color: 'var(--color-accent)' }}>*</span>
               </label>
-              <input className="input" name="phone_number" type="tel" required defaultValue={profile.phone_number ?? ''} />
+              <input
+                className="input"
+                name="phone_number"
+                type="tel"
+                required
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+              />
             </div>
           </div>
+
+          {!phoneUnchanged && (
+            <PhoneVerifyPanel
+              phoneCountryCode={phoneCountryCode}
+              phoneNumber={phoneNumber}
+              verifiedE164={phoneVerifiedE164}
+              onVerifiedChange={setPhoneVerified}
+            />
+          )}
 
           <div className="field" style={{ marginTop: 14 }}>
             <label>Email</label>
@@ -134,7 +171,12 @@ export function ProfileEditForm({ profile, hasPassword }: { profile: Profile; ha
           {error && <p style={{ color: 'var(--p-alert)', marginTop: 16, fontSize: 13.5 }}>{error}</p>}
           {notice && <p style={{ color: 'var(--color-accent-700)', marginTop: 16, fontSize: 13.5 }}>{notice}</p>}
 
-          <button className="btn btn-primary btn-block" type="submit" disabled={isPending} style={{ minHeight: 48, fontSize: 14, marginTop: 20, justifyContent: 'center' }}>
+          <button
+            className="btn btn-primary btn-block"
+            type="submit"
+            disabled={isPending || (!phoneUnchanged && !phoneVerified)}
+            style={{ minHeight: 48, fontSize: 14, marginTop: 20, justifyContent: 'center' }}
+          >
             {isPending ? 'Saving…' : 'Save changes'}
           </button>
         </form>

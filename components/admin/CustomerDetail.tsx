@@ -55,7 +55,10 @@ export async function CustomerDetail({ userId }: { userId: string }) {
             )}
           </div>
           <div>
-            Phone: <strong>{displayPhone(profile.phoneCountryCode, profile.phoneNumber)}</strong>
+            Phone: <strong>{displayPhone(profile.phoneCountryCode, profile.phoneNumber)}</strong>{' '}
+            {profile.phoneNumber && (
+              <span style={{ color: 'var(--p-ink-soft)' }}>({profile.phoneConfirmed ? 'confirmed' : 'not confirmed'})</span>
+            )}
           </div>
           {profile.createdAt && (
             <div style={{ color: 'var(--p-ink-soft)' }}>Signed up {profile.createdAt.slice(0, 10)}</div>

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { saveCustomerRegistration } from './onboarding.actions';
 import { logOut } from '@/components/auth/auth.actions';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_DIAL } from '@/lib/countryCodes';
+import { PhoneVerifyPanel } from '@/components/auth/PhoneVerifyPanel';
 
 // Redesign 2026-09 (follow-up, round 10) — Plot reported that a brand-new
 // customer signing up via a social login (Google) was landing on the OLD,
@@ -23,16 +24,37 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY_DIAL } from '@/lib/countryCodes';
 // the same way property documents are collected post-registration. The
 // `profiles` columns themselves are untouched (still nullable) so this is
 // a pure UI/action simplification, not a schema change.
-export function CustomerRegistrationForm() {
+//
+// Redesign 2026-09 (follow-up, 2026-11-12) — phone verification.
+// initialPhoneVerifiedE164 lets app/onboarding/page.tsx tell this form
+// "the signed-in user already has a verified phone" — the case where
+// someone signed up via "Continue with WhatsApp OTP" (AuthScreen.tsx),
+// which is itself a verified-phone signup — so PhoneVerifyPanel can skip
+// asking for a second code once they re-type that same number here.
+// initialPhoneCountryCode/initialPhoneNumber are unused today (nothing
+// reliably splits a single E.164 string back into country code + local
+// number across every country) but kept as optional props in case a
+// future caller has them separately.
+export function CustomerRegistrationForm({
+  initialPhoneCountryCode,
+  initialPhoneNumber,
+  initialPhoneVerifiedE164,
+}: {
+  initialPhoneCountryCode?: string;
+  initialPhoneNumber?: string;
+  initialPhoneVerifiedE164?: string | null;
+} = {}) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState(initialPhoneCountryCode || DEFAULT_COUNTRY_DIAL);
+  const [phone, setPhone] = useState(initialPhoneNumber || '');
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
-  const blocked = !firstName.trim() || !lastName.trim() || !phone.trim() || !termsAgreed || !privacyAgreed;
+  const blocked = !firstName.trim() || !lastName.trim() || !phone.trim() || !phoneVerified || !termsAgreed || !privacyAgreed;
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -98,7 +120,13 @@ export function CustomerRegistrationForm() {
             <label>
               Country code <span style={{ color: 'var(--color-accent)' }}>*</span>
             </label>
-            <select className="input" name="phone_country_code" required defaultValue={DEFAULT_COUNTRY_DIAL}>
+            <select
+              className="input"
+              name="phone_country_code"
+              required
+              value={phoneCountryCode}
+              onChange={(e) => setPhoneCountryCode(e.target.value)}
+            >
               {COUNTRY_CODES.map((c) => (
                 <option key={c.name} value={c.dial}>
                   {c.dial} {c.name}
@@ -121,6 +149,13 @@ export function CustomerRegistrationForm() {
             />
           </div>
         </div>
+
+        <PhoneVerifyPanel
+          phoneCountryCode={phoneCountryCode}
+          phoneNumber={phone}
+          verifiedE164={initialPhoneVerifiedE164}
+          onVerifiedChange={setPhoneVerified}
+        />
 
         <div style={{ height: 2, background: 'var(--color-divider)', margin: '22px 0' }} />
 
